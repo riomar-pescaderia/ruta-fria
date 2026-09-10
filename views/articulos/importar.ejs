@@ -1,0 +1,51 @@
+<%- include('../partials/head') %>
+
+<h1>Importar artículos desde una planilla</h1>
+
+<div class="pendiente" style="margin-bottom:20px;">
+  <p><strong>Cómo hacerlo:</strong> en Google Sheets, seleccioná las columnas que quieras importar — incluyendo la fila de encabezados — copiá (Ctrl+C) y pegá acá abajo (Ctrl+V). Se pega tal cual, con las columnas separadas por tabulador.</p>
+  <p>Encabezados que reconozco (no hace falta que estén todas, pero <strong>código</strong> y <strong>nombre</strong> son obligatorias):</p>
+  <ul class="plain" style="margin-bottom:0;">
+    <li><span class="mono">código</span> / <span class="mono">cod</span> — obligatoria</li>
+    <li><span class="mono">nombre</span> / <span class="mono">producto</span> / <span class="mono">productos</span> — obligatoria</li>
+    <li><span class="mono">unidad</span> / <span class="mono">unid</span> — opcional, si falta queda "kg". <strong>Ojo:</strong> si en tu planilla esa columna trae un número (1, 0,75...) en vez de "kg" o "cajón", es otra cosa (una cantidad, no la unidad) — mejor dejala afuera de lo que pegues.</li>
+    <li><span class="mono">costo</span> / <span class="mono">precio bruto</span> / <span class="mono">pcio unit bruto</span> — opcional, arranca en $0 si falta</li>
+    <li><span class="mono">margen</span> / <span class="mono">%benef</span> / <span class="mono">beneficio</span> — opcional (es el % de margen del artículo)</li>
+    <li><span class="mono">flete_pct</span> — opcional. <strong>Ojo:</strong> si tu planilla tiene una columna llamada simplemente "Flete", no la importes tal cual — ahí guardan un monto, no un porcentaje, y cargaría un flete mal. Si querés cargar el flete ahora, agregá una columna nueva llamada <span class="mono">flete_pct</span> con el porcentaje correspondiente.</li>
+  </ul>
+  <p style="margin-bottom:0;">Un artículo cuyo código ya existe se actualiza (nombre, costo, margen, flete); uno nuevo se crea.</p>
+</div>
+
+<form class="card" method="post" action="/articulos/importar" style="max-width:100%;">
+  <div>
+    <label for="datos">Pegá acá lo que copiaste de la planilla</label>
+    <textarea id="datos" name="datos" rows="10" style="font-family:ui-monospace,monospace; font-size:.85rem;" placeholder="código&#9;nombre&#9;unidad&#9;costo&#9;margen
+1003&#9;Filet de merluza x kg&#9;kg&#9;8500&#9;47"><%= datos %></textarea>
+  </div>
+  <div>
+    <button class="btn" type="submit">Importar</button>
+    <a class="btn secondary" href="/articulos">Cancelar</a>
+  </div>
+</form>
+
+<% if (resultado) { %>
+  <div class="pendiente" style="margin-top:20px;">
+    <% if (resultado.error) { %>
+      <p><strong>No pude importar:</strong> <%= resultado.error %></p>
+      <% if (resultado.columnasReconocidas && resultado.columnasReconocidas.length) { %>
+        <p>Columnas que sí reconocí: <span class="mono"><%= resultado.columnasReconocidas.join(', ') %></span></p>
+      <% } %>
+    <% } else { %>
+      <p><strong><%= resultado.creados %></strong> artículo(s) nuevo(s), <strong><%= resultado.actualizados %></strong> actualizado(s).</p>
+      <% if (resultado.errores.length) { %>
+        <p><strong>Avisos:</strong></p>
+        <ul class="plain" style="margin-bottom:0;">
+          <% resultado.errores.forEach(e => { %><li><%= e %></li><% }) %>
+        </ul>
+      <% } %>
+      <p style="margin-bottom:0;"><a href="/articulos">Ver los artículos →</a></p>
+    <% } %>
+  </div>
+<% } %>
+
+<%- include('../partials/foot') %>

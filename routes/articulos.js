@@ -2,6 +2,8 @@ const express = require('express');
 const pool = require('../db/pool');
 const { getConfig } = require('../lib/config');
 const { calcularPrecios } = require('../lib/precios');
+const { parseTabla } = require('../lib/csv');
+const { parseNumeroAr } = require('../lib/numeros');
 
 const router = express.Router();
 
@@ -18,6 +20,76 @@ router.get('/', async (req, res, next) => {
 
 router.get('/nuevo', (req, res) => {
   res.render('articulos/form', { articulo: {}, accion: '/articulos' });
+});
+
+router.get('/importar', (req, res) => {
+  res.render('articulos/importar', { resultado: null, datos: '' });
+});
+
+router.post('/importar', async (req, res, next) => {
+  const datos = req.body.datos || '';
+  try {
+    const { filas, columnasReconocidas } = parseTabla(datos);
+
+    if (!columnasReconocidas.includes('codigo') || !columnasReconocidas.includes('nombre')) {
+      return res.render('articulos/importar', {
+        datos,
+        resultado: {
+          error: 'No encontré columnas de "código" y "nombre" en lo que pegaste — son las dos obligatorias. Revisá los encabezados de la primera fila.',
+          columnasReconocidas,
+        },
+      });
+    }
+
+    let creados = 0;
+    let actualizados = 0;
+    const errores = [];
+
+    for (let i = 0; i < filas.length; i++) {
+      const f = filas[i];
+      const numeroFila = i + 2; // +1 por el encabezado, +1 porque i arranca en 0
+
+      if (!f.codigo || !f.nombre) {
+        errores.push(`Fila ${numeroFila}: falta código o nombre, se salteó.`);
+        continue;
+      }
+
+      const costo = f.costo !== undefined ? parseNumeroAr(f.costo) : null;
+      const margenPct = f.margen_pct !== undefined ? parseNumeroAr(f.margen_pct) : null;
+      const fletePct = f.flete_pct !== undefined ? parseNumeroAr(f.flete_pct) : null;
+
+      if (f.costo !== undefined && costo === null) {
+        errores.push(`Fila ${numeroFila} (${f.codigo}): el costo "${f.costo}" no se entiende como número, se dejó en 0.`);
+      }
+      if (f.margen_pct !== undefined && margenPct === null) {
+        errores.push(`Fila ${numeroFila} (${f.codigo}): el margen "${f.margen_pct}" no se entiende como número, se dejó en 0.`);
+      }
+
+      const { rows } = await pool.query('select id from articulos where codigo = $1', [f.codigo]);
+
+      if (rows[0]) {
+        await pool.query(
+          `update articulos set nombre=$1, unidad=coalesce($2, unidad),
+             costo=coalesce($3, costo), margen_pct=coalesce($4, margen_pct), flete_pct=coalesce($5, flete_pct)
+           where codigo=$6`,
+          [f.nombre, f.unidad || null, costo, margenPct, fletePct, f.codigo]
+        );
+        actualizados++;
+      } else {
+        await pool.query(
+          `insert into articulos (codigo, nombre, unidad, costo, margen_pct, flete_pct, aplica_iva, aplica_iibb)
+           values ($1,$2,$3,$4,$5,$6,true,true)`,
+          [f.codigo, f.nombre, f.unidad || 'kg', costo || 0, margenPct || 0, fletePct || 0]
+        );
+        creados++;
+      }
+    }
+
+    res.render('articulos/importar', {
+      datos: '',
+      resultado: { creados, actualizados, errores, columnasReconocidas },
+    });
+  } catch (err) { next(err); }
 });
 
 router.post('/', async (req, res, next) => {
