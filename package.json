@@ -1,0 +1,19 @@
+{
+  "name": "ruta-fria",
+  "version": "0.1.0",
+  "description": "Sistema de gestión para mayorista de pescados congelados",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "db:init": "node db/init.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.10",
+    "express": "^4.19.2",
+    "pg": "^8.12.0"
+  }
+}

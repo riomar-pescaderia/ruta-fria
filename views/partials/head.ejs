@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ruta Fría</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="app">
+    <span class="brand">🐟 Ruta Fría</span>
+    <nav class="app">
+      <a href="/clientes" class="<%= path && path.startsWith('/clientes') ? 'active' : '' %>">Clientes</a>
+      <a href="/articulos" class="<%= path && path.startsWith('/articulos') ? 'active' : '' %>">Artículos</a>
+      <a href="/compras" class="<%= path && path.startsWith('/compras') ? 'active' : '' %>">Compras</a>
+      <a href="/gastos" class="<%= path && path.startsWith('/gastos') ? 'active' : '' %>">Gastos</a>
+      <a href="/ventas" class="<%= path && path.startsWith('/ventas') ? 'active' : '' %>">Venta / remito</a>
+    </nav>
+  </header>
+  <main>

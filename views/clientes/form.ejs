@@ -1,0 +1,51 @@
+<%- include('../partials/head') %>
+
+<h1><%= cliente.id ? 'Editar cliente' : 'Nuevo cliente' %></h1>
+
+<form class="card" method="post" action="<%= accion %>">
+  <div>
+    <label for="razon_social">Razón social</label>
+    <input type="text" id="razon_social" name="razon_social" value="<%= cliente.razon_social || '' %>" required>
+  </div>
+  <div>
+    <label for="nombre_contacto">Nombre de contacto</label>
+    <input type="text" id="nombre_contacto" name="nombre_contacto" value="<%= cliente.nombre_contacto || '' %>">
+  </div>
+  <div>
+    <label for="telefono">Teléfono</label>
+    <input type="text" id="telefono" name="telefono" value="<%= cliente.telefono || '' %>">
+  </div>
+  <div>
+    <label for="direccion">Dirección</label>
+    <input type="text" id="direccion" name="direccion" value="<%= cliente.direccion || '' %>">
+  </div>
+  <div>
+    <label for="condicion_iva">Condición de IVA</label>
+    <select id="condicion_iva" name="condicion_iva">
+      <% ['Responsable Inscripto','Monotributo','Consumidor Final'].forEach(op => { %>
+        <option value="<%= op %>" <%= cliente.condicion_iva === op ? 'selected' : '' %>><%= op %></option>
+      <% }) %>
+    </select>
+  </div>
+  <div>
+    <label for="cuit_dni">CUIT / DNI</label>
+    <input type="text" id="cuit_dni" name="cuit_dni" value="<%= cliente.cuit_dni || '' %>">
+  </div>
+  <div>
+    <label for="condicion_pago">Condición de pago</label>
+    <select id="condicion_pago" name="condicion_pago">
+      <option value="contado" <%= cliente.condicion_pago === 'contado' ? 'selected' : '' %>>Contado</option>
+      <option value="cuenta_corriente" <%= cliente.condicion_pago === 'cuenta_corriente' ? 'selected' : '' %>>Cuenta corriente</option>
+    </select>
+  </div>
+  <div>
+    <label for="notas">Notas</label>
+    <textarea id="notas" name="notas" rows="2"><%= cliente.notas || '' %></textarea>
+  </div>
+  <div>
+    <button class="btn" type="submit">Guardar</button>
+    <a class="btn secondary" href="/clientes">Cancelar</a>
+  </div>
+</form>
+
+<%- include('../partials/foot') %>
