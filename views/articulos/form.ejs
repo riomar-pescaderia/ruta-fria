@@ -12,23 +12,15 @@
     <input type="text" id="nombre" name="nombre" value="<%= articulo.nombre || '' %>" required>
   </div>
   <div>
-    <label for="unidad">Unidad</label>
-    <select id="unidad" name="unidad">
-      <% ['kg','cajon','bolsa','unidad'].forEach(op => { %>
-        <option value="<%= op %>" <%= articulo.unidad === op ? 'selected' : '' %>><%= op %></option>
-      <% }) %>
-    </select>
-  </div>
-  <div>
-    <label for="contenido_gr">Contenido por unidad, en gramos (solo si Unidad = "unidad")</label>
-    <input type="number" step="1" id="contenido_gr" name="contenido_gr" value="<%= articulo.contenido_gr || '' %>" placeholder="ej. 200">
-    <p style="color:var(--ink-soft); font-size:.85rem; margin:6px 0 0;">Para artículos que se venden por unidad/paquete pero cuyo costo se carga por kg (como llega en la factura). Si cargás esto, el costo por unidad se calcula solo: costo por kg × (gramos ÷ 1000). Dejalo vacío si el costo ya es directamente el de la unidad.</p>
+    <label for="unidad">Unidad (divisor de kg)</label>
+    <input type="number" step="0.01" id="unidad" name="unidad" value="<%= articulo.unidad || 1 %>" placeholder="1">
+    <p style="color:var(--ink-soft); font-size:.85rem; margin:6px 0 0;">El costo se carga siempre por kg; acá se divide para llegar al costo real de lo que vendés. Dejalo en 1 si el precio ya es directamente por kg. Ejemplos: se vende en paquetes de 200g → poné 5 (1000 ÷ 200). Se vende entero y pesa en promedio 0,75kg → poné 0,75.</p>
   </div>
 
   <% if (articulo.id) { %>
   <div>
-    <label>Costo<%= articulo.unidad === 'unidad' && articulo.contenido_gr ? ' (por kg, no por unidad)' : '' %></label>
-    <input type="text" value="$<%= Number(articulo.costo).toFixed(2) %><%= articulo.unidad === 'unidad' && articulo.contenido_gr ? '/kg' : '' %> — se actualiza desde Compras" disabled>
+    <label>Costo<%= articulo.unidad && Number(articulo.unidad) !== 1 ? ' (por kg, antes de dividir por unidad)' : '' %></label>
+    <input type="text" value="$<%= Number(articulo.costo).toFixed(2) %> — se actualiza desde Compras" disabled>
   </div>
   <% } else { %>
   <p style="color:var(--ink-soft); font-size:.85rem; margin:0;">El costo arranca en $0 y se completa solo apenas carguen la primera factura de este artículo en Compras.</p>

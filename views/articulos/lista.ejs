@@ -33,7 +33,7 @@
       <td data-label="Código" class="mono"><%= a.codigo %></td>
       <td data-label="Nombre"><%= a.nombre %></td>
       <td data-label="Unidad"><%= a.unidad %></td>
-      <td data-label="Costo" class="mono"<% if (a.unidad === 'unidad' && a.contenido_gr) { %> title="$<%= Number(a.costo).toFixed(2) %>/kg × <%= a.contenido_gr %>g"<% } %>>$<%= a.costoPorUnidad.toFixed(2) %></td>
+      <td data-label="Costo" class="mono"<% if (Number(a.unidad) !== 1) { %> title="$<%= Number(a.costo).toFixed(2) %>/kg ÷ <%= a.unidad %>"<% } %>>$<%= a.costoPorUnidad.toFixed(2) %></td>
       <td data-label="Precio efectivo" class="mono">$<%= a.precioEfectivo.toFixed(0) %></td>
       <td data-label="Precio de lista" class="mono">$<%= a.precioLista.toFixed(0) %></td>
       <td data-label=""><a class="btn secondary" href="/articulos/<%= a.id %>/editar">Editar</a></td>

@@ -39,7 +39,7 @@ create table if not exists articulos (
   id serial primary key,
   codigo text not null unique,
   nombre text not null,
-  unidad text not null default 'kg',   -- kg / cajon / bolsa / unidad
+  unidad numeric not null default 1,   -- divisor: costo (por kg) ÷ unidad = costo real del producto
   costo numeric not null default 0,     -- lo pisa la última factura de compra confirmada
   aplica_iva boolean not null default true,
   aplica_iibb boolean not null default true,
@@ -50,12 +50,32 @@ create table if not exists articulos (
   created_at timestamptz not null default now()
 );
 
--- gramos por unidad de venta, solo para artículos con unidad = 'unidad' cuyo
--- costo se sigue cargando por kg (ej. un producto que viene en paquetes de
--- 200g pero en la factura del proveedor figura el precio del kilo).
--- alter table (en vez de una columna más arriba) porque la tabla ya existía
--- en producción antes de agregar este campo.
+-- gramos por unidad de venta — quedó sin uso: la división genérica de
+-- costo/unidad (más abajo) cubre el mismo caso. La dejamos en la tabla sin
+-- tocar para no volver a alterar la base; nada la lee ni la escribe.
 alter table articulos add column if not exists contenido_gr numeric;
+
+-- La columna "unidad" pasó de texto categórico (kg/cajon/bolsa/unidad) a
+-- ser el divisor numérico que se usa en la fórmula de precio: costo (que
+-- siempre se carga por kg) ÷ unidad = costo real del producto que se
+-- vende. Esta migración corre una sola vez: normaliza los valores de texto
+-- que ya había cargados (incluye formato con coma decimal, "0,75", y algún
+-- "kg" suelto cargado a mano) y recién ahí cambia el tipo de columna. Una
+-- vez que la columna ya es numeric, este bloque no hace nada en los
+-- arranques siguientes.
+do $$
+begin
+  if (select data_type from information_schema.columns
+      where table_name = 'articulos' and column_name = 'unidad') = 'text' then
+    update articulos set unidad = replace(unidad, ',', '.')
+      where unidad ~ '^[0-9]+,[0-9]+$';
+    update articulos set unidad = '1'
+      where unidad is null or unidad = '' or unidad !~ '^[0-9]+(\.[0-9]+)?$';
+    alter table articulos alter column unidad drop default;
+    alter table articulos alter column unidad type numeric using unidad::numeric;
+    alter table articulos alter column unidad set default 1;
+  end if;
+end $$;
 
 create table if not exists facturas_compra (
   id serial primary key,
