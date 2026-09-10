@@ -14,7 +14,7 @@
   <div>
     <label for="unidad">Unidad</label>
     <select id="unidad" name="unidad">
-      <% ['kg','cajon','bolsa'].forEach(op => { %>
+      <% ['kg','cajon','bolsa','unidad'].forEach(op => { %>
         <option value="<%= op %>" <%= articulo.unidad === op ? 'selected' : '' %>><%= op %></option>
       <% }) %>
     </select>
