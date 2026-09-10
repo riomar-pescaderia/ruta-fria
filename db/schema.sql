@@ -39,7 +39,7 @@ create table if not exists articulos (
   id serial primary key,
   codigo text not null unique,
   nombre text not null,
-  unidad text not null default 'kg',   -- kg / cajon / bolsa
+  unidad text not null default 'kg',   -- kg / cajon / bolsa / unidad
   costo numeric not null default 0,     -- lo pisa la última factura de compra confirmada
   aplica_iva boolean not null default true,
   aplica_iibb boolean not null default true,
