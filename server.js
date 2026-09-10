@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
+const pool = require('./db/pool');
 
 const clientesRouter = require('./routes/clientes');
 const articulosRouter = require('./routes/articulos');
@@ -35,4 +37,18 @@ app.use((err, req, res, next) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`[ruta-fria] escuchando en el puerto ${port}`));
+
+// aplica el esquema al arrancar — usa "if not exists" en todas las tablas,
+// así es seguro correrlo cada vez que el servicio se reinicia o redeploya.
+async function iniciar() {
+  try {
+    const schema = fs.readFileSync(path.join(__dirname, 'db', 'schema.sql'), 'utf8');
+    await pool.query(schema);
+    console.log('[ruta-fria] esquema de base de datos verificado.');
+  } catch (err) {
+    console.error('[ruta-fria] no se pudo aplicar el esquema al arrancar:', err.message);
+  }
+  app.listen(port, () => console.log(`[ruta-fria] escuchando en el puerto ${port}`));
+}
+
+iniciar();
