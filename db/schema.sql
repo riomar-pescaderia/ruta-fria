@@ -50,6 +50,13 @@ create table if not exists articulos (
   created_at timestamptz not null default now()
 );
 
+-- gramos por unidad de venta, solo para artículos con unidad = 'unidad' cuyo
+-- costo se sigue cargando por kg (ej. un producto que viene en paquetes de
+-- 200g pero en la factura del proveedor figura el precio del kilo).
+-- alter table (en vez de una columna más arriba) porque la tabla ya existía
+-- en producción antes de agregar este campo.
+alter table articulos add column if not exists contenido_gr numeric;
+
 create table if not exists facturas_compra (
   id serial primary key,
   proveedor_id integer references proveedores(id),

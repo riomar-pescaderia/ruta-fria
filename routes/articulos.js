@@ -61,6 +61,7 @@ router.post('/importar', async (req, res, next) => {
       const costo = f.costo !== undefined ? parseNumeroAr(f.costo) : null;
       const margenPct = f.margen_pct !== undefined ? parseNumeroAr(f.margen_pct) : null;
       const fletePct = f.flete_pct !== undefined ? parseNumeroAr(f.flete_pct) : null;
+      const contenidoGr = f.contenido_gr !== undefined ? parseNumeroAr(f.contenido_gr) : null;
 
       if (f.costo !== undefined && costo === null) {
         errores.push(`Fila ${numeroFila} (${f.codigo}): el costo "${f.costo}" no se entiende como número, se dejó en 0.`);
@@ -68,22 +69,26 @@ router.post('/importar', async (req, res, next) => {
       if (f.margen_pct !== undefined && margenPct === null) {
         errores.push(`Fila ${numeroFila} (${f.codigo}): el margen "${f.margen_pct}" no se entiende como número, se dejó en 0.`);
       }
+      if (f.contenido_gr !== undefined && contenidoGr === null) {
+        errores.push(`Fila ${numeroFila} (${f.codigo}): el contenido "${f.contenido_gr}" no se entiende como número, se dejó vacío.`);
+      }
 
       const { rows } = await pool.query('select id from articulos where codigo = $1', [f.codigo]);
 
       if (rows[0]) {
         await pool.query(
           `update articulos set nombre=$1, unidad=coalesce($2, unidad),
-             costo=coalesce($3, costo), margen_pct=coalesce($4, margen_pct), flete_pct=coalesce($5, flete_pct)
-           where codigo=$6`,
-          [f.nombre, f.unidad || null, costo, margenPct, fletePct, f.codigo]
+             costo=coalesce($3, costo), margen_pct=coalesce($4, margen_pct), flete_pct=coalesce($5, flete_pct),
+             contenido_gr=coalesce($6, contenido_gr)
+           where codigo=$7`,
+          [f.nombre, f.unidad || null, costo, margenPct, fletePct, contenidoGr, f.codigo]
         );
         actualizados++;
       } else {
         await pool.query(
-          `insert into articulos (codigo, nombre, unidad, costo, margen_pct, flete_pct, aplica_iva, aplica_iibb)
-           values ($1,$2,$3,$4,$5,$6,true,true)`,
-          [f.codigo, f.nombre, f.unidad || 'kg', costo || 0, margenPct || 0, fletePct || 0]
+          `insert into articulos (codigo, nombre, unidad, costo, margen_pct, flete_pct, contenido_gr, aplica_iva, aplica_iibb)
+           values ($1,$2,$3,$4,$5,$6,$7,true,true)`,
+          [f.codigo, f.nombre, f.unidad || 'kg', costo || 0, margenPct || 0, fletePct || 0, contenidoGr]
         );
         creados++;
       }
@@ -100,9 +105,9 @@ router.post('/', async (req, res, next) => {
   try {
     const a = req.body;
     await pool.query(
-      `insert into articulos (codigo, nombre, unidad, costo, aplica_iva, aplica_iibb, flete_pct, margen_pct, stock)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [a.codigo, a.nombre, a.unidad, a.costo || 0, !!a.aplica_iva, !!a.aplica_iibb, a.flete_pct || 0, a.margen_pct || 0, a.stock || null]
+      `insert into articulos (codigo, nombre, unidad, costo, aplica_iva, aplica_iibb, flete_pct, margen_pct, stock, contenido_gr)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [a.codigo, a.nombre, a.unidad, a.costo || 0, !!a.aplica_iva, !!a.aplica_iibb, a.flete_pct || 0, a.margen_pct || 0, a.stock || null, a.contenido_gr || null]
     );
     res.redirect('/articulos');
   } catch (err) { next(err); }
@@ -122,8 +127,8 @@ router.post('/:id', async (req, res, next) => {
     // el costo NO se edita a mano acá — llega desde Compras (facturas de proveedores)
     await pool.query(
       `update articulos set codigo=$1, nombre=$2, unidad=$3, aplica_iva=$4, aplica_iibb=$5,
-        flete_pct=$6, margen_pct=$7, stock=$8 where id=$9`,
-      [a.codigo, a.nombre, a.unidad, !!a.aplica_iva, !!a.aplica_iibb, a.flete_pct || 0, a.margen_pct || 0, a.stock || null, req.params.id]
+        flete_pct=$6, margen_pct=$7, stock=$8, contenido_gr=$9 where id=$10`,
+      [a.codigo, a.nombre, a.unidad, !!a.aplica_iva, !!a.aplica_iibb, a.flete_pct || 0, a.margen_pct || 0, a.stock || null, a.contenido_gr || null, req.params.id]
     );
     res.redirect('/articulos');
   } catch (err) { next(err); }
