@@ -10,7 +10,11 @@ const router = express.Router();
 router.get('/', async (req, res, next) => {
   try {
     const [{ rows: articulos }, config] = await Promise.all([
-      pool.query('select * from articulos order by nombre'),
+      pool.query(`select * from articulos
+        order by
+          case when codigo ~ '^[0-9]+$' then 0 else 1 end,
+          case when codigo ~ '^[0-9]+$' then codigo::numeric end,
+          codigo`),
       getConfig(),
     ]);
     const conPrecios = articulos.map((a) => ({ ...a, ...calcularPrecios(a, config) }));
