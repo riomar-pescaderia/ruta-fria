@@ -60,8 +60,11 @@ router.post('/importar', async (req, res, next) => {
 
       const costo = f.costo !== undefined ? parseNumeroAr(f.costo) : null;
       const margenPct = f.margen_pct !== undefined ? parseNumeroAr(f.margen_pct) : null;
-      const fletePct = f.flete_pct !== undefined ? parseNumeroAr(f.flete_pct) : null;
+      const fletePctManual = f.flete_pct !== undefined ? parseNumeroAr(f.flete_pct) : null;
       const contenidoGr = f.contenido_gr !== undefined ? parseNumeroAr(f.contenido_gr) : null;
+      const fleteMonto = f.flete_monto !== undefined ? parseNumeroAr(f.flete_monto) : null;
+      const ivaMonto = f.iva_monto !== undefined ? parseNumeroAr(f.iva_monto) : null;
+      const iibbMonto = f.iibb_monto !== undefined ? parseNumeroAr(f.iibb_monto) : null;
 
       if (f.costo !== undefined && costo === null) {
         errores.push(`Fila ${numeroFila} (${f.codigo}): el costo "${f.costo}" no se entiende como número, se dejó en 0.`);
@@ -72,6 +75,21 @@ router.post('/importar', async (req, res, next) => {
       if (f.contenido_gr !== undefined && contenidoGr === null) {
         errores.push(`Fila ${numeroFila} (${f.codigo}): el contenido "${f.contenido_gr}" no se entiende como número, se dejó vacío.`);
       }
+      if (f.flete_monto !== undefined && fleteMonto === null) {
+        errores.push(`Fila ${numeroFila} (${f.codigo}): el flete "${f.flete_monto}" no se entiende como número, no se tocó el flete.`);
+      }
+      if (f.iva_monto !== undefined && ivaMonto === null) {
+        errores.push(`Fila ${numeroFila} (${f.codigo}): el IVA "${f.iva_monto}" no se entiende como número, no se tocó "Aplica IVA".`);
+      }
+      if (f.iibb_monto !== undefined && iibbMonto === null) {
+        errores.push(`Fila ${numeroFila} (${f.codigo}): el IIBB "${f.iibb_monto}" no se entiende como número, no se tocó "Aplica IIBB".`);
+      }
+
+      // el monto de flete/IVA/IIBB de la planilla manda sobre flete_pct
+      // manual si ambos vienen en la misma fila.
+      const fletePct = fleteMonto !== null ? (fleteMonto > 0 ? 6 : 0) : fletePctManual;
+      const aplicaIva = ivaMonto !== null ? ivaMonto > 0 : null;
+      const aplicaIibb = iibbMonto !== null ? iibbMonto > 0 : null;
 
       const { rows } = await pool.query('select id from articulos where codigo = $1', [f.codigo]);
 
@@ -79,16 +97,17 @@ router.post('/importar', async (req, res, next) => {
         await pool.query(
           `update articulos set nombre=$1, unidad=coalesce($2, unidad),
              costo=coalesce($3, costo), margen_pct=coalesce($4, margen_pct), flete_pct=coalesce($5, flete_pct),
-             contenido_gr=coalesce($6, contenido_gr)
-           where codigo=$7`,
-          [f.nombre, f.unidad || null, costo, margenPct, fletePct, contenidoGr, f.codigo]
+             contenido_gr=coalesce($6, contenido_gr), aplica_iva=coalesce($7, aplica_iva),
+             aplica_iibb=coalesce($8, aplica_iibb)
+           where codigo=$9`,
+          [f.nombre, f.unidad || null, costo, margenPct, fletePct, contenidoGr, aplicaIva, aplicaIibb, f.codigo]
         );
         actualizados++;
       } else {
         await pool.query(
           `insert into articulos (codigo, nombre, unidad, costo, margen_pct, flete_pct, contenido_gr, aplica_iva, aplica_iibb)
-           values ($1,$2,$3,$4,$5,$6,$7,true,true)`,
-          [f.codigo, f.nombre, f.unidad || 'kg', costo || 0, margenPct || 0, fletePct || 0, contenidoGr]
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [f.codigo, f.nombre, f.unidad || 'kg', costo || 0, margenPct || 0, fletePct || 0, contenidoGr, aplicaIva !== null ? aplicaIva : true, aplicaIibb !== null ? aplicaIibb : true]
         );
         creados++;
       }

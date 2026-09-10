@@ -11,10 +11,13 @@
     <li><span class="mono">unidad</span> / <span class="mono">unid</span> — opcional, si falta queda "kg". <strong>Ojo:</strong> si en tu planilla esa columna trae un número (1, 0,75...) en vez de "kg" o "cajón", es otra cosa (una cantidad, no la unidad) — mejor dejala afuera de lo que pegues.</li>
     <li><span class="mono">costo</span> / <span class="mono">precio bruto</span> / <span class="mono">pcio unit bruto</span> — opcional, arranca en $0 si falta</li>
     <li><span class="mono">margen</span> / <span class="mono">%benef</span> / <span class="mono">beneficio</span> — opcional (es el % de margen del artículo)</li>
-    <li><span class="mono">flete_pct</span> — opcional. <strong>Ojo:</strong> si tu planilla tiene una columna llamada simplemente "Flete", no la importes tal cual — ahí guardan un monto, no un porcentaje, y cargaría un flete mal. Si querés cargar el flete ahora, agregá una columna nueva llamada <span class="mono">flete_pct</span> con el porcentaje correspondiente.</li>
+    <li><span class="mono">flete</span> — opcional, tal cual la columna "Flete" de tu planilla (el monto, no un porcentaje). Si trae un valor distinto de 0, activo el flete del artículo en 6%; si está en 0 o vacío, lo dejo en 0%.</li>
+    <li><span class="mono">iva</span> — opcional, tal cual la columna "IVA" de tu planilla. Si trae un valor distinto de 0, activo "Aplica IVA"; si está en 0, lo desactivo.</li>
+    <li><span class="mono">iibb</span> — opcional, tal cual la columna "IIBB" de tu planilla. Mismo criterio: distinto de 0 activa "Aplica IIBB", 0 lo desactiva.</li>
+    <li><span class="mono">flete_pct</span> — opcional, para cuando querés cargar el porcentaje de flete directamente en vez de dejar que se derive de la columna "flete". Si pegás las dos columnas juntas, manda "flete".</li>
     <li><span class="mono">contenido_gr</span> — opcional. Solo para artículos con unidad "unidad" cuyo costo viene por kg (ej. un paquete de 200g): poné ahí los gramos que trae cada unidad y el costo por unidad se calcula solo.</li>
   </ul>
-  <p style="margin-bottom:0;">Un artículo cuyo código ya existe se actualiza (nombre, costo, margen, flete, contenido); uno nuevo se crea.</p>
+  <p style="margin-bottom:0;">Un artículo cuyo código ya existe se actualiza (nombre, costo, margen, flete, IVA, IIBB, contenido); uno nuevo se crea.</p>
 </div>
 
 <form class="card" method="post" action="/articulos/importar" style="max-width:100%;">
