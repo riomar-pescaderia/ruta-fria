@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { contarUsuarios, buscarPorUsername, crearUsuario, verificarPassword } = require('../lib/auth');
+const { contarUsuarios, buscarPorUsername, crearUsuario, verificarPassword, datosSesion } = require('../lib/auth');
 
 router.get('/login', async (req, res) => {
   if (req.session.usuario) return res.redirect('/');
@@ -22,7 +22,7 @@ router.post('/login', async (req, res) => {
     if (!ok) {
       return res.render('auth/login', { error: 'Usuario o contraseña incorrectos.' });
     }
-    req.session.usuario = { id: usuario.id, username: usuario.username, nombre: usuario.nombre };
+    req.session.usuario = datosSesion(usuario);
     res.redirect('/');
   } catch (err) {
     console.error('[ruta-fria] error en login:', err.message);
@@ -61,8 +61,17 @@ router.post('/setup', async (req, res) => {
       return res.render('auth/setup', { error: 'Las contraseñas no coinciden.' });
     }
 
-    const usuario = await crearUsuario({ username, password, nombre });
-    req.session.usuario = { id: usuario.id, username: usuario.username, nombre: usuario.nombre };
+    // el primer usuario del sistema siempre nace administrador, con
+    // acceso total — si no, nadie podría entrar nunca a Usuarios a
+    // otorgarle permisos a sí mismo ni a nadie más
+    const usuario = await crearUsuario({
+      username,
+      password,
+      nombre,
+      esAdmin: true,
+      accesos: { clientes: true, articulos: true, compras: true, gastos: true, ventas: true },
+    });
+    req.session.usuario = datosSesion(usuario);
     res.redirect('/');
   } catch (err) {
     console.error('[ruta-fria] error en setup:', err.message);

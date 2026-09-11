@@ -5,6 +5,10 @@
   <a class="btn" href="/usuarios/nuevo">+ Nuevo usuario</a>
 </div>
 
+<% if (error) { %>
+  <p style="color:#b3261e;"><%= error %></p>
+<% } %>
+
 <% if (usuarios.length === 0) { %>
   <p class="empty">Todavía no hay usuarios cargados.</p>
 <% } else { %>
@@ -13,6 +17,8 @@
     <tr>
       <th>Usuario</th>
       <th>Nombre</th>
+      <th>Rol</th>
+      <th>Accesos</th>
       <th>Estado</th>
       <th></th>
     </tr>
@@ -20,10 +26,20 @@
   <tbody>
     <% usuarios.forEach(u => { %>
     <tr>
-      <td data-label="Usuario" class="mono"><%= u.username %></td>
+      <td data-label="Usuario" class="mono"><%= u.username %><%= u.id === sesionId ? ' (vos)' : '' %></td>
       <td data-label="Nombre"><%= u.nombre || '—' %></td>
+      <td data-label="Rol"><%= u.es_admin ? 'Administrador' : 'Empleado' %></td>
+      <td data-label="Accesos" style="font-size:.85rem; color:var(--ink-soft);">
+        <% if (u.es_admin) { %>Todos<% } else { %>
+          <%= ['clientes','articulos','compras','gastos','ventas']
+                .filter(m => u['acceso_' + m])
+                .map(m => m[0].toUpperCase() + m.slice(1))
+                .join(', ') || 'Ninguno' %>
+        <% } %>
+      </td>
       <td data-label="Estado"><%= u.activo ? 'Activo' : 'Desactivado' %></td>
       <td data-label="" style="display:flex; gap:8px; flex-wrap:wrap;">
+        <a class="btn secondary" href="/usuarios/<%= u.id %>/permisos">Permisos</a>
         <a class="btn secondary" href="/usuarios/<%= u.id %>/password">Cambiar contraseña</a>
         <form method="post" action="/usuarios/<%= u.id %>/estado" style="margin:0;">
           <button class="btn secondary" type="submit"><%= u.activo ? 'Desactivar' : 'Activar' %></button>

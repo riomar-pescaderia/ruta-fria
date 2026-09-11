@@ -1,0 +1,32 @@
+<%- include('../partials/head') %>
+
+<h1>Permisos — <%= usuario.username %></h1>
+
+<form class="card" method="post" action="/usuarios/<%= usuario.id %>/permisos">
+  <% if (error) { %>
+    <p style="color:#b3261e; margin-top:0;"><%= error %></p>
+  <% } %>
+
+  <div class="check-row">
+    <input type="checkbox" id="es_admin" name="es_admin" <%= usuario.es_admin ? 'checked' : '' %>>
+    <label for="es_admin" style="margin:0;">Administrador (acceso total, incluida esta pantalla de Usuarios)</label>
+  </div>
+
+  <div>
+    <label style="margin-top:10px;">Accesos por módulo (se ignoran si es administrador — un administrador ya tiene acceso a todo)</label>
+    <div class="check-row"><input type="checkbox" id="acceso_clientes" name="acceso_clientes" <%= usuario.acceso_clientes ? 'checked' : '' %>><label for="acceso_clientes" style="margin:0;">Clientes</label></div>
+    <div class="check-row"><input type="checkbox" id="acceso_articulos" name="acceso_articulos" <%= usuario.acceso_articulos ? 'checked' : '' %>><label for="acceso_articulos" style="margin:0;">Artículos</label></div>
+    <div class="check-row"><input type="checkbox" id="acceso_compras" name="acceso_compras" <%= usuario.acceso_compras ? 'checked' : '' %>><label for="acceso_compras" style="margin:0;">Compras</label></div>
+    <div class="check-row"><input type="checkbox" id="acceso_gastos" name="acceso_gastos" <%= usuario.acceso_gastos ? 'checked' : '' %>><label for="acceso_gastos" style="margin:0;">Gastos</label></div>
+    <div class="check-row"><input type="checkbox" id="acceso_ventas" name="acceso_ventas" <%= usuario.acceso_ventas ? 'checked' : '' %>><label for="acceso_ventas" style="margin:0;">Venta / remito</label></div>
+  </div>
+
+  <p style="color:var(--ink-soft); font-size:.85rem;">Los cambios se aplican al toque, aunque la persona ya esté logueada — no hace falta que vuelva a entrar.</p>
+
+  <div>
+    <button class="btn" type="submit">Guardar</button>
+    <a class="btn secondary" href="/usuarios">Cancelar</a>
+  </div>
+</form>
+
+<%- include('../partials/foot') %>

@@ -136,8 +136,39 @@ create table if not exists usuarios (
   password_hash text not null,
   nombre text,
   activo boolean not null default true,
+  es_admin boolean not null default false,       -- acceso total, incluida la gestión de usuarios
+  acceso_clientes boolean not null default false,
+  acceso_articulos boolean not null default false,
+  acceso_compras boolean not null default false,
+  acceso_gastos boolean not null default false,
+  acceso_ventas boolean not null default false,
   created_at timestamptz not null default now()
 );
+alter table usuarios add column if not exists es_admin boolean not null default false;
+alter table usuarios add column if not exists acceso_clientes boolean not null default false;
+alter table usuarios add column if not exists acceso_articulos boolean not null default false;
+alter table usuarios add column if not exists acceso_compras boolean not null default false;
+alter table usuarios add column if not exists acceso_gastos boolean not null default false;
+alter table usuarios add column if not exists acceso_ventas boolean not null default false;
+
+-- Antes de que existieran los permisos por módulo, cualquier usuario
+-- cargado tenía acceso a todo. Para no dejar a nadie afuera de un día
+-- para el otro, la primera vez que corre este bloque (todavía no hay
+-- ningún administrador) promueve a administrador, con acceso total, a
+-- todos los usuarios que ya estuvieran cargados en ese momento. Una vez
+-- que existe al menos un administrador, no vuelve a tocar nada.
+do $$
+begin
+  if not exists (select 1 from usuarios where es_admin = true) then
+    update usuarios set
+      es_admin = true,
+      acceso_clientes = true,
+      acceso_articulos = true,
+      acceso_compras = true,
+      acceso_gastos = true,
+      acceso_ventas = true;
+  end if;
+end $$;
 
 create index if not exists idx_facturas_compra_items_factura on facturas_compra_items(factura_id);
 create index if not exists idx_ventas_items_venta on ventas_items(venta_id);

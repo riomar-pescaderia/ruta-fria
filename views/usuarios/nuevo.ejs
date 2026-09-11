@@ -22,6 +22,21 @@
     <label for="password2">Repetir contraseña</label>
     <input type="password" id="password2" name="password2" required minlength="6">
   </div>
+
+  <div class="check-row">
+    <input type="checkbox" id="es_admin" name="es_admin" <%= valores.es_admin ? 'checked' : '' %>>
+    <label for="es_admin" style="margin:0;">Administrador (acceso total, incluida esta pantalla de Usuarios)</label>
+  </div>
+
+  <div>
+    <label style="margin-top:10px;">Accesos por módulo (para usuarios que no son administradores)</label>
+    <div class="check-row"><input type="checkbox" id="acceso_clientes" name="acceso_clientes" <%= accesos.clientes ? 'checked' : '' %>><label for="acceso_clientes" style="margin:0;">Clientes</label></div>
+    <div class="check-row"><input type="checkbox" id="acceso_articulos" name="acceso_articulos" <%= accesos.articulos ? 'checked' : '' %>><label for="acceso_articulos" style="margin:0;">Artículos</label></div>
+    <div class="check-row"><input type="checkbox" id="acceso_compras" name="acceso_compras" <%= accesos.compras ? 'checked' : '' %>><label for="acceso_compras" style="margin:0;">Compras</label></div>
+    <div class="check-row"><input type="checkbox" id="acceso_gastos" name="acceso_gastos" <%= accesos.gastos ? 'checked' : '' %>><label for="acceso_gastos" style="margin:0;">Gastos</label></div>
+    <div class="check-row"><input type="checkbox" id="acceso_ventas" name="acceso_ventas" <%= accesos.ventas ? 'checked' : '' %>><label for="acceso_ventas" style="margin:0;">Venta / remito</label></div>
+  </div>
+
   <div>
     <button class="btn" type="submit">Crear usuario</button>
     <a class="btn secondary" href="/usuarios">Cancelar</a>

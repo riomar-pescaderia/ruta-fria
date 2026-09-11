@@ -5,7 +5,7 @@ const fs = require('fs');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const pool = require('./db/pool');
-const { requireAuth } = require('./lib/auth');
+const { requireAuth, refrescarSesion, requireAdmin, requireAcceso } = require('./lib/auth');
 
 const clientesRouter = require('./routes/clientes');
 const articulosRouter = require('./routes/articulos');
@@ -47,17 +47,21 @@ app.use((req, res, next) => {
 // /login, /logout y /setup quedan siempre accesibles, sin login
 app.use('/', authRouter);
 
-// todo lo que se registre de acá para abajo queda protegido
+// todo lo que se registre de acá para abajo queda protegido — primero
+// hay que estar logueado, y después se refresca el usuario de la sesión
+// contra la base en cada pedido, para que un cambio de permisos hecho
+// por un administrador tenga efecto ya mismo, sin desloguear a nadie
 app.use(requireAuth);
+app.use(refrescarSesion);
 
 app.get('/', (req, res) => res.redirect('/clientes'));
 
-app.use('/clientes', clientesRouter);
-app.use('/articulos', articulosRouter);
-app.use('/usuarios', usuariosRouter);
-app.use('/compras', proximamente('Compras', 'Cargar facturas de proveedores y que el costo de cada artículo se actualice solo.'));
-app.use('/gastos', proximamente('Gastos generales', 'Sueldos, alquiler, insumos y demás gastos de la operación, con un panel de total por tipo.'));
-app.use('/ventas', proximamente('Venta / remito', 'Cargar una venta, elegir forma de pago y generar el remito en PDF.'));
+app.use('/clientes', requireAcceso('clientes'), clientesRouter);
+app.use('/articulos', requireAcceso('articulos'), articulosRouter);
+app.use('/usuarios', requireAdmin, usuariosRouter);
+app.use('/compras', requireAcceso('compras'), proximamente('Compras', 'Cargar facturas de proveedores y que el costo de cada artículo se actualice solo.'));
+app.use('/gastos', requireAcceso('gastos'), proximamente('Gastos generales', 'Sueldos, alquiler, insumos y demás gastos de la operación, con un panel de total por tipo.'));
+app.use('/ventas', requireAcceso('ventas'), proximamente('Venta / remito', 'Cargar una venta, elegir forma de pago y generar el remito en PDF.'));
 
 app.use((req, res) => res.status(404).render('404'));
 

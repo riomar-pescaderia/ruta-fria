@@ -9,13 +9,14 @@
 <body>
   <header class="app">
     <span class="brand">🐟 Ruta Fría</span>
+    <% const acc = (typeof usuario !== 'undefined' && usuario) ? (usuario.esAdmin ? { clientes:true, articulos:true, compras:true, gastos:true, ventas:true } : (usuario.accesos || {})) : {}; %>
     <nav class="app">
-      <a href="/clientes" class="<%= path && path.startsWith('/clientes') ? 'active' : '' %>">Clientes</a>
-      <a href="/articulos" class="<%= path && path.startsWith('/articulos') ? 'active' : '' %>">Artículos</a>
-      <a href="/compras" class="<%= path && path.startsWith('/compras') ? 'active' : '' %>">Compras</a>
-      <a href="/gastos" class="<%= path && path.startsWith('/gastos') ? 'active' : '' %>">Gastos</a>
-      <a href="/ventas" class="<%= path && path.startsWith('/ventas') ? 'active' : '' %>">Venta / remito</a>
-      <a href="/usuarios" class="<%= path && path.startsWith('/usuarios') ? 'active' : '' %>">Usuarios</a>
+      <% if (acc.clientes) { %><a href="/clientes" class="<%= path && path.startsWith('/clientes') ? 'active' : '' %>">Clientes</a><% } %>
+      <% if (acc.articulos) { %><a href="/articulos" class="<%= path && path.startsWith('/articulos') ? 'active' : '' %>">Artículos</a><% } %>
+      <% if (acc.compras) { %><a href="/compras" class="<%= path && path.startsWith('/compras') ? 'active' : '' %>">Compras</a><% } %>
+      <% if (acc.gastos) { %><a href="/gastos" class="<%= path && path.startsWith('/gastos') ? 'active' : '' %>">Gastos</a><% } %>
+      <% if (acc.ventas) { %><a href="/ventas" class="<%= path && path.startsWith('/ventas') ? 'active' : '' %>">Venta / remito</a><% } %>
+      <% if (typeof usuario !== 'undefined' && usuario && usuario.esAdmin) { %><a href="/usuarios" class="<%= path && path.startsWith('/usuarios') ? 'active' : '' %>">Usuarios</a><% } %>
     </nav>
     <% if (typeof usuario !== 'undefined' && usuario) { %>
       <div style="margin-left:auto; display:flex; align-items:center; gap:12px; font-size:.85rem; color:#d9eef0;">
