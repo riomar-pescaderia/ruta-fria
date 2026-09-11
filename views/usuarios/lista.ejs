@@ -1,0 +1,38 @@
+<%- include('../partials/head') %>
+
+<div class="toolbar">
+  <h1>Usuarios</h1>
+  <a class="btn" href="/usuarios/nuevo">+ Nuevo usuario</a>
+</div>
+
+<% if (usuarios.length === 0) { %>
+  <p class="empty">Todavía no hay usuarios cargados.</p>
+<% } else { %>
+<table>
+  <thead>
+    <tr>
+      <th>Usuario</th>
+      <th>Nombre</th>
+      <th>Estado</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <% usuarios.forEach(u => { %>
+    <tr>
+      <td data-label="Usuario" class="mono"><%= u.username %></td>
+      <td data-label="Nombre"><%= u.nombre || '—' %></td>
+      <td data-label="Estado"><%= u.activo ? 'Activo' : 'Desactivado' %></td>
+      <td data-label="" style="display:flex; gap:8px; flex-wrap:wrap;">
+        <a class="btn secondary" href="/usuarios/<%= u.id %>/password">Cambiar contraseña</a>
+        <form method="post" action="/usuarios/<%= u.id %>/estado" style="margin:0;">
+          <button class="btn secondary" type="submit"><%= u.activo ? 'Desactivar' : 'Activar' %></button>
+        </form>
+      </td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+<% } %>
+
+<%- include('../partials/foot') %>

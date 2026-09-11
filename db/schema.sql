@@ -130,6 +130,15 @@ create table if not exists ventas_items (
   subtotal numeric not null
 );
 
+create table if not exists usuarios (
+  id serial primary key,
+  username text not null unique,
+  password_hash text not null,
+  nombre text,
+  activo boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
 create index if not exists idx_facturas_compra_items_factura on facturas_compra_items(factura_id);
 create index if not exists idx_ventas_items_venta on ventas_items(venta_id);
 create index if not exists idx_gastos_fecha on gastos(fecha);

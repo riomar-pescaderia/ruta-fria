@@ -15,6 +15,13 @@
       <a href="/compras" class="<%= path && path.startsWith('/compras') ? 'active' : '' %>">Compras</a>
       <a href="/gastos" class="<%= path && path.startsWith('/gastos') ? 'active' : '' %>">Gastos</a>
       <a href="/ventas" class="<%= path && path.startsWith('/ventas') ? 'active' : '' %>">Venta / remito</a>
+      <a href="/usuarios" class="<%= path && path.startsWith('/usuarios') ? 'active' : '' %>">Usuarios</a>
     </nav>
+    <% if (typeof usuario !== 'undefined' && usuario) { %>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:12px; font-size:.85rem; color:#d9eef0;">
+        <span><%= usuario.nombre || usuario.username %></span>
+        <a href="/logout" class="btn secondary" style="color:#fff; border-color:rgba(255,255,255,.35);">Salir</a>
+      </div>
+    <% } %>
   </header>
   <main>
