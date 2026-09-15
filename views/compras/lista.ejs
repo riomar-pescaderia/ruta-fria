@@ -1,0 +1,40 @@
+<%- include('../partials/head') %>
+
+<div class="toolbar">
+  <h1>Compras</h1>
+  <div style="display:flex; gap:8px;">
+    <a class="btn secondary" href="/compras/proveedores">Proveedores</a>
+    <a class="btn" href="/compras/nueva">+ Nueva factura</a>
+  </div>
+</div>
+
+<% if (facturas.length === 0) { %>
+  <p class="empty">Todavía no cargaste ninguna factura de compra.</p>
+<% } else { %>
+<table>
+  <thead>
+    <tr>
+      <th>Fecha</th>
+      <th>Proveedor</th>
+      <th>Número</th>
+      <th>Total</th>
+      <th>Estado</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <% facturas.forEach(f => { %>
+    <tr>
+      <td data-label="Fecha"><%= new Date(f.fecha).toLocaleDateString('es-AR') %></td>
+      <td data-label="Proveedor"><%= f.proveedor_nombre %></td>
+      <td data-label="Número" class="mono"><%= f.numero || '—' %></td>
+      <td data-label="Total" class="mono">$<%= Number(f.total).toFixed(2) %></td>
+      <td data-label="Estado"><span class="badge <%= f.actualizo_costos ? 'confirmada' : 'borrador' %>"><%= f.actualizo_costos ? 'Confirmada' : 'Borrador' %></span></td>
+      <td data-label=""><a class="btn secondary" href="/compras/<%= f.id %>">Ver</a></td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+<% } %>
+
+<%- include('../partials/foot') %>

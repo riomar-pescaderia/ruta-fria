@@ -6,11 +6,10 @@ Sistema de gestión para el mayorista de pescados congelados. Node.js + Express 
 
 - **Clientes** — alta, edición y listado. ✅ funcionando
 - **Artículos** — alta, edición, listado, con la calculadora de precio (costo + IVA/IIBB + flete + margen → precio en efectivo → precio de lista). ✅ funcionando
-- **Compras** (facturas de proveedores) — pantalla placeholder, todavía sin construir
+- **Usuarios** — login, alta de usuarios, permisos por módulo, rol de administrador. ✅ funcionando
+- **Compras** (facturas de proveedores) — proveedores (alta y listado) y facturas de compra con renglones por artículo. Una factura arranca en borrador (se puede seguir editando o borrar) y al confirmarla pisa el costo de cada artículo con el precio unitario cargado — a partir de ahí queda de solo lectura. ✅ funcionando
 - **Gastos generales** — pantalla placeholder, todavía sin construir
 - **Venta / remito** — pantalla placeholder, todavía sin construir
-
-El costo de cada artículo hoy se carga directo en la base (no hay pantalla para eso todavía) — lo va a completar Compras cuando esté listo.
 
 ## Correr en local
 

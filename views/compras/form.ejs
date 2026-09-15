@@ -1,0 +1,142 @@
+<%- include('../partials/head') %>
+
+<h1><%= factura.id ? 'Editar factura de compra' : 'Nueva factura de compra' %></h1>
+
+<% if (error) { %>
+  <div class="pendiente" style="border-color:#e3b8b8; color:#7a2b2b; margin-bottom:16px; padding:14px 20px;">
+    <p style="margin:0;"><%= error %></p>
+  </div>
+<% } %>
+
+<form class="card" method="post" action="<%= accion %>" style="max-width:900px;">
+  <div style="display:flex; gap:12px; flex-wrap:wrap;">
+    <div style="flex:2; min-width:220px;">
+      <label for="proveedor_id">Proveedor</label>
+      <select id="proveedor_id" name="proveedor_id" required>
+        <option value="">— elegir —</option>
+        <% proveedores.forEach(p => { %>
+          <option value="<%= p.id %>" <%= String(factura.proveedor_id) === String(p.id) ? 'selected' : '' %>><%= p.nombre %></option>
+        <% }) %>
+      </select>
+      <% if (proveedores.length === 0) { %>
+        <p style="color:var(--ink-soft); font-size:.85rem; margin:6px 0 0;">Todavía no cargaste ningún proveedor — <a href="/compras/proveedores/nuevo">creá uno primero</a>.</p>
+      <% } %>
+    </div>
+    <div style="flex:1; min-width:140px;">
+      <label for="numero">Número de factura</label>
+      <input type="text" id="numero" name="numero" value="<%= factura.numero || '' %>" placeholder="opcional">
+    </div>
+    <div style="flex:1; min-width:150px;">
+      <label for="fecha">Fecha</label>
+      <input type="date" id="fecha" name="fecha" value="<%= factura.fecha || '' %>">
+    </div>
+  </div>
+
+  <div style="overflow-x:auto;">
+  <table id="tabla-items">
+    <thead>
+      <tr>
+        <th style="min-width:220px;">Artículo</th>
+        <th style="width:110px;">Cantidad</th>
+        <th style="width:130px;">Precio unit.</th>
+        <th style="width:60px;">IVA</th>
+        <th style="width:110px;">Subtotal</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="filas-items">
+      <% items.forEach((it, i) => { %>
+      <tr>
+        <td data-label="Artículo">
+          <select data-campo="articulo_id" name="items[<%= i %>][articulo_id]" required>
+            <option value="">— elegir —</option>
+            <% articulos.forEach(a => { %>
+              <option value="<%= a.id %>" <%= String(it.articulo_id) === String(a.id) ? 'selected' : '' %>><%= a.codigo %> — <%= a.nombre %></option>
+            <% }) %>
+          </select>
+        </td>
+        <td data-label="Cantidad">
+          <input class="f-cantidad" data-campo="cantidad" type="number" step="0.01" min="0" name="items[<%= i %>][cantidad]" value="<%= it.cantidad || '' %>" required>
+        </td>
+        <td data-label="Precio unit.">
+          <input class="f-precio" data-campo="precio_unitario" type="number" step="0.01" min="0" name="items[<%= i %>][precio_unitario]" value="<%= it.precio_unitario || '' %>" required>
+        </td>
+        <td data-label="IVA" style="text-align:center;">
+          <input data-campo="aplica_iva" type="checkbox" name="items[<%= i %>][aplica_iva]" <%= it.aplica_iva !== false ? 'checked' : '' %>>
+        </td>
+        <td data-label="Subtotal" class="mono f-subtotal">$<%= it.total ? Number(it.total).toFixed(2) : '0.00' %></td>
+        <td><button type="button" class="btn secondary quitar-fila">Quitar</button></td>
+      </tr>
+      <% }) %>
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="4" style="text-align:right; font-weight:600; border-bottom:none;">Total</td>
+        <td class="mono" id="total-factura" style="border-bottom:none;">$0.00</td>
+        <td style="border-bottom:none;"></td>
+      </tr>
+    </tfoot>
+  </table>
+  </div>
+
+  <div>
+    <button type="button" id="agregar-fila" class="btn secondary">+ Agregar artículo</button>
+  </div>
+
+  <div>
+    <button class="btn" type="submit">Guardar factura</button>
+    <a class="btn secondary" href="/compras">Cancelar</a>
+  </div>
+</form>
+
+<script>
+(function () {
+  var tbody = document.getElementById('filas-items');
+
+  function actualizarTotales() {
+    var total = 0;
+    tbody.querySelectorAll('tr').forEach(function (tr) {
+      var cantidad = parseFloat(tr.querySelector('.f-cantidad').value) || 0;
+      var precio = parseFloat(tr.querySelector('.f-precio').value) || 0;
+      var subtotal = cantidad * precio;
+      tr.querySelector('.f-subtotal').textContent = '$' + subtotal.toFixed(2);
+      total += subtotal;
+    });
+    document.getElementById('total-factura').textContent = '$' + total.toFixed(2);
+  }
+
+  function reindexar() {
+    tbody.querySelectorAll('tr').forEach(function (tr, i) {
+      tr.querySelectorAll('[data-campo]').forEach(function (el) {
+        el.name = 'items[' + i + '][' + el.dataset.campo + ']';
+      });
+    });
+  }
+
+  document.getElementById('agregar-fila').addEventListener('click', function () {
+    var filas = tbody.querySelectorAll('tr');
+    var nueva = filas[filas.length - 1].cloneNode(true);
+    nueva.querySelectorAll('select').forEach(function (el) { el.selectedIndex = 0; });
+    nueva.querySelectorAll('input[type=number]').forEach(function (el) { el.value = ''; });
+    nueva.querySelectorAll('input[type=checkbox]').forEach(function (el) { el.checked = true; });
+    nueva.querySelector('.f-subtotal').textContent = '$0.00';
+    tbody.appendChild(nueva);
+    reindexar();
+  });
+
+  tbody.addEventListener('click', function (e) {
+    if (e.target.classList.contains('quitar-fila')) {
+      if (tbody.querySelectorAll('tr').length > 1) {
+        e.target.closest('tr').remove();
+        reindexar();
+        actualizarTotales();
+      }
+    }
+  });
+
+  tbody.addEventListener('input', actualizarTotales);
+  actualizarTotales();
+})();
+</script>
+
+<%- include('../partials/foot') %>

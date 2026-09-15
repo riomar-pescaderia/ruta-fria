@@ -1,0 +1,36 @@
+<%- include('../partials/head') %>
+
+<div class="toolbar">
+  <h1>Proveedores</h1>
+  <div style="display:flex; gap:8px;">
+    <a class="btn secondary" href="/compras">← Volver a compras</a>
+    <a class="btn" href="/compras/proveedores/nuevo">+ Nuevo proveedor</a>
+  </div>
+</div>
+
+<% if (proveedores.length === 0) { %>
+  <p class="empty">Todavía no cargaste ningún proveedor.</p>
+<% } else { %>
+<table>
+  <thead>
+    <tr>
+      <th>Nombre</th>
+      <th>Contacto</th>
+      <th>Teléfono</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <% proveedores.forEach(p => { %>
+    <tr>
+      <td data-label="Nombre"><%= p.nombre %></td>
+      <td data-label="Contacto"><%= p.contacto || '—' %></td>
+      <td data-label="Teléfono" class="mono"><%= p.telefono || '—' %></td>
+      <td data-label=""><a class="btn secondary" href="/compras/proveedores/<%= p.id %>/editar">Editar</a></td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+<% } %>
+
+<%- include('../partials/foot') %>
