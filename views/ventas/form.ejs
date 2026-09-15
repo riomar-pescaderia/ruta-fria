@@ -1,0 +1,351 @@
+<%- include('../partials/head') %>
+
+<h1><%= venta.id ? 'Editar venta' : 'Nueva venta' %></h1>
+
+<% if (error) { %>
+  <div class="pendiente" style="border-color:#e3b8b8; color:#7a2b2b; margin-bottom:16px; padding:14px 20px;">
+    <p style="margin:0;"><%= error %></p>
+  </div>
+<% } %>
+
+<form class="card" method="post" action="<%= accion %>" style="max-width:900px;">
+  <% const clienteSel = venta.cliente_id ? clientes.find(c => String(c.id) === String(venta.cliente_id)) : null; %>
+  <div style="display:flex; gap:12px; flex-wrap:wrap;">
+    <div style="flex:2; min-width:240px;">
+      <label for="cliente_buscar">Cliente</label>
+      <input type="text" id="cliente_buscar" placeholder="Buscar por razón social, CUIT/DNI..." autocomplete="off" value="<%= clienteSel ? clienteSel.razon_social : '' %>" required>
+      <input type="hidden" id="cliente_id" name="cliente_id" value="<%= venta.cliente_id || '' %>">
+      <% if (clientes.length === 0) { %>
+        <p style="color:var(--ink-soft); font-size:.85rem; margin:6px 0 0;">Todavía no cargaste ningún cliente — <a href="/clientes/nuevo">creá uno primero</a>.</p>
+      <% } %>
+    </div>
+    <div style="flex:1; min-width:150px;">
+      <label for="fecha">Fecha</label>
+      <input type="date" id="fecha" name="fecha" value="<%= venta.fecha || '' %>">
+    </div>
+  </div>
+
+  <div style="display:flex; gap:12px; flex-wrap:wrap;">
+    <div style="flex:1; min-width:220px;">
+      <label for="forma_pago">Forma de pago</label>
+      <select id="forma_pago" name="forma_pago" required>
+        <option value="">— elegir —</option>
+        <option value="efectivo" <%= venta.forma_pago === 'efectivo' ? 'selected' : '' %>>Efectivo</option>
+        <option value="transferencia" <%= venta.forma_pago === 'transferencia' ? 'selected' : '' %>>Transferencia</option>
+        <option value="cuenta_corriente" <%= venta.forma_pago === 'cuenta_corriente' ? 'selected' : '' %>>Cuenta corriente</option>
+      </select>
+      <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Define qué precio se sugiere al elegir cada artículo: efectivo sugiere el precio en efectivo, transferencia y cuenta corriente sugieren el precio de lista.</p>
+    </div>
+    <div style="flex:1; min-width:200px;">
+      <label for="origen">Origen</label>
+      <select id="origen" name="origen">
+        <option value="deposito" <%= (venta.origen || 'deposito') === 'deposito' ? 'selected' : '' %>>Depósito</option>
+        <option value="calle" <%= venta.origen === 'calle' ? 'selected' : '' %>>Calle (preventista)</option>
+      </select>
+    </div>
+  </div>
+
+  <% const mapaArticulos = {}; articulos.forEach(a => { mapaArticulos[a.id] = a; }); %>
+  <div style="overflow-x:auto;">
+  <table id="tabla-items">
+    <thead>
+      <tr>
+        <th style="width:90px;">Código</th>
+        <th style="min-width:220px;">Artículo</th>
+        <th style="width:100px;">Cantidad</th>
+        <th style="width:130px;">Precio unit.</th>
+        <th style="width:110px;">Subtotal</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="filas-items">
+      <% items.forEach((it, i) => {
+           const artSel = it.articulo_id ? mapaArticulos[it.articulo_id] : null;
+           const articuloValor = artSel ? (artSel.codigo + ' — ' + artSel.nombre) : ''; %>
+      <tr>
+        <td data-label="Código" class="mono f-codigo-display"><%= artSel ? artSel.codigo : '' %></td>
+        <td data-label="Artículo">
+          <input class="f-articulo-buscar" type="text" placeholder="Buscar por nombre o código" autocomplete="off" value="<%= articuloValor %>">
+          <input type="hidden" class="f-articulo-id" data-campo="articulo_id" name="items[<%= i %>][articulo_id]" value="<%= it.articulo_id || '' %>">
+        </td>
+        <td data-label="Cantidad">
+          <input class="f-cantidad" data-campo="cantidad" type="number" step="0.01" min="0" name="items[<%= i %>][cantidad]" value="<%= it.cantidad || '' %>" required>
+        </td>
+        <td data-label="Precio unit.">
+          <input class="f-precio" data-campo="precio_unitario" type="number" step="0.01" min="0" name="items[<%= i %>][precio_unitario]" value="<%= it.precio_unitario || '' %>" required>
+        </td>
+        <td data-label="Subtotal" class="mono">$<span class="f-subtotal"><%= it.subtotal ? Number(it.subtotal).toFixed(2) : '0.00' %></span></td>
+        <td><button type="button" class="btn secondary quitar-fila">Quitar</button></td>
+      </tr>
+      <% }) %>
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="4" style="text-align:right; font-weight:600; border-bottom:none;">Total</td>
+        <td class="mono" id="total-venta" style="border-bottom:none; font-weight:600;">$0.00</td>
+        <td style="border-bottom:none;"></td>
+      </tr>
+    </tfoot>
+  </table>
+  </div>
+  <p style="color:var(--ink-soft); font-size:.85rem; margin-top:-8px;">
+    Al elegir un artículo se sugiere su precio según la forma de pago elegida arriba — se puede pisar a mano en cualquier renglón, y ese cambio no se vuelve a tocar solo.
+  </p>
+
+  <div>
+    <button type="button" id="agregar-fila" class="btn secondary">+ Agregar artículo</button>
+  </div>
+
+  <div>
+    <label for="notas">Notas</label>
+    <textarea id="notas" name="notas" rows="2"><%= venta.notas || '' %></textarea>
+  </div>
+
+  <div>
+    <button class="btn" type="submit">Guardar venta</button>
+    <a class="btn secondary" href="/ventas">Cancelar</a>
+  </div>
+</form>
+
+<script>
+(function () {
+  var tbody = document.getElementById('filas-items');
+  var formaPagoSelect = document.getElementById('forma_pago');
+
+  // Datos de artículos para el buscador de la columna "Artículo" y para
+  // sugerir el precio según la forma de pago vigente en el momento en que
+  // se elige cada uno.
+  var ARTICULOS = <%- JSON.stringify(articulos.map(a => ({ id: String(a.id), codigo: a.codigo, nombre: a.nombre, precioEfectivo: a.precioEfectivo, precioLista: a.precioLista }))) %>;
+  var articulosPorId = {};
+  ARTICULOS.forEach(function (a) { articulosPorId[a.id] = a; });
+
+  function etiquetaArticulo(a) { return a.codigo + ' — ' + a.nombre; }
+
+  function buscarArticulos(texto) {
+    var t = texto.trim().toLowerCase();
+    if (!t) return ARTICULOS;
+    return ARTICULOS.filter(function (a) {
+      return a.codigo.toLowerCase().indexOf(t) !== -1 || a.nombre.toLowerCase().indexOf(t) !== -1;
+    });
+  }
+
+  // Un único panel flotante, reutilizado para la fila que esté activa en
+  // cada momento — mismo patrón que en Compras.
+  var buscador = document.createElement('div');
+  buscador.className = 'buscador-flotante';
+  buscador.style.display = 'none';
+  document.body.appendChild(buscador);
+  var filaActiva = null;
+
+  function ocultarBuscador() {
+    buscador.style.display = 'none';
+    buscador.innerHTML = '';
+    filaActiva = null;
+  }
+
+  function precioSugerido(articulo) {
+    return formaPagoSelect.value === 'efectivo' ? articulo.precioEfectivo : articulo.precioLista;
+  }
+
+  function fijarArticuloEnFila(tr, articulo) {
+    tr.querySelector('.f-articulo-id').value = articulo ? articulo.id : '';
+    tr.querySelector('.f-articulo-buscar').value = articulo ? etiquetaArticulo(articulo) : '';
+    tr.querySelector('.f-codigo-display').textContent = articulo ? articulo.codigo : '';
+    var precioInput = tr.querySelector('.f-precio');
+    // Solo sugiere el precio si el renglón todavía no tenía uno cargado —
+    // así no pisa un precio que ya se había ajustado a mano.
+    if (articulo && !precioInput.value) {
+      precioInput.value = precioSugerido(articulo);
+    }
+    actualizarTotales();
+  }
+
+  function mostrarBuscador(tr, coincidencias) {
+    filaActiva = tr;
+    buscador.innerHTML = '';
+    if (coincidencias.length === 0) {
+      var vacio = document.createElement('div');
+      vacio.style.cssText = 'padding:8px 12px; font-size:.85rem; color:var(--ink-soft);';
+      vacio.textContent = 'Sin resultados.';
+      buscador.appendChild(vacio);
+    } else {
+      coincidencias.slice(0, 30).forEach(function (a) {
+        var boton = document.createElement('button');
+        boton.type = 'button';
+        boton.textContent = etiquetaArticulo(a);
+        // "mousedown" (no "click") para que se ejecute antes de que el
+        // input pierda el foco y el buscador se cierre solo.
+        boton.addEventListener('mousedown', function (e) {
+          e.preventDefault();
+          fijarArticuloEnFila(tr, a);
+          ocultarBuscador();
+        });
+        buscador.appendChild(boton);
+      });
+    }
+    var input = tr.querySelector('.f-articulo-buscar');
+    var rect = input.getBoundingClientRect();
+    buscador.style.left = rect.left + 'px';
+    buscador.style.top = rect.bottom + 'px';
+    buscador.style.width = Math.max(rect.width, 240) + 'px';
+    buscador.style.display = 'block';
+  }
+
+  function actualizarTotales() {
+    var total = 0;
+    tbody.querySelectorAll('tr').forEach(function (tr) {
+      var cantidad = parseFloat(tr.querySelector('.f-cantidad').value) || 0;
+      var precio = parseFloat(tr.querySelector('.f-precio').value) || 0;
+      var subtotal = cantidad * precio;
+      tr.querySelector('.f-subtotal').textContent = subtotal.toFixed(2);
+      total += subtotal;
+    });
+    document.getElementById('total-venta').textContent = '$' + total.toFixed(2);
+  }
+
+  function reindexar() {
+    tbody.querySelectorAll('tr').forEach(function (tr, i) {
+      tr.querySelectorAll('[data-campo]').forEach(function (el) {
+        el.name = 'items[' + i + '][' + el.dataset.campo + ']';
+      });
+    });
+  }
+
+  document.getElementById('agregar-fila').addEventListener('click', function () {
+    var filas = tbody.querySelectorAll('tr');
+    var nueva = filas[filas.length - 1].cloneNode(true);
+    nueva.querySelectorAll('input[type=number]').forEach(function (el) { el.value = ''; });
+    nueva.querySelector('.f-codigo-display').textContent = '';
+    nueva.querySelector('.f-articulo-buscar').value = '';
+    nueva.querySelector('.f-articulo-id').value = '';
+    nueva.querySelector('.f-subtotal').textContent = '0.00';
+    tbody.appendChild(nueva);
+    reindexar();
+  });
+
+  tbody.addEventListener('click', function (e) {
+    if (e.target.classList.contains('quitar-fila')) {
+      if (tbody.querySelectorAll('tr').length > 1) {
+        e.target.closest('tr').remove();
+        reindexar();
+        actualizarTotales();
+      }
+    }
+  });
+
+  tbody.addEventListener('input', function (e) {
+    actualizarTotales();
+    if (e.target.classList.contains('f-articulo-buscar')) {
+      var tr = e.target.closest('tr');
+      // si lo que quedó tipeado ya no coincide con el artículo elegido, se
+      // desvincula hasta que se elija uno de la lista de nuevo
+      var actual = articulosPorId[tr.querySelector('.f-articulo-id').value];
+      if (!actual || etiquetaArticulo(actual) !== e.target.value) {
+        tr.querySelector('.f-articulo-id').value = '';
+        tr.querySelector('.f-codigo-display').textContent = '';
+      }
+      mostrarBuscador(tr, buscarArticulos(e.target.value));
+    }
+  });
+
+  // "focus" y "blur" no burbujean — hay que escucharlos en fase de
+  // "capture" para poder delegarlos igual que los demás eventos de fila.
+  tbody.addEventListener('focus', function (e) {
+    if (e.target.classList.contains('f-articulo-buscar')) {
+      mostrarBuscador(e.target.closest('tr'), buscarArticulos(e.target.value));
+    }
+  }, true);
+  tbody.addEventListener('blur', function (e) {
+    if (e.target.classList.contains('f-articulo-buscar')) {
+      var trBlur = e.target.closest('tr');
+      setTimeout(function () {
+        if (filaActiva === trBlur) ocultarBuscador();
+      }, 150);
+    }
+  }, true);
+  window.addEventListener('scroll', function () { if (filaActiva) ocultarBuscador(); }, true);
+  window.addEventListener('resize', ocultarBuscador);
+
+  // Buscador del cliente — mismo patrón que el de artículo, pero para un
+  // único campo obligatorio en vez de una tabla de renglones.
+  var CLIENTES = <%- JSON.stringify(clientes.map(c => ({ id: String(c.id), razon_social: c.razon_social, cuit_dni: c.cuit_dni || '' }))) %>;
+  var clienteBuscarInput = document.getElementById('cliente_buscar');
+  var clienteIdInput = document.getElementById('cliente_id');
+  var clienteBuscador = document.createElement('div');
+  clienteBuscador.className = 'buscador-flotante';
+  clienteBuscador.style.display = 'none';
+  document.body.appendChild(clienteBuscador);
+  var clienteBuscadorActivo = false;
+
+  function etiquetaCliente(c) {
+    return c.razon_social + (c.cuit_dni ? ' (' + c.cuit_dni + ')' : '');
+  }
+
+  function buscarClientes(texto) {
+    var t = texto.trim().toLowerCase();
+    if (!t) return CLIENTES;
+    return CLIENTES.filter(function (c) {
+      return c.razon_social.toLowerCase().indexOf(t) !== -1 || c.cuit_dni.toLowerCase().indexOf(t) !== -1;
+    });
+  }
+
+  function ocultarClienteBuscador() {
+    clienteBuscador.style.display = 'none';
+    clienteBuscador.innerHTML = '';
+    clienteBuscadorActivo = false;
+  }
+
+  function fijarCliente(c) {
+    clienteIdInput.value = c ? c.id : '';
+    clienteBuscarInput.value = c ? etiquetaCliente(c) : '';
+  }
+
+  function mostrarClienteBuscador(coincidencias) {
+    clienteBuscadorActivo = true;
+    clienteBuscador.innerHTML = '';
+    if (coincidencias.length === 0) {
+      var vacio = document.createElement('div');
+      vacio.style.cssText = 'padding:8px 12px; font-size:.85rem; color:var(--ink-soft);';
+      vacio.textContent = 'Sin resultados.';
+      clienteBuscador.appendChild(vacio);
+    } else {
+      coincidencias.slice(0, 30).forEach(function (c) {
+        var boton = document.createElement('button');
+        boton.type = 'button';
+        boton.textContent = etiquetaCliente(c);
+        boton.addEventListener('mousedown', function (e) {
+          e.preventDefault();
+          fijarCliente(c);
+          ocultarClienteBuscador();
+        });
+        clienteBuscador.appendChild(boton);
+      });
+    }
+    var rect = clienteBuscarInput.getBoundingClientRect();
+    clienteBuscador.style.left = rect.left + 'px';
+    clienteBuscador.style.top = rect.bottom + 'px';
+    clienteBuscador.style.width = Math.max(rect.width, 240) + 'px';
+    clienteBuscador.style.display = 'block';
+  }
+
+  clienteBuscarInput.addEventListener('focus', function () {
+    mostrarClienteBuscador(buscarClientes(clienteBuscarInput.value));
+  });
+  clienteBuscarInput.addEventListener('input', function () {
+    var actual = CLIENTES.find(function (c) { return c.id === clienteIdInput.value; });
+    if (!actual || etiquetaCliente(actual) !== clienteBuscarInput.value) {
+      clienteIdInput.value = '';
+    }
+    mostrarClienteBuscador(buscarClientes(clienteBuscarInput.value));
+  });
+  clienteBuscarInput.addEventListener('blur', function () {
+    setTimeout(function () { if (clienteBuscadorActivo) ocultarClienteBuscador(); }, 150);
+  });
+  window.addEventListener('scroll', function () { if (clienteBuscadorActivo) ocultarClienteBuscador(); }, true);
+  window.addEventListener('resize', ocultarClienteBuscador);
+
+  actualizarTotales();
+})();
+</script>
+
+<%- include('../partials/foot') %>

@@ -1,0 +1,123 @@
+<%- include('../partials/head') %>
+
+<div class="toolbar">
+  <h1>Cuenta corriente — <%= cliente.razon_social %></h1>
+  <a class="btn secondary" href="/cuenta-corriente">← Volver</a>
+</div>
+
+<% if (error) { %>
+  <p style="color:#b3261e;"><%= error %></p>
+<% } %>
+
+<p style="font-size:1.1rem;">
+  Saldo actual:
+  <strong style="<%= saldo > 0 ? 'color:#a33;' : (saldo < 0 ? 'color:var(--accent-deep);' : '') %>">$<%= saldo.toFixed(2) %></strong>
+  <% if (saldo > 0) { %><span style="color:var(--ink-soft); font-size:.85rem;"> (debe)</span>
+  <% } else if (saldo < 0) { %><span style="color:var(--ink-soft); font-size:.85rem;"> (a favor del cliente)</span><% } %>
+</p>
+
+<% if (movimientos.length === 0) { %>
+  <p class="empty">Todavía no hay movimientos cargados para este cliente.</p>
+<% } else { %>
+<div style="overflow-x:auto;">
+<table>
+  <thead>
+    <tr>
+      <th>Fecha</th>
+      <th>Comprobante</th>
+      <th>Debe</th>
+      <th>Haber</th>
+      <th>Saldo</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <% movimientos.forEach(m => { %>
+    <tr>
+      <td data-label="Fecha"><%= new Date(m.fecha).toLocaleDateString('es-AR') %></td>
+      <td data-label="Comprobante">
+        <% if (m.tipo === 'venta') { %>
+          <a href="/ventas/<%= m.venta_id %>">Venta remito Nº <%= m.numero_remito %></a>
+        <% } else if (m.tipo === 'recibo') { %>
+          Recibo Nº <%= m.numero_recibo %><% if (m.notas) { %> — <%= m.notas %><% } %>
+        <% } else { %>
+          Ajuste<% if (m.notas) { %> — <%= m.notas %><% } %>
+        <% } %>
+      </td>
+      <td data-label="Debe" class="mono"><%= Number(m.debe) > 0 ? '$' + Number(m.debe).toFixed(2) : '—' %></td>
+      <td data-label="Haber" class="mono"><%= Number(m.haber) > 0 ? '$' + Number(m.haber).toFixed(2) : '—' %></td>
+      <td data-label="Saldo" class="mono">$<%= m.saldoAcumulado.toFixed(2) %></td>
+      <td data-label="">
+        <% if (m.tipo === 'recibo') { %>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <a class="btn secondary" href="/cuenta-corriente/recibos/<%= m.recibo_id %>/editar">Editar</a>
+            <form method="post" action="/cuenta-corriente/recibos/<%= m.recibo_id %>/eliminar" style="margin:0;" onsubmit="return confirm('¿Eliminar este recibo? No se puede deshacer.');">
+              <button type="submit" class="btn secondary" style="color:#a33;">Eliminar</button>
+            </form>
+          </div>
+        <% } %>
+      </td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+</div>
+<% } %>
+
+<div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:24px;">
+  <form class="card" method="post" action="/cuenta-corriente/<%= cliente.id %>/recibos" style="flex:1; min-width:280px; max-width:400px;">
+    <h2 style="font-size:1.05rem; margin:0;">Registrar recibo (cobro)</h2>
+    <div>
+      <label for="fecha_recibo">Fecha</label>
+      <input type="date" id="fecha_recibo" name="fecha" value="<%= hoy %>">
+    </div>
+    <div>
+      <label for="monto_recibo">Monto</label>
+      <input type="number" id="monto_recibo" name="monto" step="0.01" min="0.01" required>
+    </div>
+    <div>
+      <label for="medio_pago_recibo">Medio de pago</label>
+      <select id="medio_pago_recibo" name="medio_pago">
+        <% mediosPago.forEach(mp => { %>
+          <option value="<%= mp %>"><%= etiquetasMedioPago[mp] %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div>
+      <label for="notas_recibo">Notas</label>
+      <input type="text" id="notas_recibo" name="notas" placeholder="opcional">
+    </div>
+    <div>
+      <button class="btn" type="submit">Registrar recibo</button>
+    </div>
+  </form>
+
+  <form class="card" method="post" action="/cuenta-corriente/<%= cliente.id %>/ajuste" style="flex:1; min-width:280px; max-width:400px;">
+    <h2 style="font-size:1.05rem; margin:0;">Registrar ajuste</h2>
+    <p style="color:var(--ink-soft); font-size:.8rem; margin:0;">Para el saldo inicial de un cliente que ya tenía cuenta corriente antes de este sistema, o para corregir un error. No genera ni modifica ninguna venta ni recibo.</p>
+    <div>
+      <label for="fecha_ajuste">Fecha</label>
+      <input type="date" id="fecha_ajuste" name="fecha" value="<%= hoy %>">
+    </div>
+    <div>
+      <label for="ajuste_tipo">Tipo</label>
+      <select id="ajuste_tipo" name="ajuste_tipo">
+        <option value="debe">Suma deuda (debe)</option>
+        <option value="haber">Resta deuda (haber)</option>
+      </select>
+    </div>
+    <div>
+      <label for="monto_ajuste">Monto</label>
+      <input type="number" id="monto_ajuste" name="monto" step="0.01" min="0.01" required>
+    </div>
+    <div>
+      <label for="notas_ajuste">Motivo</label>
+      <input type="text" id="notas_ajuste" name="notas" placeholder="ej: saldo inicial al migrar del sistema anterior" required>
+    </div>
+    <div>
+      <button class="btn secondary" type="submit">Registrar ajuste</button>
+    </div>
+  </form>
+</div>
+
+<%- include('../partials/foot') %>

@@ -1,0 +1,38 @@
+<%- include('../partials/head') %>
+
+<h1>Editar recibo Nº <%= recibo.numero_recibo %></h1>
+
+<% if (error) { %>
+  <div class="pendiente" style="border-color:#e3b8b8; color:#7a2b2b; margin-bottom:16px; padding:14px 20px;">
+    <p style="margin:0;"><%= error %></p>
+  </div>
+<% } %>
+
+<form class="card" method="post" action="/cuenta-corriente/recibos/<%= recibo.id %>">
+  <div>
+    <label for="fecha">Fecha</label>
+    <input type="date" id="fecha" name="fecha" value="<%= recibo.fecha %>">
+  </div>
+  <div>
+    <label for="monto">Monto</label>
+    <input type="number" id="monto" name="monto" step="0.01" min="0.01" value="<%= recibo.monto %>" required>
+  </div>
+  <div>
+    <label for="medio_pago">Medio de pago</label>
+    <select id="medio_pago" name="medio_pago">
+      <% mediosPago.forEach(mp => { %>
+        <option value="<%= mp %>" <%= recibo.medio_pago === mp ? 'selected' : '' %>><%= etiquetasMedioPago[mp] %></option>
+      <% }) %>
+    </select>
+  </div>
+  <div>
+    <label for="notas">Notas</label>
+    <input type="text" id="notas" name="notas" value="<%= recibo.notas || '' %>">
+  </div>
+  <div>
+    <button class="btn" type="submit">Guardar</button>
+    <a class="btn secondary" href="/cuenta-corriente/<%= recibo.cliente_id %>">Cancelar</a>
+  </div>
+</form>
+
+<%- include('../partials/foot') %>

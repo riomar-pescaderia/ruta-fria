@@ -18,7 +18,7 @@ router.get('/', async (req, res, next) => {
       getConfig(),
     ]);
     const conPrecios = articulos.map((a) => ({ ...a, ...calcularPrecios(a, config) }));
-    res.render('articulos/lista', { articulos: conPrecios, config });
+    res.render('articulos/lista', { articulos: conPrecios, config, error: req.query.error || null });
   } catch (err) { next(err); }
 });
 
@@ -160,6 +160,28 @@ router.post('/:id', async (req, res, next) => {
         flete_pct=$6, margen_pct=$7, stock=$8 where id=$9`,
       [a.codigo, a.nombre, a.unidad || 1, !!a.aplica_iva, !!a.aplica_iibb, a.flete_pct || 0, a.margen_pct || 0, a.stock || null, req.params.id]
     );
+    res.redirect('/articulos');
+  } catch (err) { next(err); }
+});
+
+// No se borra si el artículo ya está usado en algún renglón de compra o de
+// venta — perder esa referencia rompería el historial de esos documentos
+// (y el código/nombre que mostraban en ese momento).
+router.post('/:id/eliminar', async (req, res, next) => {
+  try {
+    const [{ rows: enCompras }, { rows: enVentas }] = await Promise.all([
+      pool.query('select count(*)::int as cantidad from facturas_compra_items where articulo_id = $1', [req.params.id]),
+      pool.query('select count(*)::int as cantidad from ventas_items where articulo_id = $1', [req.params.id]),
+    ]);
+    const usos = [];
+    if (enCompras[0].cantidad > 0) usos.push(`${enCompras[0].cantidad} renglón${enCompras[0].cantidad > 1 ? 'es' : ''} de compra`);
+    if (enVentas[0].cantidad > 0) usos.push(`${enVentas[0].cantidad} renglón${enVentas[0].cantidad > 1 ? 'es' : ''} de venta`);
+    const totalUsos = enCompras[0].cantidad + enVentas[0].cantidad;
+    if (totalUsos > 0) {
+      const msg = `No se puede eliminar: tiene ${usos.join(' y ')} cargado${totalUsos > 1 ? 's' : ''}.`;
+      return res.redirect('/articulos?error=' + encodeURIComponent(msg));
+    }
+    await pool.query('delete from articulos where id = $1', [req.params.id]);
     res.redirect('/articulos');
   } catch (err) { next(err); }
 });

@@ -1,0 +1,39 @@
+<%- include('../partials/head') %>
+
+<div class="toolbar">
+  <h1>Cuenta corriente</h1>
+</div>
+
+<p style="color:var(--ink-soft); font-size:.9rem; margin-top:-10px;">
+  Lo que suman las ventas a cuenta corriente de cada cliente, menos lo que ya cobraste con recibos. Un saldo en $0 o negativo significa que no debe nada (o tiene a favor).
+</p>
+
+<% if (clientes.length === 0) { %>
+  <p class="empty">Todavía no hay ningún cliente con cuenta corriente ni movimientos cargados.</p>
+<% } else { %>
+<p style="font-weight:600;">Deuda total: $<%= totalDeuda.toFixed(2) %></p>
+<table>
+  <thead>
+    <tr>
+      <th>Cliente</th>
+      <th>Condición de pago</th>
+      <th>Movimientos</th>
+      <th>Saldo</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <% clientes.forEach(c => { %>
+    <tr>
+      <td data-label="Cliente"><%= c.razon_social %></td>
+      <td data-label="Condición de pago"><%= c.condicion_pago === 'cuenta_corriente' ? 'Cuenta corriente' : (c.condicion_pago || '—') %></td>
+      <td data-label="Movimientos" class="mono"><%= c.movimientos %></td>
+      <td data-label="Saldo" class="mono" style="<%= Number(c.saldo) > 0 ? 'color:#a33; font-weight:600;' : '' %>">$<%= Number(c.saldo).toFixed(2) %></td>
+      <td data-label=""><a class="btn secondary" href="/cuenta-corriente/<%= c.id %>">Ver cuenta</a></td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+<% } %>
+
+<%- include('../partials/foot') %>

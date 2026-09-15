@@ -1,0 +1,64 @@
+<%- include('../partials/head') %>
+
+<div class="toolbar">
+  <h1>Venta / remito</h1>
+  <a class="btn" href="/ventas/nueva">+ Nueva venta</a>
+</div>
+
+<% if (ventas.length === 0) { %>
+  <p class="empty">Todavía no cargaste ninguna venta.</p>
+<% } else { %>
+<div style="max-width:340px; margin-bottom:14px;">
+  <input type="text" id="buscar-venta" placeholder="Buscar por cliente o Nº de remito...">
+</div>
+<p id="sin-resultados-ventas" class="empty" style="display:none;">No encontré ninguna venta con esa búsqueda.</p>
+<table id="tabla-ventas">
+  <thead>
+    <tr>
+      <th>Fecha</th>
+      <th>Nº remito</th>
+      <th>Cliente</th>
+      <th>Forma de pago</th>
+      <th>Total</th>
+      <th>Estado</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <% const ETIQUETAS_FORMA_PAGO = { efectivo: 'Efectivo', transferencia: 'Transferencia', cuenta_corriente: 'Cuenta corriente' };
+       const ETIQUETAS_ESTADO = { emitido: 'Emitido', entregado: 'Entregado', cobrado: 'Cobrado' }; %>
+    <% ventas.forEach(v => { %>
+    <tr data-buscar="<%= (v.cliente_nombre + ' ' + v.numero_remito).toLowerCase() %>">
+      <td data-label="Fecha"><%= new Date(v.fecha).toLocaleDateString('es-AR') %></td>
+      <td data-label="Nº remito" class="mono">#<%= v.numero_remito %></td>
+      <td data-label="Cliente"><%= v.cliente_nombre %></td>
+      <td data-label="Forma de pago"><%= ETIQUETAS_FORMA_PAGO[v.forma_pago] || v.forma_pago %></td>
+      <td data-label="Total" class="mono">$<%= Number(v.total).toFixed(2) %></td>
+      <td data-label="Estado"><span class="badge <%= v.estado %>"><%= ETIQUETAS_ESTADO[v.estado] || v.estado %></span></td>
+      <td data-label=""><a class="btn secondary" href="/ventas/<%= v.id %>">Ver</a></td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+<% } %>
+
+<script>
+(function () {
+  var input = document.getElementById('buscar-venta');
+  if (!input) return;
+  var filas = document.querySelectorAll('#tabla-ventas tbody tr');
+  var sinResultados = document.getElementById('sin-resultados-ventas');
+  input.addEventListener('input', function () {
+    var texto = input.value.trim().toLowerCase();
+    var visibles = 0;
+    filas.forEach(function (tr) {
+      var coincide = !texto || tr.dataset.buscar.indexOf(texto) !== -1;
+      tr.hidden = !coincide;
+      if (coincide) visibles++;
+    });
+    sinResultados.style.display = visibles === 0 ? 'block' : 'none';
+  });
+})();
+</script>
+
+<%- include('../partials/foot') %>

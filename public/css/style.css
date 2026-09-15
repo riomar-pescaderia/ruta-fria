@@ -129,6 +129,9 @@ tr[hidden] { display: none !important; }
 .badge.no-aplicado { background: #eef2ef; color: var(--ink-soft); }
 .badge.cliente { background: #e2f3e6; color: #1e6b34; }
 .badge.prospecto { background: #fdf0dc; color: #b5650b; }
+.badge.emitido { background: #fdf3e3; color: #8a5a12; }
+.badge.entregado { background: #e3edfa; color: #1e4f8a; }
+.badge.cobrado { background: #e3f3ef; color: var(--accent-deep); }
 
 tr.fila-cambio td { background: #fdf3e3; }
 tr.fila-cambio td:nth-child(4) { color: #8a5a12; }

@@ -230,6 +230,104 @@ create table if not exists ventas_items (
   subtotal numeric not null
 );
 
+alter table ventas add column if not exists notas text;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'chk_venta_forma_pago'
+  ) then
+    alter table ventas
+      add constraint chk_venta_forma_pago
+      check (forma_pago in ('efectivo', 'transferencia', 'cuenta_corriente'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'chk_venta_estado'
+  ) then
+    alter table ventas
+      add constraint chk_venta_estado
+      check (estado in ('emitido', 'entregado', 'cobrado'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'chk_venta_origen'
+  ) then
+    alter table ventas
+      add constraint chk_venta_origen
+      check (origen in ('deposito', 'calle'));
+  end if;
+end $$;
+
+-- Cuenta corriente de clientes. "recibos" son los cobros que se cargan a
+-- mano (ver routes/cuentaCorriente.js); "cuenta_corriente_movimientos" es
+-- el libro con un renglón por cada venta a cuenta corriente (debe, la
+-- genera sola routes/ventas.js — ver lib/cuentaCorriente.js) y por cada
+-- recibo (haber), más los ajustes manuales (por ejemplo el saldo inicial
+-- de un cliente que ya tenía cuenta corriente antes de este sistema).
+create table if not exists recibos (
+  id serial primary key,
+  numero_recibo serial,
+  cliente_id integer not null references clientes(id),
+  fecha date not null default current_date,
+  monto numeric not null,
+  medio_pago text not null default 'efectivo',  -- efectivo / transferencia / cheque / otro
+  notas text,
+  created_at timestamptz not null default now()
+);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'chk_recibo_medio_pago'
+  ) then
+    alter table recibos
+      add constraint chk_recibo_medio_pago
+      check (medio_pago in ('efectivo', 'transferencia', 'cheque', 'otro'));
+  end if;
+end $$;
+
+create table if not exists cuenta_corriente_movimientos (
+  id serial primary key,
+  cliente_id integer not null references clientes(id),
+  fecha date not null default current_date,
+  tipo text not null,  -- venta / recibo / ajuste
+  venta_id integer references ventas(id) on delete cascade,
+  recibo_id integer references recibos(id) on delete cascade,
+  debe numeric not null default 0,
+  haber numeric not null default 0,
+  notas text,
+  created_at timestamptz not null default now()
+);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'chk_movimiento_tipo'
+  ) then
+    alter table cuenta_corriente_movimientos
+      add constraint chk_movimiento_tipo
+      check (tipo in ('venta', 'recibo', 'ajuste'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'chk_movimiento_debe_haber'
+  ) then
+    alter table cuenta_corriente_movimientos
+      add constraint chk_movimiento_debe_haber
+      check (debe >= 0 and haber >= 0 and not (debe > 0 and haber > 0));
+  end if;
+end $$;
+
 create table if not exists usuarios (
   id serial primary key,
   username text not null unique,
@@ -252,6 +350,7 @@ alter table usuarios add column if not exists acceso_gastos boolean not null def
 alter table usuarios add column if not exists acceso_ventas boolean not null default false;
 alter table usuarios add column if not exists acceso_prospectos boolean not null default false;
 alter table usuarios add column if not exists acceso_stock boolean not null default false;
+alter table usuarios add column if not exists acceso_cuenta_corriente boolean not null default false;
 
 -- Permiso especial (no es un módulo entero): habilita editar o eliminar
 -- una factura de compra que ya está confirmada, algo que por defecto
@@ -276,7 +375,8 @@ begin
       acceso_gastos = true,
       acceso_ventas = true,
       acceso_prospectos = true,
-      acceso_stock = true;
+      acceso_stock = true,
+      acceso_cuenta_corriente = true;
   end if;
 end $$;
 
@@ -285,3 +385,8 @@ create index if not exists idx_prospectos_activo on prospectos(activo);
 create index if not exists idx_ventas_items_venta on ventas_items(venta_id);
 create index if not exists idx_gastos_fecha on gastos(fecha);
 create index if not exists idx_ventas_fecha on ventas(fecha);
+create index if not exists idx_ventas_cliente on ventas(cliente_id);
+create index if not exists idx_movimientos_cliente on cuenta_corriente_movimientos(cliente_id);
+create index if not exists idx_movimientos_venta on cuenta_corriente_movimientos(venta_id);
+create index if not exists idx_movimientos_recibo on cuenta_corriente_movimientos(recibo_id);
+create index if not exists idx_recibos_cliente on recibos(cliente_id);

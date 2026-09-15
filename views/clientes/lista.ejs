@@ -5,6 +5,10 @@
   <a class="btn" href="/clientes/nuevo">+ Nuevo cliente</a>
 </div>
 
+<% if (error) { %>
+  <p style="color:#b3261e;"><%= error %></p>
+<% } %>
+
 <% if (clientes.length === 0) { %>
   <p class="empty">Todavía no cargaste ningún cliente.</p>
 <% } else { %>
@@ -31,7 +35,15 @@
       <td data-label="Teléfono" class="mono"><%= c.telefono || '—' %></td>
       <td data-label="Condición IVA"><%= c.condicion_iva || '—' %></td>
       <td data-label="Condición de pago"><%= c.condicion_pago || '—' %></td>
-      <td data-label=""><a class="btn secondary" href="/clientes/<%= c.id %>/editar">Editar</a></td>
+      <td data-label="" style="display:flex; gap:8px; flex-wrap:wrap;">
+        <a class="btn secondary" href="/clientes/<%= c.id %>/editar">Editar</a>
+        <% if (c.condicion_pago === 'cuenta_corriente' && usuario && (usuario.esAdmin || (usuario.accesos && usuario.accesos.cuenta_corriente))) { %>
+          <a class="btn secondary" href="/cuenta-corriente/<%= c.id %>">Cuenta corriente</a>
+        <% } %>
+        <form method="post" action="/clientes/<%= c.id %>/eliminar" style="display:inline; margin:0;" onsubmit="return confirm('¿Eliminar este cliente? No se puede deshacer.');">
+          <button type="submit" class="btn secondary" style="color:#a33;">Eliminar</button>
+        </form>
+      </td>
     </tr>
     <% }) %>
   </tbody>

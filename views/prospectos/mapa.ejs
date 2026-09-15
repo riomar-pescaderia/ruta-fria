@@ -67,6 +67,9 @@
       <td data-label="" style="display:flex; gap:8px; flex-wrap:wrap;">
         <a class="btn secondary" href="/prospectos/<%= p.id %>">Ver</a>
         <a class="btn secondary" href="/prospectos/<%= p.id %>/editar">Editar</a>
+        <form method="post" action="/prospectos/<%= p.id %>/eliminar" style="display:inline; margin:0;" onsubmit="return confirm('¿Eliminar este prospecto? Se deja de mostrar en el mapa y la lista, pero no se pierde el historial de visitas.');">
+          <button type="submit" class="btn secondary" style="color:#a33;">Eliminar</button>
+        </form>
       </td>
     </tr>
     <% }) %>

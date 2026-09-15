@@ -9,12 +9,13 @@
 <body>
   <header class="app">
     <span class="brand">🐟 Ruta Fría</span>
-    <% const acc = (typeof usuario !== 'undefined' && usuario) ? (usuario.esAdmin ? { clientes:true, articulos:true, prospectos:true, ventas:true, compras:true, gastos:true, stock:true } : (usuario.accesos || {})) : {}; %>
+    <% const acc = (typeof usuario !== 'undefined' && usuario) ? (usuario.esAdmin ? { clientes:true, articulos:true, prospectos:true, ventas:true, cuenta_corriente:true, compras:true, gastos:true, stock:true } : (usuario.accesos || {})) : {}; %>
     <nav class="app">
       <% if (acc.clientes) { %><a href="/clientes" class="<%= path && path.startsWith('/clientes') ? 'active' : '' %>">Clientes</a><% } %>
       <% if (acc.articulos) { %><a href="/articulos" class="<%= path && path.startsWith('/articulos') ? 'active' : '' %>">Artículos</a><% } %>
       <% if (acc.prospectos) { %><a href="/prospectos" class="<%= path && path.startsWith('/prospectos') ? 'active' : '' %>">Historial visitas</a><% } %>
       <% if (acc.ventas) { %><a href="/ventas" class="<%= path && path.startsWith('/ventas') ? 'active' : '' %>">Venta / remito</a><% } %>
+      <% if (acc.cuenta_corriente) { %><a href="/cuenta-corriente" class="<%= path && path.startsWith('/cuenta-corriente') ? 'active' : '' %>">Cuenta corriente</a><% } %>
       <% if (acc.compras) { %><a href="/compras" class="<%= path && path.startsWith('/compras') ? 'active' : '' %>">Compras</a><% } %>
       <% if (acc.gastos) { %><a href="/gastos" class="<%= path && path.startsWith('/gastos') ? 'active' : '' %>">Gastos</a><% } %>
       <% if (acc.stock) { %><a href="/stock" class="<%= path && path.startsWith('/stock') ? 'active' : '' %>">Stock</a><% } %>

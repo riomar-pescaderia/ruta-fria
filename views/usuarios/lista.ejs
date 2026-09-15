@@ -31,9 +31,10 @@
       <td data-label="Rol"><%= u.es_admin ? 'Administrador' : 'Empleado' %></td>
       <td data-label="Accesos" style="font-size:.85rem; color:var(--ink-soft);">
         <% if (u.es_admin) { %>Todos<% } else { %>
-          <%= ['clientes','articulos','prospectos','ventas','compras','gastos','stock']
+          <% const ETIQUETAS_MODULO = { prospectos: 'Historial visitas', ventas: 'Venta / remito', cuenta_corriente: 'Cuenta corriente' }; %>
+          <%= ['clientes','articulos','prospectos','ventas','cuenta_corriente','compras','gastos','stock']
                 .filter(m => u['acceso_' + m])
-                .map(m => m === 'prospectos' ? 'Historial visitas' : (m === 'ventas' ? 'Venta / remito' : m[0].toUpperCase() + m.slice(1)))
+                .map(m => ETIQUETAS_MODULO[m] || (m[0].toUpperCase() + m.slice(1)))
                 .join(', ') || 'Ninguno' %>
           <% if (u.permiso_editar_confirmadas) { %>
             <br><span style="font-size:.78rem;">+ Editar confirmadas</span>

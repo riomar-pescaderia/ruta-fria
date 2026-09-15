@@ -13,6 +13,10 @@
   IVA <%= config.iva_pct %>% · IIBB <%= config.iibb_pct %>% · recargo por medio de pago <%= config.recargo_lista_pct %>% — configurables más adelante en una sola pantalla.
 </p>
 
+<% if (error) { %>
+  <p style="color:#b3261e;"><%= error %></p>
+<% } %>
+
 <% if (articulos.length === 0) { %>
   <p class="empty">Todavía no cargaste ningún artículo.</p>
 <% } else { %>
@@ -52,7 +56,12 @@
           </select>
         </form>
       </td>
-      <td data-label=""><a class="btn secondary" href="/articulos/<%= a.id %>/editar">Editar</a></td>
+      <td data-label="" style="display:flex; gap:8px; flex-wrap:wrap;">
+        <a class="btn secondary" href="/articulos/<%= a.id %>/editar">Editar</a>
+        <form method="post" action="/articulos/<%= a.id %>/eliminar" style="display:inline; margin:0;" onsubmit="return confirm('¿Eliminar este artículo? No se puede deshacer.');">
+          <button type="submit" class="btn secondary" style="color:#a33;">Eliminar</button>
+        </form>
+      </td>
     </tr>
     <% }) %>
   </tbody>

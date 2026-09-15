@@ -13,6 +13,8 @@ const usuariosRouter = require('./routes/usuarios');
 const authRouter = require('./routes/auth');
 const comprasRouter = require('./routes/compras');
 const prospectosRouter = require('./routes/prospectos');
+const ventasRouter = require('./routes/ventas');
+const cuentaCorrienteRouter = require('./routes/cuentaCorriente');
 const proximamente = require('./routes/proximamente');
 
 const app = express();
@@ -65,7 +67,8 @@ app.use('/usuarios', requireAdmin, usuariosRouter);
 app.use('/compras', requireAcceso('compras'), comprasRouter);
 app.use('/prospectos', requireAcceso('prospectos'), prospectosRouter);
 app.use('/gastos', requireAcceso('gastos'), proximamente('Gastos generales', 'Sueldos, alquiler, insumos y demás gastos de la operación, con un panel de total por tipo.'));
-app.use('/ventas', requireAcceso('ventas'), proximamente('Venta / remito', 'Cargar una venta, elegir forma de pago y generar el remito en PDF.'));
+app.use('/ventas', requireAcceso('ventas'), ventasRouter);
+app.use('/cuenta-corriente', requireAcceso('cuenta_corriente'), cuentaCorrienteRouter);
 app.use('/stock', requireAcceso('stock'), proximamente('Stock', 'Control de stock de mercadería: cantidades actuales, movimientos y alertas de faltantes.'));
 
 app.use((req, res) => res.status(404).render('404'));
