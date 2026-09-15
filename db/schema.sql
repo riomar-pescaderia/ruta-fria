@@ -111,6 +111,34 @@ alter table facturas_compra_items add column if not exists estado_costo text;
 alter table facturas_compra_items add column if not exists neto numeric;
 alter table facturas_compra_items add column if not exists iva numeric;
 
+-- Categoría del comprobante (ver lib/categoriasGasto.js) — "mercaderia"
+-- es la única que arrastra artículos de stock y pisa costos; el resto
+-- (servicios, insumos, alquileres, etc.) carga sus renglones a mano, sin
+-- vínculo con el catálogo de artículos. Las facturas cargadas antes de
+-- que existiera esta columna eran todas de mercadería, por eso el
+-- default.
+alter table facturas_compra add column if not exists categoria text not null default 'mercaderia';
+
+-- Para una factura que no es de mercadería, el renglón no tiene un
+-- artículo real: "codigo_manual" y "descripcion" son lo que se tipeó a
+-- mano en esos casos, y quedan null cuando el renglón sí es de un
+-- artículo del catálogo (ahí manda articulo_id). El check de abajo
+-- asegura que todo renglón tenga uno de los dos.
+alter table facturas_compra_items add column if not exists codigo_manual text;
+alter table facturas_compra_items add column if not exists descripcion text;
+alter table facturas_compra_items alter column articulo_id drop not null;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'chk_factura_item_articulo_o_descripcion'
+  ) then
+    alter table facturas_compra_items
+      add constraint chk_factura_item_articulo_o_descripcion
+      check (articulo_id is not null or descripcion is not null);
+  end if;
+end $$;
+
 -- Historial de visitas a potenciales clientes (prospectos), aparte de
 -- Clientes para no mezclar a quien todavía no compró con quien ya
 -- concretó una venta. Cada prospecto se carga una vez con su dirección

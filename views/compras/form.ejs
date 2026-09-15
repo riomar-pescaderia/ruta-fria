@@ -16,6 +16,23 @@
 
 <form class="card" method="post" action="<%= accion %>" style="max-width:900px;">
   <div style="display:flex; gap:12px; flex-wrap:wrap;">
+    <div style="flex:1; min-width:220px;">
+      <label for="categoria">Tipo de comprobante</label>
+      <select id="categoria" name="categoria" required <%= factura.actualizo_costos ? 'disabled' : '' %>>
+        <% categorias.forEach(c => { %>
+          <option value="<%= c.clave %>" <%= (factura.categoria || 'mercaderia') === c.clave ? 'selected' : '' %>><%= c.etiqueta %></option>
+        <% }) %>
+      </select>
+      <% if (factura.actualizo_costos) { %>
+        <input type="hidden" name="categoria" value="mercaderia">
+        <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Una factura ya confirmada no puede cambiar de categoría.</p>
+      <% } else { %>
+        <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Si es "Mercadería" se cargan artículos del catálogo y se pueden actualizar sus costos. Cualquier otra categoría (servicios, insumos, etc.) se carga a mano, sin vincularse a ningún artículo de stock.</p>
+      <% } %>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:12px; flex-wrap:wrap;">
     <div style="flex:2; min-width:220px;">
       <label for="proveedor_id">Proveedor</label>
       <select id="proveedor_id" name="proveedor_id" required>
@@ -59,13 +76,15 @@
     </thead>
     <tbody id="filas-items">
       <% items.forEach((it, i) => {
-           const artSel = it.articulo_id ? mapaArticulos[it.articulo_id] : null; %>
+           const artSel = it.articulo_id ? mapaArticulos[it.articulo_id] : null;
+           const codigoValor = artSel ? artSel.codigo : (it.codigo_manual || '');
+           const articuloValor = artSel ? (artSel.codigo + ' — ' + artSel.nombre) : (it.descripcion || ''); %>
       <tr>
         <td data-label="Código">
-          <input class="f-codigo" type="text" placeholder="Código" autocomplete="off" value="<%= artSel ? artSel.codigo : '' %>">
+          <input class="f-codigo" data-campo="codigo_manual" type="text" name="items[<%= i %>][codigo_manual]" placeholder="Código" autocomplete="off" value="<%= codigoValor %>">
         </td>
         <td data-label="Artículo">
-          <input class="f-articulo-buscar" type="text" placeholder="Buscar por nombre o código" autocomplete="off" value="<%= artSel ? (artSel.codigo + ' — ' + artSel.nombre) : '' %>">
+          <input class="f-articulo-buscar" data-campo="descripcion" type="text" name="items[<%= i %>][descripcion]" placeholder="Buscar por nombre o código" autocomplete="off" value="<%= articuloValor %>">
           <input type="hidden" class="f-articulo-id" data-campo="articulo_id" name="items[<%= i %>][articulo_id]" value="<%= it.articulo_id || '' %>">
         </td>
         <td data-label="Cantidad">
@@ -123,6 +142,24 @@
   var tbody = document.getElementById('filas-items');
   var checkTodos = document.getElementById('iva-todos');
   var IVA_PCT = <%- JSON.stringify(Number(ivaPct)) %>;
+
+  // Con categoría "mercadería" el código/artículo se vinculan al catálogo
+  // (buscador, autocompletado). Con cualquier otra categoría son texto
+  // libre: no hay stock ni costo que actualizar, así que no tiene sentido
+  // ofrecer el buscador ni auto-completar nada.
+  var categoriaSelect = document.getElementById('categoria');
+  var categoriaAnterior = categoriaSelect.value;
+  function esMercaderia() { return categoriaSelect.value === 'mercaderia'; }
+
+  function actualizarPlaceholders() {
+    var esM = esMercaderia();
+    tbody.querySelectorAll('.f-codigo').forEach(function (el) {
+      el.placeholder = esM ? 'Código' : 'Código (opcional)';
+    });
+    tbody.querySelectorAll('.f-articulo-buscar').forEach(function (el) {
+      el.placeholder = esM ? 'Buscar por nombre o código' : 'Descripción';
+    });
+  }
 
   // Datos de artículos para el buscador de la columna "Artículo" y para
   // completar el código automáticamente cuando se elige uno.
@@ -283,6 +320,7 @@
   tbody.addEventListener('input', function (e) {
     actualizarTotales();
     if (e.target.classList.contains('f-articulo-buscar')) {
+      if (!esMercaderia()) return;
       var tr = e.target.closest('tr');
       // si lo que quedó tipeado ya no coincide con el artículo elegido,
       // se desvincula hasta que se elija uno de la lista de nuevo
@@ -292,10 +330,18 @@
       }
       mostrarBuscador(tr, buscarArticulos(e.target.value));
     } else if (e.target.classList.contains('f-codigo')) {
+      if (!esMercaderia()) return;
       var tr2 = e.target.closest('tr');
       var codigoTexto = e.target.value.trim().toLowerCase();
       var encontrado = codigoTexto && ARTICULOS.find(function (a) { return a.codigo.toLowerCase() === codigoTexto; });
-      if (encontrado) fijarArticuloEnFila(tr2, encontrado);
+      if (encontrado) {
+        fijarArticuloEnFila(tr2, encontrado);
+      } else if (tr2.querySelector('.f-articulo-id').value) {
+        // el código se borró o ya no coincide con ningún artículo: se
+        // desvincula el artículo que estaba elegido, en vez de dejarlo
+        // pegado a un código que ya no está
+        fijarArticuloEnFila(tr2, null);
+      }
     }
   });
   tbody.addEventListener('change', function (e) {
@@ -306,7 +352,7 @@
   // "focus" y "blur" no burbujean — hay que escucharlos en fase de
   // "capture" para poder delegarlos igual que los demás eventos de fila.
   tbody.addEventListener('focus', function (e) {
-    if (e.target.classList.contains('f-articulo-buscar')) {
+    if (e.target.classList.contains('f-articulo-buscar') && esMercaderia()) {
       mostrarBuscador(e.target.closest('tr'), buscarArticulos(e.target.value));
     }
   }, true);
@@ -323,7 +369,35 @@
   window.addEventListener('scroll', function () { if (filaActiva) ocultarBuscador(); }, true);
   window.addEventListener('resize', ocultarBuscador);
 
+  // Cambiar entre "mercadería" y cualquier otra categoría cambia por
+  // completo qué significan los renglones (artículo del catálogo vs.
+  // texto libre), así que si ya hay algo cargado se avisa antes de
+  // limpiar código/artículo de todos los renglones.
+  categoriaSelect.addEventListener('change', function () {
+    var eraMercaderia = categoriaAnterior === 'mercaderia';
+    var esAhoraMercaderia = categoriaSelect.value === 'mercaderia';
+    if (eraMercaderia !== esAhoraMercaderia) {
+      var hayDatos = false;
+      tbody.querySelectorAll('tr').forEach(function (tr) {
+        if (tr.querySelector('.f-codigo').value.trim() || tr.querySelector('.f-articulo-buscar').value.trim()) hayDatos = true;
+      });
+      if (hayDatos && !confirm('Cambiar el tipo de comprobante borra el código y el artículo cargados en cada renglón. ¿Querés continuar?')) {
+        categoriaSelect.value = categoriaAnterior;
+        return;
+      }
+      tbody.querySelectorAll('tr').forEach(function (tr) {
+        tr.querySelector('.f-codigo').value = '';
+        tr.querySelector('.f-articulo-buscar').value = '';
+        tr.querySelector('.f-articulo-id').value = '';
+      });
+    }
+    categoriaAnterior = categoriaSelect.value;
+    actualizarPlaceholders();
+    actualizarTotales();
+  });
+
   actualizarCheckTodos();
+  actualizarPlaceholders();
   actualizarTotales();
 })();
 </script>

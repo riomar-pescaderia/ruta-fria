@@ -9,7 +9,9 @@
       <form method="post" action="/compras/<%= factura.id %>/eliminar" style="display:inline;" onsubmit="return confirm('¿Eliminar esta factura? No se puede deshacer.');">
         <button type="submit" class="btn secondary" style="color:#a33;">Eliminar</button>
       </form>
-      <a class="btn" href="/compras/<%= factura.id %>/confirmar">Revisar precios y confirmar</a>
+      <% if (factura.categoria === 'mercaderia') { %>
+        <a class="btn" href="/compras/<%= factura.id %>/confirmar">Revisar precios y confirmar</a>
+      <% } %>
     <% } else if (puedeCorregir) { %>
       <a class="btn secondary" href="/compras/<%= factura.id %>/editar">Editar</a>
       <form method="post" action="/compras/<%= factura.id %>/eliminar" style="display:inline;" onsubmit="return confirm('Esta factura ya está confirmada. Eliminarla no revierte el costo que ya se aplicó a los artículos, y se pierde el historial. ¿Eliminar igual?');">
@@ -20,8 +22,10 @@
   </div>
 </div>
 
+<% const catFactura = categorias.find(c => c.clave === factura.categoria); %>
 <p style="color:var(--ink-soft);">
   <span class="badge <%= factura.actualizo_costos ? 'confirmada' : 'borrador' %>"><%= factura.actualizo_costos ? 'Confirmada' : 'Borrador' %></span>
+  · <%= catFactura ? catFactura.etiqueta : factura.categoria %>
   · Proveedor: <strong style="color:var(--ink);"><%= factura.proveedor_nombre %></strong>
   · Fecha: <%= new Date(factura.fecha).toLocaleDateString('es-AR') %>
 </p>

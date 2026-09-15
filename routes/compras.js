@@ -1,13 +1,17 @@
-// Compras — facturas de proveedores. Una factura arranca como borrador
-// (se puede seguir editando) y al confirmarla pisa el costo de cada
-// artículo con el precio unitario cargado en esa línea. Una vez
-// confirmada queda de solo lectura, para no perder el historial de qué
-// costo regía en cada momento.
+// Compras — facturas de proveedores. Una factura de "mercadería" arranca
+// como borrador (se puede seguir editando) y al confirmarla pisa el
+// costo de cada artículo con el precio unitario cargado en esa línea —
+// a partir de ahí queda de solo lectura, para no perder el historial de
+// qué costo regía en cada momento. Un comprobante de cualquier otra
+// categoría (servicios, insumos, alquileres, etc.) no tiene artículos de
+// stock ni costo que pisar, así que no pasa por ese paso de revisión: se
+// carga a mano y queda siempre editable.
 const express = require('express');
 const pool = require('../db/pool');
 const proveedoresRouter = require('./proveedores');
 const { getConfig } = require('../lib/config');
 const { puedeEditarConfirmadas } = require('../lib/auth');
+const { CATEGORIAS_GASTO, esClaveValida } = require('../lib/categoriasGasto');
 
 const router = express.Router();
 
@@ -64,6 +68,14 @@ function calcularItem(cantidad, precioIngresado, sumarIva, ivaPct) {
   return { precioFinal, total, neto, iva };
 }
 
+// La categoría manda: "mercaderia" es la única con artículos reales del
+// catálogo. Si viene una clave desconocida (o ninguna) se usa
+// "mercaderia" como valor seguro — es el comportamiento que tenía el
+// sistema antes de que existiera esta categorización.
+function leerCategoria(body) {
+  return esClaveValida(body.categoria) ? body.categoria : 'mercaderia';
+}
+
 // Lee los renglones que vienen del formulario (items[0][...], items[1][...]),
 // descarta los incompletos (fila vacía que quedó de sobra) y calcula el
 // precio final, el total y el desglose neto/IVA de cada uno. El
@@ -71,19 +83,27 @@ function calcularItem(cantidad, precioIngresado, sumarIva, ivaPct) {
 // volver a mostrarlo si hay que reabrir el formulario); el precio final
 // ya calculado va en "precio_final", que es lo que se guarda como costo
 // real del renglón.
-function leerItems(body, ivaPct) {
+//
+// En "mercaderia" el renglón tiene que traer un articulo_id real del
+// catálogo (se descarta si no). En cualquier otra categoría no hay
+// artículo: el renglón se identifica por la descripción tipeada a mano
+// (el código manual es opcional, solo para referencia).
+function leerItems(body, ivaPct, categoria) {
   const raw = body.items;
   if (!raw) return [];
   const arr = Array.isArray(raw) ? raw : Object.values(raw);
+  const esMercaderia = categoria === 'mercaderia';
   return arr
-    .filter((it) => it && it.articulo_id)
+    .filter((it) => it && (esMercaderia ? it.articulo_id : (it.descripcion && it.descripcion.trim())))
     .map((it) => {
       const cantidad = redondear2(Number(it.cantidad) || 0);
       const precioIngresado = redondear2(Number(it.precio_unitario) || 0);
       const sumarIva = it.aplica_iva === 'on';
       const { precioFinal, total, neto, iva } = calcularItem(cantidad, precioIngresado, sumarIva, ivaPct);
       return {
-        articulo_id: it.articulo_id,
+        articulo_id: esMercaderia ? it.articulo_id : null,
+        codigo_manual: esMercaderia ? null : ((it.codigo_manual || '').trim() || null),
+        descripcion: esMercaderia ? null : it.descripcion.trim(),
         cantidad,
         precio_unitario: precioIngresado,
         precio_final: precioFinal,
@@ -103,7 +123,7 @@ router.get('/', async (req, res, next) => {
        from facturas_compra f join proveedores p on p.id = f.proveedor_id
        order by f.fecha desc, f.id desc`
     );
-    res.render('compras/lista', { facturas });
+    res.render('compras/lista', { facturas, categorias: CATEGORIAS_GASTO });
   } catch (err) { next(err); }
 });
 
@@ -111,10 +131,11 @@ router.get('/nueva', async (req, res, next) => {
   try {
     const [{ proveedores, articulos }, config] = await Promise.all([datosFormulario(), getConfig()]);
     res.render('compras/form', {
-      factura: { fecha: hoyAr() },
+      factura: { fecha: hoyAr(), categoria: 'mercaderia' },
       items: [{}],
       proveedores,
       articulos,
+      categorias: CATEGORIAS_GASTO,
       ivaPct: config.iva_pct,
       error: null,
       accion: '/compras',
@@ -124,22 +145,26 @@ router.get('/nueva', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   const { proveedor_id, numero, fecha } = req.body;
+  const categoria = leerCategoria(req.body);
   let config, items;
   try {
     config = await getConfig();
-    items = leerItems(req.body, config.iva_pct);
+    items = leerItems(req.body, config.iva_pct, categoria);
   } catch (err) { return next(err); }
 
   if (!proveedor_id || items.length === 0) {
     try {
       const { proveedores, articulos } = await datosFormulario();
       return res.render('compras/form', {
-        factura: { proveedor_id, numero, fecha },
+        factura: { proveedor_id, numero, fecha, categoria },
         items: items.length ? items : [{}],
         proveedores,
         articulos,
+        categorias: CATEGORIAS_GASTO,
         ivaPct: config.iva_pct,
-        error: !proveedor_id ? 'Elegí un proveedor.' : 'Agregá al menos un artículo con cantidad y precio mayores a 0.',
+        error: !proveedor_id
+          ? 'Elegí un proveedor.'
+          : 'Agregá al menos un renglón con cantidad y precio mayores a 0' + (categoria === 'mercaderia' ? ', con un artículo elegido.' : '.'),
         accion: '/compras',
       });
     } catch (err) { return next(err); }
@@ -150,20 +175,22 @@ router.post('/', async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
-      `insert into facturas_compra (proveedor_id, numero, fecha, total)
-       values ($1,$2,$3,$4) returning id`,
-      [proveedor_id, numero || null, fecha || hoyAr(), total]
+      `insert into facturas_compra (proveedor_id, numero, fecha, total, categoria)
+       values ($1,$2,$3,$4,$5) returning id`,
+      [proveedor_id, numero || null, fecha || hoyAr(), total, categoria]
     );
     const facturaId = rows[0].id;
     for (const it of items) {
       await client.query(
-        `insert into facturas_compra_items (factura_id, articulo_id, cantidad, precio_unitario, aplica_iva, total, neto, iva)
-         values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [facturaId, it.articulo_id, it.cantidad, it.precio_final, it.aplica_iva, it.total, it.neto, it.iva]
+        `insert into facturas_compra_items (factura_id, articulo_id, codigo_manual, descripcion, cantidad, precio_unitario, aplica_iva, total, neto, iva)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [facturaId, it.articulo_id, it.codigo_manual, it.descripcion, it.cantidad, it.precio_final, it.aplica_iva, it.total, it.neto, it.iva]
       );
     }
     await client.query('COMMIT');
-    res.redirect(`/compras/${facturaId}/confirmar`);
+    // Solo "mercadería" pasa por la revisión de precios — es el único
+    // caso donde cargar la factura puede pisar el costo de un artículo.
+    res.redirect(categoria === 'mercaderia' ? `/compras/${facturaId}/confirmar` : `/compras/${facturaId}`);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     next(err);
@@ -204,6 +231,7 @@ router.get('/:id/editar', async (req, res, next) => {
       items,
       proveedores,
       articulos,
+      categorias: CATEGORIAS_GASTO,
       ivaPct: config.iva_pct,
       error: null,
       accion: `/compras/${factura.id}`,
@@ -213,10 +241,11 @@ router.get('/:id/editar', async (req, res, next) => {
 
 router.post('/:id', async (req, res, next) => {
   const { proveedor_id, numero, fecha } = req.body;
+  const categoria = leerCategoria(req.body);
   let config, items;
   try {
     config = await getConfig();
-    items = leerItems(req.body, config.iva_pct);
+    items = leerItems(req.body, config.iva_pct, categoria);
   } catch (err) { return next(err); }
   const client = await pool.connect();
   try {
@@ -230,12 +259,15 @@ router.post('/:id', async (req, res, next) => {
     if (!proveedor_id || items.length === 0) {
       const { proveedores, articulos } = await datosFormulario();
       return res.render('compras/form', {
-        factura: { id: factura.id, proveedor_id, numero, fecha, actualizo_costos: factura.actualizo_costos },
+        factura: { id: factura.id, proveedor_id, numero, fecha, categoria, actualizo_costos: factura.actualizo_costos },
         items: items.length ? items : [{}],
         proveedores,
         articulos,
+        categorias: CATEGORIAS_GASTO,
         ivaPct: config.iva_pct,
-        error: !proveedor_id ? 'Elegí un proveedor.' : 'Agregá al menos un artículo con cantidad y precio mayores a 0.',
+        error: !proveedor_id
+          ? 'Elegí un proveedor.'
+          : 'Agregá al menos un renglón con cantidad y precio mayores a 0' + (categoria === 'mercaderia' ? ', con un artículo elegido.' : '.'),
         accion: `/compras/${factura.id}`,
       });
     }
@@ -249,15 +281,15 @@ router.post('/:id', async (req, res, next) => {
     // renglones habían aplicado costo, que quedaba en estado_costo).
     await client.query('BEGIN');
     await client.query(
-      'update facturas_compra set proveedor_id=$1, numero=$2, fecha=$3, total=$4 where id=$5',
-      [proveedor_id, numero || null, fecha || fechaInput(factura.fecha), total, factura.id]
+      'update facturas_compra set proveedor_id=$1, numero=$2, fecha=$3, total=$4, categoria=$5 where id=$6',
+      [proveedor_id, numero || null, fecha || fechaInput(factura.fecha), total, categoria, factura.id]
     );
     await client.query('delete from facturas_compra_items where factura_id = $1', [factura.id]);
     for (const it of items) {
       await client.query(
-        `insert into facturas_compra_items (factura_id, articulo_id, cantidad, precio_unitario, aplica_iva, total, neto, iva)
-         values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [factura.id, it.articulo_id, it.cantidad, it.precio_final, it.aplica_iva, it.total, it.neto, it.iva]
+        `insert into facturas_compra_items (factura_id, articulo_id, codigo_manual, descripcion, cantidad, precio_unitario, aplica_iva, total, neto, iva)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [factura.id, it.articulo_id, it.codigo_manual, it.descripcion, it.cantidad, it.precio_final, it.aplica_iva, it.total, it.neto, it.iva]
       );
     }
     await client.query('COMMIT');
@@ -282,13 +314,13 @@ router.get('/:id', async (req, res, next) => {
     if (!factura) return res.redirect('/compras');
 
     const { rows: items } = await pool.query(
-      `select i.*, a.codigo, a.nombre
-       from facturas_compra_items i join articulos a on a.id = i.articulo_id
+      `select i.*, coalesce(a.codigo, i.codigo_manual) as codigo, coalesce(a.nombre, i.descripcion) as nombre
+       from facturas_compra_items i left join articulos a on a.id = i.articulo_id
        where i.factura_id = $1
        order by i.id`,
       [factura.id]
     );
-    res.render('compras/detalle', { factura, items });
+    res.render('compras/detalle', { factura, items, categorias: CATEGORIAS_GASTO });
   } catch (err) { next(err); }
 });
 
@@ -305,6 +337,9 @@ router.get('/:id/confirmar', async (req, res, next) => {
     );
     const factura = rows[0];
     if (!factura) return res.redirect('/compras');
+    // Solo "mercadería" pasa por acá — es la única categoría con costo de
+    // artículo que revisar y, eventualmente, pisar.
+    if (factura.categoria !== 'mercaderia') return res.redirect(`/compras/${factura.id}`);
     if (factura.actualizo_costos) return res.redirect(`/compras/${factura.id}`);
 
     const { rows: items } = await pool.query(
@@ -331,6 +366,7 @@ router.post('/:id/confirmar', async (req, res, next) => {
     const { rows } = await client.query('select * from facturas_compra where id = $1', [req.params.id]);
     const factura = rows[0];
     if (!factura) return res.redirect('/compras');
+    if (factura.categoria !== 'mercaderia') return res.redirect(`/compras/${factura.id}`);
     if (factura.actualizo_costos) return res.redirect(`/compras/${factura.id}`);
 
     const { rows: items } = await client.query(
