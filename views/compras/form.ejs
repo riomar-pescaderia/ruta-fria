@@ -62,22 +62,38 @@
           <input class="f-precio" data-campo="precio_unitario" type="number" step="0.01" min="0" name="items[<%= i %>][precio_unitario]" value="<%= it.precio_unitario || '' %>" required>
         </td>
         <td data-label="IVA" style="text-align:center;">
-          <input data-campo="aplica_iva" type="checkbox" name="items[<%= i %>][aplica_iva]" <%= it.aplica_iva !== false ? 'checked' : '' %>>
+          <input class="f-iva" data-campo="aplica_iva" type="checkbox" name="items[<%= i %>][aplica_iva]" <%= it.aplica_iva !== false ? 'checked' : '' %>>
         </td>
-        <td data-label="Subtotal" class="mono f-subtotal">$<%= it.total ? Number(it.total).toFixed(2) : '0.00' %></td>
+        <td data-label="Subtotal" class="mono">
+          $<span class="f-subtotal"><%= it.total ? Number(it.total).toFixed(2) : '0.00' %></span>
+          <div class="f-desglose" style="font-size:.75rem; font-weight:400; color:var(--ink-soft);"></div>
+        </td>
         <td><button type="button" class="btn secondary quitar-fila">Quitar</button></td>
       </tr>
       <% }) %>
     </tbody>
     <tfoot>
       <tr>
+        <td colspan="4" style="text-align:right; border-bottom:none;">Neto</td>
+        <td class="mono" id="total-neto" style="border-bottom:none;">$0.00</td>
+        <td style="border-bottom:none;"></td>
+      </tr>
+      <tr>
+        <td colspan="4" style="text-align:right; border-bottom:none;">IVA</td>
+        <td class="mono" id="total-iva" style="border-bottom:none;">$0.00</td>
+        <td style="border-bottom:none;"></td>
+      </tr>
+      <tr>
         <td colspan="4" style="text-align:right; font-weight:600; border-bottom:none;">Total</td>
-        <td class="mono" id="total-factura" style="border-bottom:none;">$0.00</td>
+        <td class="mono" id="total-factura" style="border-bottom:none; font-weight:600;">$0.00</td>
         <td style="border-bottom:none;"></td>
       </tr>
     </tfoot>
   </table>
   </div>
+  <p style="color:var(--ink-soft); font-size:.85rem; margin-top:-8px;">
+    IVA <%= ivaPct %>% (configurable más adelante) — se usa para separar neto e IVA en los renglones que tienen la casilla "IVA" tildada.
+  </p>
 
   <div>
     <button type="button" id="agregar-fila" class="btn secondary">+ Agregar artículo</button>
@@ -92,17 +108,34 @@
 <script>
 (function () {
   var tbody = document.getElementById('filas-items');
+  var IVA_PCT = <%- JSON.stringify(Number(ivaPct)) %>;
+
+  // Separa un monto que ya incluye IVA en neto + IVA, al %IVA vigente.
+  function desglosarIva(monto, aplicaIva) {
+    if (!aplicaIva) return { neto: monto, iva: 0 };
+    var neto = monto / (1 + IVA_PCT / 100);
+    return { neto: neto, iva: monto - neto };
+  }
 
   function actualizarTotales() {
-    var total = 0;
+    var total = 0, totalNeto = 0, totalIva = 0;
     tbody.querySelectorAll('tr').forEach(function (tr) {
       var cantidad = parseFloat(tr.querySelector('.f-cantidad').value) || 0;
       var precio = parseFloat(tr.querySelector('.f-precio').value) || 0;
+      var aplicaIva = tr.querySelector('.f-iva').checked;
       var subtotal = cantidad * precio;
-      tr.querySelector('.f-subtotal').textContent = '$' + subtotal.toFixed(2);
+      var d = desglosarIva(subtotal, aplicaIva);
+      tr.querySelector('.f-subtotal').textContent = subtotal.toFixed(2);
+      tr.querySelector('.f-desglose').textContent = aplicaIva
+        ? 'neto $' + d.neto.toFixed(2) + ' + IVA $' + d.iva.toFixed(2)
+        : 'sin IVA discriminado';
       total += subtotal;
+      totalNeto += d.neto;
+      totalIva += d.iva;
     });
     document.getElementById('total-factura').textContent = '$' + total.toFixed(2);
+    document.getElementById('total-neto').textContent = '$' + totalNeto.toFixed(2);
+    document.getElementById('total-iva').textContent = '$' + totalIva.toFixed(2);
   }
 
   function reindexar() {
@@ -119,7 +152,8 @@
     nueva.querySelectorAll('select').forEach(function (el) { el.selectedIndex = 0; });
     nueva.querySelectorAll('input[type=number]').forEach(function (el) { el.value = ''; });
     nueva.querySelectorAll('input[type=checkbox]').forEach(function (el) { el.checked = true; });
-    nueva.querySelector('.f-subtotal').textContent = '$0.00';
+    nueva.querySelector('.f-subtotal').textContent = '0.00';
+    nueva.querySelector('.f-desglose').textContent = '';
     tbody.appendChild(nueva);
     reindexar();
   });
@@ -135,6 +169,7 @@
   });
 
   tbody.addEventListener('input', actualizarTotales);
+  tbody.addEventListener('change', actualizarTotales);
   actualizarTotales();
 })();
 </script>

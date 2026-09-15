@@ -104,6 +104,13 @@ create table if not exists facturas_compra_items (
 -- borrador.
 alter table facturas_compra_items add column if not exists estado_costo text;
 
+-- Desglose neto/IVA de cada renglón, calculado al cargar o editar la
+-- factura con el %IVA vigente en ese momento (config.iva_pct) — queda
+-- fijo aunque el %IVA cambie después, para no reescribir facturas viejas.
+-- Si el renglón no tiene "aplica_iva", neto = total e iva = 0.
+alter table facturas_compra_items add column if not exists neto numeric;
+alter table facturas_compra_items add column if not exists iva numeric;
+
 create table if not exists gastos (
   id serial primary key,
   fecha date not null default current_date,

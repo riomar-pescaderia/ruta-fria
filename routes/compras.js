@@ -6,6 +6,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const proveedoresRouter = require('./proveedores');
+const { getConfig } = require('../lib/config');
 
 const router = express.Router();
 
@@ -39,10 +40,21 @@ async function datosFormulario() {
   return { proveedores, articulos };
 }
 
+// El total de cada renglón es lo que factura el proveedor — si el
+// renglón tiene IVA discriminado (no todas las facturas lo traen: depende
+// del tipo de comprobante), ese total ya lo incluye, y acá se separa
+// cuánto es neto y cuánto es IVA, al %IVA vigente en config. Si el
+// renglón no discrimina IVA, todo el monto es neto y el IVA queda en 0.
+function desglosarIva(monto, aplicaIva, ivaPct) {
+  if (!aplicaIva) return { neto: monto, iva: 0 };
+  const neto = redondear2(monto / (1 + Number(ivaPct) / 100));
+  return { neto, iva: redondear2(monto - neto) };
+}
+
 // Lee los renglones que vienen del formulario (items[0][...], items[1][...]),
 // descarta los incompletos (fila vacía que quedó de sobra) y calcula el
-// subtotal de cada uno.
-function leerItems(body) {
+// subtotal de cada uno, junto con su desglose neto/IVA.
+function leerItems(body, ivaPct) {
   const raw = body.items;
   if (!raw) return [];
   const arr = Array.isArray(raw) ? raw : Object.values(raw);
@@ -51,12 +63,17 @@ function leerItems(body) {
     .map((it) => {
       const cantidad = redondear2(Number(it.cantidad) || 0);
       const precioUnitario = redondear2(Number(it.precio_unitario) || 0);
+      const aplicaIva = it.aplica_iva === 'on';
+      const total = redondear2(cantidad * precioUnitario);
+      const { neto, iva } = desglosarIva(total, aplicaIva, ivaPct);
       return {
         articulo_id: it.articulo_id,
         cantidad,
         precio_unitario: precioUnitario,
-        aplica_iva: it.aplica_iva === 'on',
-        total: redondear2(cantidad * precioUnitario),
+        aplica_iva: aplicaIva,
+        total,
+        neto,
+        iva,
       };
     })
     .filter((it) => it.cantidad > 0 && it.precio_unitario > 0);
@@ -75,12 +92,13 @@ router.get('/', async (req, res, next) => {
 
 router.get('/nueva', async (req, res, next) => {
   try {
-    const { proveedores, articulos } = await datosFormulario();
+    const [{ proveedores, articulos }, config] = await Promise.all([datosFormulario(), getConfig()]);
     res.render('compras/form', {
       factura: { fecha: hoyAr() },
       items: [{}],
       proveedores,
       articulos,
+      ivaPct: config.iva_pct,
       error: null,
       accion: '/compras',
     });
@@ -89,7 +107,11 @@ router.get('/nueva', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   const { proveedor_id, numero, fecha } = req.body;
-  const items = leerItems(req.body);
+  let config, items;
+  try {
+    config = await getConfig();
+    items = leerItems(req.body, config.iva_pct);
+  } catch (err) { return next(err); }
 
   if (!proveedor_id || items.length === 0) {
     try {
@@ -99,6 +121,7 @@ router.post('/', async (req, res, next) => {
         items: items.length ? items : [{}],
         proveedores,
         articulos,
+        ivaPct: config.iva_pct,
         error: !proveedor_id ? 'Elegí un proveedor.' : 'Agregá al menos un artículo con cantidad y precio mayores a 0.',
         accion: '/compras',
       });
@@ -117,9 +140,9 @@ router.post('/', async (req, res, next) => {
     const facturaId = rows[0].id;
     for (const it of items) {
       await client.query(
-        `insert into facturas_compra_items (factura_id, articulo_id, cantidad, precio_unitario, aplica_iva, total)
-         values ($1,$2,$3,$4,$5,$6)`,
-        [facturaId, it.articulo_id, it.cantidad, it.precio_unitario, it.aplica_iva, it.total]
+        `insert into facturas_compra_items (factura_id, articulo_id, cantidad, precio_unitario, aplica_iva, total, neto, iva)
+         values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [facturaId, it.articulo_id, it.cantidad, it.precio_unitario, it.aplica_iva, it.total, it.neto, it.iva]
       );
     }
     await client.query('COMMIT');
@@ -143,12 +166,13 @@ router.get('/:id/editar', async (req, res, next) => {
       'select * from facturas_compra_items where factura_id = $1 order by id',
       [factura.id]
     );
-    const { proveedores, articulos } = await datosFormulario();
+    const [{ proveedores, articulos }, config] = await Promise.all([datosFormulario(), getConfig()]);
     res.render('compras/form', {
       factura: { ...factura, fecha: fechaInput(factura.fecha) },
       items,
       proveedores,
       articulos,
+      ivaPct: config.iva_pct,
       error: null,
       accion: `/compras/${factura.id}`,
     });
@@ -157,7 +181,11 @@ router.get('/:id/editar', async (req, res, next) => {
 
 router.post('/:id', async (req, res, next) => {
   const { proveedor_id, numero, fecha } = req.body;
-  const items = leerItems(req.body);
+  let config, items;
+  try {
+    config = await getConfig();
+    items = leerItems(req.body, config.iva_pct);
+  } catch (err) { return next(err); }
   const client = await pool.connect();
   try {
     const { rows } = await client.query('select * from facturas_compra where id = $1', [req.params.id]);
@@ -172,6 +200,7 @@ router.post('/:id', async (req, res, next) => {
         items: items.length ? items : [{}],
         proveedores,
         articulos,
+        ivaPct: config.iva_pct,
         error: !proveedor_id ? 'Elegí un proveedor.' : 'Agregá al menos un artículo con cantidad y precio mayores a 0.',
         accion: `/compras/${factura.id}`,
       });
@@ -187,9 +216,9 @@ router.post('/:id', async (req, res, next) => {
     await client.query('delete from facturas_compra_items where factura_id = $1', [factura.id]);
     for (const it of items) {
       await client.query(
-        `insert into facturas_compra_items (factura_id, articulo_id, cantidad, precio_unitario, aplica_iva, total)
-         values ($1,$2,$3,$4,$5,$6)`,
-        [factura.id, it.articulo_id, it.cantidad, it.precio_unitario, it.aplica_iva, it.total]
+        `insert into facturas_compra_items (factura_id, articulo_id, cantidad, precio_unitario, aplica_iva, total, neto, iva)
+         values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [factura.id, it.articulo_id, it.cantidad, it.precio_unitario, it.aplica_iva, it.total, it.neto, it.iva]
       );
     }
     await client.query('COMMIT');

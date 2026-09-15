@@ -40,7 +40,12 @@
       <td data-label="Cantidad" class="mono"><%= Number(it.cantidad) %></td>
       <td data-label="Precio unit." class="mono">$<%= Number(it.precio_unitario).toFixed(2) %></td>
       <td data-label="IVA"><%= it.aplica_iva ? 'Sí' : 'No' %></td>
-      <td data-label="Subtotal" class="mono">$<%= Number(it.total).toFixed(2) %></td>
+      <td data-label="Subtotal" class="mono">
+        $<%= Number(it.total).toFixed(2) %>
+        <div style="font-size:.75rem; font-weight:400; color:var(--ink-soft);">
+          <% if (it.aplica_iva) { %>neto $<%= Number(it.neto).toFixed(2) %> + IVA $<%= Number(it.iva).toFixed(2) %><% } else { %>sin IVA discriminado<% } %>
+        </div>
+      </td>
       <% if (factura.actualizo_costos) { %>
         <td data-label="Costo del artículo">
           <% if (it.estado_costo === 'aplicado') { %>
@@ -55,7 +60,19 @@
     </tr>
     <% }) %>
   </tbody>
+  <% const totalNeto = items.reduce((acc, it) => acc + Number(it.neto), 0);
+     const totalIva = items.reduce((acc, it) => acc + Number(it.iva), 0); %>
   <tfoot>
+    <tr>
+      <td colspan="5" style="text-align:right; border-bottom:none;">Neto</td>
+      <td class="mono" style="border-bottom:none;">$<%= totalNeto.toFixed(2) %></td>
+      <% if (factura.actualizo_costos) { %><td style="border-bottom:none;"></td><% } %>
+    </tr>
+    <tr>
+      <td colspan="5" style="text-align:right; border-bottom:none;">IVA</td>
+      <td class="mono" style="border-bottom:none;">$<%= totalIva.toFixed(2) %></td>
+      <% if (factura.actualizo_costos) { %><td style="border-bottom:none;"></td><% } %>
+    </tr>
     <tr>
       <td colspan="5" style="text-align:right; font-weight:600;">Total</td>
       <td class="mono">$<%= Number(factura.total).toFixed(2) %></td>
