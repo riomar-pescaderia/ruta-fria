@@ -39,7 +39,12 @@
         <th style="min-width:220px;">Artículo</th>
         <th style="width:110px;">Cantidad</th>
         <th style="width:130px;">Precio unit.</th>
-        <th style="width:60px;">IVA</th>
+        <th style="width:70px;">
+          IVA<br>
+          <label style="font-weight:400; text-transform:none; font-size:.7rem; display:flex; align-items:center; gap:3px; letter-spacing:0;">
+            <input type="checkbox" id="iva-todos" checked style="width:auto;"> todos
+          </label>
+        </th>
         <th style="width:110px;">Subtotal</th>
         <th></th>
       </tr>
@@ -92,7 +97,7 @@
   </table>
   </div>
   <p style="color:var(--ink-soft); font-size:.85rem; margin-top:-8px;">
-    IVA <%= ivaPct %>% (configurable más adelante) — se usa para separar neto e IVA en los renglones que tienen la casilla "IVA" tildada.
+    Casilla "IVA" tildada: el precio unitario cargado es <strong>sin IVA</strong> y el sistema le suma el <%= ivaPct %>% automáticamente (el caso más común). Destildada: el precio unitario cargado <strong>ya incluye el IVA</strong> integrado, tal cual viene en la factura. Usá "todos" para tildar o destildar la columna completa de una vez.
   </p>
 
   <div>
@@ -108,13 +113,26 @@
 <script>
 (function () {
   var tbody = document.getElementById('filas-items');
+  var checkTodos = document.getElementById('iva-todos');
   var IVA_PCT = <%- JSON.stringify(Number(ivaPct)) %>;
 
-  // Separa un monto que ya incluye IVA en neto + IVA, al %IVA vigente.
-  function desglosarIva(monto, aplicaIva) {
-    if (!aplicaIva) return { neto: monto, iva: 0 };
-    var neto = monto / (1 + IVA_PCT / 100);
-    return { neto: neto, iva: monto - neto };
+  // Misma lógica que calcularItem() en routes/compras.js:
+  // sumarIva=true  → el precio cargado es neto (sin IVA), se le suma el IVA.
+  // sumarIva=false → el precio cargado ya incluye el IVA, se usa tal cual.
+  function calcularItem(cantidad, precioIngresado, sumarIva) {
+    var precioFinal, total, neto, iva;
+    if (sumarIva) {
+      precioFinal = precioIngresado * (1 + IVA_PCT / 100);
+      total = cantidad * precioFinal;
+      neto = cantidad * precioIngresado;
+      iva = total - neto;
+    } else {
+      precioFinal = precioIngresado;
+      total = cantidad * precioFinal;
+      neto = total / (1 + IVA_PCT / 100);
+      iva = total - neto;
+    }
+    return { precioFinal: precioFinal, total: total, neto: neto, iva: iva };
   }
 
   function actualizarTotales() {
@@ -122,20 +140,26 @@
     tbody.querySelectorAll('tr').forEach(function (tr) {
       var cantidad = parseFloat(tr.querySelector('.f-cantidad').value) || 0;
       var precio = parseFloat(tr.querySelector('.f-precio').value) || 0;
-      var aplicaIva = tr.querySelector('.f-iva').checked;
-      var subtotal = cantidad * precio;
-      var d = desglosarIva(subtotal, aplicaIva);
-      tr.querySelector('.f-subtotal').textContent = subtotal.toFixed(2);
-      tr.querySelector('.f-desglose').textContent = aplicaIva
-        ? 'neto $' + d.neto.toFixed(2) + ' + IVA $' + d.iva.toFixed(2)
-        : 'sin IVA discriminado';
-      total += subtotal;
-      totalNeto += d.neto;
-      totalIva += d.iva;
+      var sumarIva = tr.querySelector('.f-iva').checked;
+      var r = calcularItem(cantidad, precio, sumarIva);
+      tr.querySelector('.f-subtotal').textContent = r.total.toFixed(2);
+      tr.querySelector('.f-desglose').textContent = sumarIva
+        ? '+ IVA $' + r.iva.toFixed(2) + ' (precio final $' + r.precioFinal.toFixed(2) + ')'
+        : 'IVA incluido: neto $' + r.neto.toFixed(2) + ' + IVA $' + r.iva.toFixed(2);
+      total += r.total;
+      totalNeto += r.neto;
+      totalIva += r.iva;
     });
     document.getElementById('total-factura').textContent = '$' + total.toFixed(2);
     document.getElementById('total-neto').textContent = '$' + totalNeto.toFixed(2);
     document.getElementById('total-iva').textContent = '$' + totalIva.toFixed(2);
+  }
+
+  function actualizarCheckTodos() {
+    var casillas = tbody.querySelectorAll('.f-iva');
+    var todasTildadas = true;
+    casillas.forEach(function (c) { if (!c.checked) todasTildadas = false; });
+    checkTodos.checked = todasTildadas;
   }
 
   function reindexar() {
@@ -151,7 +175,7 @@
     var nueva = filas[filas.length - 1].cloneNode(true);
     nueva.querySelectorAll('select').forEach(function (el) { el.selectedIndex = 0; });
     nueva.querySelectorAll('input[type=number]').forEach(function (el) { el.value = ''; });
-    nueva.querySelectorAll('input[type=checkbox]').forEach(function (el) { el.checked = true; });
+    nueva.querySelectorAll('input[type=checkbox]').forEach(function (el) { el.checked = checkTodos.checked; });
     nueva.querySelector('.f-subtotal').textContent = '0.00';
     nueva.querySelector('.f-desglose').textContent = '';
     tbody.appendChild(nueva);
@@ -164,12 +188,22 @@
         e.target.closest('tr').remove();
         reindexar();
         actualizarTotales();
+        actualizarCheckTodos();
       }
     }
   });
 
+  checkTodos.addEventListener('change', function () {
+    tbody.querySelectorAll('.f-iva').forEach(function (c) { c.checked = checkTodos.checked; });
+    actualizarTotales();
+  });
+
   tbody.addEventListener('input', actualizarTotales);
-  tbody.addEventListener('change', actualizarTotales);
+  tbody.addEventListener('change', function (e) {
+    actualizarTotales();
+    if (e.target.classList.contains('f-iva')) actualizarCheckTodos();
+  });
+  actualizarCheckTodos();
   actualizarTotales();
 })();
 </script>

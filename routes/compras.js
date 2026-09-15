@@ -40,20 +40,36 @@ async function datosFormulario() {
   return { proveedores, articulos };
 }
 
-// El total de cada renglón es lo que factura el proveedor — si el
-// renglón tiene IVA discriminado (no todas las facturas lo traen: depende
-// del tipo de comprobante), ese total ya lo incluye, y acá se separa
-// cuánto es neto y cuánto es IVA, al %IVA vigente en config. Si el
-// renglón no discrimina IVA, todo el monto es neto y el IVA queda en 0.
-function desglosarIva(monto, aplicaIva, ivaPct) {
-  if (!aplicaIva) return { neto: monto, iva: 0 };
-  const neto = redondear2(monto / (1 + Number(ivaPct) / 100));
-  return { neto, iva: redondear2(monto - neto) };
+// La casilla "IVA" de un renglón define qué es el precio unitario que se
+// tipeó: tildada, es el precio SIN IVA y hay que sumárselo (el caso más
+// común, como viene la mayoría de las facturas de compra); destildada, el
+// precio ya viene con el IVA integrado y se usa tal cual. En los dos
+// casos se devuelve el precio final (el costo real, con IVA ya sumado si
+// correspondía) y el desglose neto/IVA de todo el renglón, calculado al
+// %IVA vigente en config.
+function calcularItem(cantidad, precioIngresado, sumarIva, ivaPct) {
+  let precioFinal, total, neto, iva;
+  if (sumarIva) {
+    precioFinal = redondear2(precioIngresado * (1 + Number(ivaPct) / 100));
+    total = redondear2(cantidad * precioFinal);
+    neto = redondear2(cantidad * precioIngresado);
+    iva = redondear2(total - neto);
+  } else {
+    precioFinal = precioIngresado;
+    total = redondear2(cantidad * precioFinal);
+    neto = redondear2(total / (1 + Number(ivaPct) / 100));
+    iva = redondear2(total - neto);
+  }
+  return { precioFinal, total, neto, iva };
 }
 
 // Lee los renglones que vienen del formulario (items[0][...], items[1][...]),
 // descarta los incompletos (fila vacía que quedó de sobra) y calcula el
-// subtotal de cada uno, junto con su desglose neto/IVA.
+// precio final, el total y el desglose neto/IVA de cada uno. El
+// "precio_unitario" del resultado es tal cual se tipeó (para poder
+// volver a mostrarlo si hay que reabrir el formulario); el precio final
+// ya calculado va en "precio_final", que es lo que se guarda como costo
+// real del renglón.
 function leerItems(body, ivaPct) {
   const raw = body.items;
   if (!raw) return [];
@@ -62,15 +78,15 @@ function leerItems(body, ivaPct) {
     .filter((it) => it && it.articulo_id)
     .map((it) => {
       const cantidad = redondear2(Number(it.cantidad) || 0);
-      const precioUnitario = redondear2(Number(it.precio_unitario) || 0);
-      const aplicaIva = it.aplica_iva === 'on';
-      const total = redondear2(cantidad * precioUnitario);
-      const { neto, iva } = desglosarIva(total, aplicaIva, ivaPct);
+      const precioIngresado = redondear2(Number(it.precio_unitario) || 0);
+      const sumarIva = it.aplica_iva === 'on';
+      const { precioFinal, total, neto, iva } = calcularItem(cantidad, precioIngresado, sumarIva, ivaPct);
       return {
         articulo_id: it.articulo_id,
         cantidad,
-        precio_unitario: precioUnitario,
-        aplica_iva: aplicaIva,
+        precio_unitario: precioIngresado,
+        precio_final: precioFinal,
+        aplica_iva: sumarIva,
         total,
         neto,
         iva,
@@ -142,7 +158,7 @@ router.post('/', async (req, res, next) => {
       await client.query(
         `insert into facturas_compra_items (factura_id, articulo_id, cantidad, precio_unitario, aplica_iva, total, neto, iva)
          values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [facturaId, it.articulo_id, it.cantidad, it.precio_unitario, it.aplica_iva, it.total, it.neto, it.iva]
+        [facturaId, it.articulo_id, it.cantidad, it.precio_final, it.aplica_iva, it.total, it.neto, it.iva]
       );
     }
     await client.query('COMMIT');
@@ -162,11 +178,24 @@ router.get('/:id/editar', async (req, res, next) => {
     if (!factura) return res.redirect('/compras');
     if (factura.actualizo_costos) return res.redirect(`/compras/${factura.id}`);
 
-    const { rows: items } = await pool.query(
+    const { rows: itemsGuardados } = await pool.query(
       'select * from facturas_compra_items where factura_id = $1 order by id',
       [factura.id]
     );
     const [{ proveedores, articulos }, config] = await Promise.all([datosFormulario(), getConfig()]);
+
+    // El precio guardado siempre es el final (con IVA ya sumado si
+    // correspondía) — para reabrir el formulario hay que reconstruir lo
+    // que realmente se tipeó: si sumaba IVA, el neto guardado ÷ cantidad
+    // es ese precio original; si no, el precio guardado ya era el que se
+    // tipeó, sin transformar.
+    const items = itemsGuardados.map((it) => ({
+      ...it,
+      precio_unitario: it.aplica_iva
+        ? redondear2(Number(it.neto) / Number(it.cantidad))
+        : Number(it.precio_unitario),
+    }));
+
     res.render('compras/form', {
       factura: { ...factura, fecha: fechaInput(factura.fecha) },
       items,
@@ -218,7 +247,7 @@ router.post('/:id', async (req, res, next) => {
       await client.query(
         `insert into facturas_compra_items (factura_id, articulo_id, cantidad, precio_unitario, aplica_iva, total, neto, iva)
          values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [factura.id, it.articulo_id, it.cantidad, it.precio_unitario, it.aplica_iva, it.total, it.neto, it.iva]
+        [factura.id, it.articulo_id, it.cantidad, it.precio_final, it.aplica_iva, it.total, it.neto, it.iva]
       );
     }
     await client.query('COMMIT');
