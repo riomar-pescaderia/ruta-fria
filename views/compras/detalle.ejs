@@ -8,9 +8,7 @@
       <form method="post" action="/compras/<%= factura.id %>/eliminar" style="display:inline;" onsubmit="return confirm('¿Eliminar esta factura? No se puede deshacer.');">
         <button type="submit" class="btn secondary" style="color:#a33;">Eliminar</button>
       </form>
-      <form method="post" action="/compras/<%= factura.id %>/confirmar" style="display:inline;" onsubmit="return confirm('Al confirmar, el costo de cada artículo de esta factura se actualiza con el precio unitario cargado acá. ¿Confirmar?');">
-        <button type="submit" class="btn">Confirmar y actualizar costos</button>
-      </form>
+      <a class="btn" href="/compras/<%= factura.id %>/confirmar">Revisar precios y confirmar</a>
     <% } %>
     <a class="btn secondary" href="/compras">← Volver</a>
   </div>
@@ -31,6 +29,7 @@
       <th>Precio unit.</th>
       <th>IVA</th>
       <th>Subtotal</th>
+      <% if (factura.actualizo_costos) { %><th>Costo del artículo</th><% } %>
     </tr>
   </thead>
   <tbody>
@@ -42,6 +41,17 @@
       <td data-label="Precio unit." class="mono">$<%= Number(it.precio_unitario).toFixed(2) %></td>
       <td data-label="IVA"><%= it.aplica_iva ? 'Sí' : 'No' %></td>
       <td data-label="Subtotal" class="mono">$<%= Number(it.total).toFixed(2) %></td>
+      <% if (factura.actualizo_costos) { %>
+        <td data-label="Costo del artículo">
+          <% if (it.estado_costo === 'aplicado') { %>
+            <span class="badge aplicado">Actualizado</span>
+          <% } else if (it.estado_costo === 'no_aplicado') { %>
+            <span class="badge no-aplicado">No aplicado</span>
+          <% } else { %>
+            <span style="color:var(--ink-soft); font-size:.85rem;">Sin cambios</span>
+          <% } %>
+        </td>
+      <% } %>
     </tr>
     <% }) %>
   </tbody>
@@ -49,6 +59,7 @@
     <tr>
       <td colspan="5" style="text-align:right; font-weight:600;">Total</td>
       <td class="mono">$<%= Number(factura.total).toFixed(2) %></td>
+      <% if (factura.actualizo_costos) { %><td></td><% } %>
     </tr>
   </tfoot>
 </table>

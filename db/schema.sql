@@ -97,6 +97,13 @@ create table if not exists facturas_compra_items (
   total numeric not null
 );
 
+-- Se completa al confirmar la factura, uno por renglón: 'aplicado' (se
+-- pisó el costo del artículo), 'no_aplicado' (el usuario decidió no
+-- pisarlo en la pantalla de revisión) o 'sin_cambio' (el precio ya
+-- coincidía con el costo vigente). Null mientras la factura sigue en
+-- borrador.
+alter table facturas_compra_items add column if not exists estado_costo text;
+
 create table if not exists gastos (
   id serial primary key,
   fecha date not null default current_date,

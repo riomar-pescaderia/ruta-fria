@@ -123,7 +123,7 @@ router.post('/', async (req, res, next) => {
       );
     }
     await client.query('COMMIT');
-    res.redirect(`/compras/${facturaId}`);
+    res.redirect(`/compras/${facturaId}/confirmar`);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     next(err);
@@ -224,6 +224,39 @@ router.get('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Pantalla de revisión: antes de confirmar, muestra para cada renglón el
+// costo vigente del artículo contra el precio cargado en la factura, y
+// deja elegir renglón por renglón si ese cambio de precio se aplica o no.
+router.get('/:id/confirmar', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `select f.*, p.nombre as proveedor_nombre
+       from facturas_compra f join proveedores p on p.id = f.proveedor_id
+       where f.id = $1`,
+      [req.params.id]
+    );
+    const factura = rows[0];
+    if (!factura) return res.redirect('/compras');
+    if (factura.actualizo_costos) return res.redirect(`/compras/${factura.id}`);
+
+    const { rows: items } = await pool.query(
+      `select i.*, a.codigo, a.nombre, a.costo as costo_actual
+       from facturas_compra_items i join articulos a on a.id = i.articulo_id
+       where i.factura_id = $1
+       order by i.id`,
+      [factura.id]
+    );
+    if (items.length === 0) return res.redirect(`/compras/${factura.id}`);
+
+    const itemsConCambio = items.map((it) => ({
+      ...it,
+      cambia: Number(it.costo_actual) !== Number(it.precio_unitario),
+    }));
+
+    res.render('compras/confirmar', { factura, items: itemsConCambio });
+  } catch (err) { next(err); }
+});
+
 router.post('/:id/confirmar', async (req, res, next) => {
   const client = await pool.connect();
   try {
@@ -233,14 +266,31 @@ router.post('/:id/confirmar', async (req, res, next) => {
     if (factura.actualizo_costos) return res.redirect(`/compras/${factura.id}`);
 
     const { rows: items } = await client.query(
-      'select * from facturas_compra_items where factura_id = $1',
+      `select i.*, a.costo as costo_actual
+       from facturas_compra_items i join articulos a on a.id = i.articulo_id
+       where i.factura_id = $1`,
       [factura.id]
     );
     if (items.length === 0) return res.redirect(`/compras/${factura.id}`);
 
+    // Qué renglones marcó el usuario para aplicar, en la pantalla de
+    // revisión — llega como { "<item_id>": "on", ... }, solo con las
+    // claves de los checkboxes tildados.
+    const aplicar = req.body.aplicar || {};
+
     await client.query('BEGIN');
     for (const it of items) {
-      await client.query('update articulos set costo = $1 where id = $2', [it.precio_unitario, it.articulo_id]);
+      const cambia = Number(it.costo_actual) !== Number(it.precio_unitario);
+      if (!cambia) {
+        await client.query('update facturas_compra_items set estado_costo = $1 where id = $2', ['sin_cambio', it.id]);
+        continue;
+      }
+      if (aplicar[it.id] === 'on') {
+        await client.query('update articulos set costo = $1 where id = $2', [it.precio_unitario, it.articulo_id]);
+        await client.query('update facturas_compra_items set estado_costo = $1 where id = $2', ['aplicado', it.id]);
+      } else {
+        await client.query('update facturas_compra_items set estado_costo = $1 where id = $2', ['no_aplicado', it.id]);
+      }
     }
     await client.query('update facturas_compra set actualizo_costos = true where id = $1', [factura.id]);
     await client.query('COMMIT');

@@ -1,0 +1,56 @@
+<%- include('../partials/head') %>
+
+<h1>Revisar precios antes de confirmar</h1>
+
+<p style="color:var(--ink-soft);">
+  Proveedor: <strong style="color:var(--ink);"><%= factura.proveedor_nombre %></strong>
+  · Fecha: <%= new Date(factura.fecha).toLocaleDateString('es-AR') %>
+  <% if (factura.numero) { %>· Factura #<%= factura.numero %><% } %>
+</p>
+
+<p style="color:var(--ink-soft); font-size:.9rem;">
+  Los artículos resaltados cambian de precio respecto al costo que tienen cargado hoy. Elegí, uno por uno, si querés que este costo nuevo quede guardado en el artículo.
+</p>
+
+<form method="post" action="/compras/<%= factura.id %>/confirmar">
+<div style="overflow-x:auto;">
+<table>
+  <thead>
+    <tr>
+      <th>Código</th>
+      <th>Artículo</th>
+      <th>Precio anterior</th>
+      <th>Precio nuevo</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <% items.forEach(it => { %>
+      <tr class="<%= it.cambia ? 'fila-cambio' : '' %>">
+        <td data-label="Código" class="mono"><%= it.codigo %></td>
+        <td data-label="Artículo"><%= it.nombre %></td>
+        <td data-label="Precio anterior" class="mono">$<%= Number(it.costo_actual).toFixed(2) %></td>
+        <td data-label="Precio nuevo" class="mono"><strong>$<%= Number(it.precio_unitario).toFixed(2) %></strong></td>
+        <td data-label="">
+          <% if (it.cambia) { %>
+            <label class="check-row" style="white-space:nowrap;">
+              <input type="checkbox" name="aplicar[<%= it.id %>]" checked>
+              <span>Cambiar precio</span>
+            </label>
+          <% } else { %>
+            <span style="color:var(--ink-soft); font-size:.85rem;">Sin cambios</span>
+          <% } %>
+        </td>
+      </tr>
+    <% }) %>
+  </tbody>
+</table>
+</div>
+
+<div style="margin-top:20px;">
+  <button class="btn" type="submit">Confirmar factura</button>
+  <a class="btn secondary" href="/compras/<%= factura.id %>">Cancelar, decidir más tarde</a>
+</div>
+</form>
+
+<%- include('../partials/foot') %>
