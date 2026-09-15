@@ -55,6 +55,24 @@ create table if not exists articulos (
 -- tocar para no volver a alterar la base; nada la lee ni la escribe.
 alter table articulos add column if not exists contenido_gr numeric;
 
+-- Orden de aparición dentro del listado de precios en PDF (ver
+-- routes/articulos.js y views/articulos/lista.ejs): 1, 2 o 3 para
+-- destacar un artículo primero, segundo o tercero en ese orden; null para
+-- los que no tienen prioridad asignada, que van al final ordenados por
+-- nombre. No afecta en nada al resto del sistema, solo al PDF.
+alter table articulos add column if not exists prioridad_listado integer;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'chk_articulo_prioridad_listado'
+  ) then
+    alter table articulos
+      add constraint chk_articulo_prioridad_listado
+      check (prioridad_listado is null or prioridad_listado in (1, 2, 3));
+  end if;
+end $$;
+
 -- La columna "unidad" pasó de texto categórico (kg/cajon/bolsa/unidad) a
 -- ser el divisor numérico que se usa en la fórmula de precio: costo (que
 -- siempre se carga por kg) ÷ unidad = costo real del producto que se
@@ -233,6 +251,7 @@ alter table usuarios add column if not exists acceso_compras boolean not null de
 alter table usuarios add column if not exists acceso_gastos boolean not null default false;
 alter table usuarios add column if not exists acceso_ventas boolean not null default false;
 alter table usuarios add column if not exists acceso_prospectos boolean not null default false;
+alter table usuarios add column if not exists acceso_stock boolean not null default false;
 
 -- Permiso especial (no es un módulo entero): habilita editar o eliminar
 -- una factura de compra que ya está confirmada, algo que por defecto
@@ -256,7 +275,8 @@ begin
       acceso_compras = true,
       acceso_gastos = true,
       acceso_ventas = true,
-      acceso_prospectos = true;
+      acceso_prospectos = true,
+      acceso_stock = true;
   end if;
 end $$;
 

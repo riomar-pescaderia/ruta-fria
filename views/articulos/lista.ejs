@@ -2,7 +2,8 @@
 
 <div class="toolbar">
   <h1>Artículos</h1>
-  <div style="display:flex; gap:8px;">
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <button type="button" id="generar-listado-precios" class="btn secondary">Generar listado de precios (PDF)</button>
     <a class="btn secondary" href="/articulos/importar">Importar desde planilla</a>
     <a class="btn" href="/articulos/nuevo">+ Nuevo artículo</a>
   </div>
@@ -28,6 +29,7 @@
       <th>Costo</th>
       <th>Precio efectivo</th>
       <th>Precio de lista</th>
+      <th>Orden en listado PDF</th>
       <th></th>
     </tr>
   </thead>
@@ -40,6 +42,16 @@
       <td data-label="Costo" class="mono"<% if (Number(a.unidad) !== 1) { %> title="$<%= Number(a.costo).toFixed(2) %>/kg ÷ <%= a.unidad %>"<% } %>>$<%= a.costoPorUnidad.toFixed(2) %></td>
       <td data-label="Precio efectivo" class="mono">$<%= a.precioEfectivo.toFixed(0) %></td>
       <td data-label="Precio de lista" class="mono">$<%= a.precioLista.toFixed(0) %></td>
+      <td data-label="Orden en listado PDF">
+        <form method="post" action="/articulos/<%= a.id %>/prioridad" style="margin:0;">
+          <select name="prioridad_listado" onchange="this.form.submit()" style="max-width:150px;">
+            <option value="" <%= !a.prioridad_listado ? 'selected' : '' %>>Sin prioridad</option>
+            <option value="1" <%= a.prioridad_listado === 1 ? 'selected' : '' %>>Primer orden</option>
+            <option value="2" <%= a.prioridad_listado === 2 ? 'selected' : '' %>>Segundo orden</option>
+            <option value="3" <%= a.prioridad_listado === 3 ? 'selected' : '' %>>Tercer orden</option>
+          </select>
+        </form>
+      </td>
       <td data-label=""><a class="btn secondary" href="/articulos/<%= a.id %>/editar">Editar</a></td>
     </tr>
     <% }) %>
@@ -62,6 +74,117 @@
       if (coincide) visibles++;
     });
     sinResultados.style.display = visibles === 0 ? 'block' : 'none';
+  });
+})();
+</script>
+
+<script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script>
+(function () {
+  // Datos del listado de precios: solo código, nombre y precios — nada de
+  // costo, margen ni flete, porque este PDF es para mandarle a un
+  // potencial cliente o revisar valores, no información interna.
+  var ARTICULOS_PDF = <%- JSON.stringify(articulos.map(a => ({
+    codigo: a.codigo,
+    nombre: a.nombre,
+    precioEfectivo: a.precioEfectivo,
+    precioLista: a.precioLista,
+    prioridad: a.prioridad_listado || null,
+    activo: a.activo !== false,
+  }))) %>;
+
+  var boton = document.getElementById('generar-listado-precios');
+  if (!boton) return;
+
+  boton.addEventListener('click', function () {
+    if (typeof window.jspdf === 'undefined') {
+      alert('No se pudo cargar la librería para generar el PDF. Revisá la conexión a internet e intentá de nuevo.');
+      return;
+    }
+
+    var activos = ARTICULOS_PDF.filter(function (a) { return a.activo; });
+    if (activos.length === 0) {
+      alert('Todavía no hay artículos cargados para armar un listado.');
+      return;
+    }
+
+    // Agrupado por prioridad (1º, 2º, 3º orden primero, en ese orden) y
+    // dentro de cada grupo alfabético — los que no tienen prioridad
+    // asignada van al final, también alfabético.
+    var articulosOrdenados = activos.slice().sort(function (a, b) {
+      var pa = a.prioridad || 99;
+      var pb = b.prioridad || 99;
+      if (pa !== pb) return pa - pb;
+      return a.nombre.localeCompare(b.nombre, 'es');
+    });
+
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    var margenIzq = 14;
+    var margenDer = 14;
+    var anchoPagina = doc.internal.pageSize.getWidth();
+    var altoPagina = doc.internal.pageSize.getHeight();
+    var xCodigo = margenIzq;
+    var xProducto = margenIzq + 24;
+    var xEfectivo = anchoPagina - margenDer - 28;
+    var xLista = anchoPagina - margenDer;
+    var y = 20;
+
+    function dibujarTitulo() {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(15);
+      doc.text('Riomar Pescadería — Lista de precios', margenIzq, y);
+      y += 6;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(110);
+      doc.text('Generado el ' + new Date().toLocaleDateString('es-AR'), margenIzq, y);
+      doc.setTextColor(0);
+      y += 9;
+    }
+
+    function dibujarEncabezadoTabla() {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.text('Código', xCodigo, y);
+      doc.text('Producto', xProducto, y);
+      doc.text('Efectivo', xEfectivo, y, { align: 'right' });
+      doc.text('Lista', xLista, y, { align: 'right' });
+      y += 2;
+      doc.setDrawColor(180);
+      doc.setLineWidth(0.2);
+      doc.line(margenIzq, y, anchoPagina - margenDer, y);
+      y += 5;
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(0);
+    }
+
+    dibujarTitulo();
+    dibujarEncabezadoTabla();
+
+    articulosOrdenados.forEach(function (a) {
+      if (y > altoPagina - 20) {
+        doc.addPage();
+        y = 20;
+        dibujarEncabezadoTabla();
+      }
+      doc.setFontSize(9.5);
+      doc.text(String(a.codigo), xCodigo, y);
+      var nombreTexto = a.nombre.length > 48 ? a.nombre.slice(0, 47) + '…' : a.nombre;
+      doc.text(nombreTexto, xProducto, y);
+      doc.text('$' + Math.round(a.precioEfectivo), xEfectivo, y, { align: 'right' });
+      doc.text('$' + Math.round(a.precioLista), xLista, y, { align: 'right' });
+      y += 6;
+    });
+
+    y += 4;
+    if (y > altoPagina - 15) { doc.addPage(); y = 20; }
+    doc.setFontSize(8);
+    doc.setTextColor(120);
+    doc.text('Precios sujetos a modificación sin previo aviso.', margenIzq, y);
+
+    var fecha = new Date().toISOString().slice(0, 10);
+    doc.save('lista-de-precios-' + fecha + '.pdf');
   });
 })();
 </script>

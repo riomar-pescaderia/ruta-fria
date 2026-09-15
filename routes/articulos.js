@@ -26,6 +26,18 @@ router.get('/nuevo', (req, res) => {
   res.render('articulos/form', { articulo: {}, accion: '/articulos' });
 });
 
+// Solo el orden de aparición en el listado de precios en PDF — un campo
+// suelto, así se puede cambiar desde el propio listado sin pasar por el
+// formulario completo de edición del artículo.
+router.post('/:id/prioridad', async (req, res, next) => {
+  try {
+    const valor = req.body.prioridad_listado;
+    const prioridad = ['1', '2', '3'].includes(valor) ? Number(valor) : null;
+    await pool.query('update articulos set prioridad_listado = $1 where id = $2', [prioridad, req.params.id]);
+    res.redirect('/articulos');
+  } catch (err) { next(err); }
+});
+
 router.get('/importar', (req, res) => {
   res.render('articulos/importar', { resultado: null, datos: '' });
 });

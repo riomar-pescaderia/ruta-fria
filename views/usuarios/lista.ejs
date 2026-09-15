@@ -31,9 +31,9 @@
       <td data-label="Rol"><%= u.es_admin ? 'Administrador' : 'Empleado' %></td>
       <td data-label="Accesos" style="font-size:.85rem; color:var(--ink-soft);">
         <% if (u.es_admin) { %>Todos<% } else { %>
-          <%= ['clientes','articulos','compras','gastos','ventas','prospectos']
+          <%= ['clientes','articulos','prospectos','ventas','compras','gastos','stock']
                 .filter(m => u['acceso_' + m])
-                .map(m => m === 'prospectos' ? 'Historial visitas' : m[0].toUpperCase() + m.slice(1))
+                .map(m => m === 'prospectos' ? 'Historial visitas' : (m === 'ventas' ? 'Venta / remito' : m[0].toUpperCase() + m.slice(1)))
                 .join(', ') || 'Ninguno' %>
           <% if (u.permiso_editar_confirmadas) { %>
             <br><span style="font-size:.78rem;">+ Editar confirmadas</span>
