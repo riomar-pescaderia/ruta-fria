@@ -3,12 +3,18 @@
 <div class="toolbar">
   <h1>Factura de compra<% if (factura.numero) { %> #<%= factura.numero %><% } %></h1>
   <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <% var puedeCorregir = usuario && (usuario.esAdmin || (usuario.permisos && usuario.permisos.editarConfirmadas)); %>
     <% if (!factura.actualizo_costos) { %>
       <a class="btn secondary" href="/compras/<%= factura.id %>/editar">Editar</a>
       <form method="post" action="/compras/<%= factura.id %>/eliminar" style="display:inline;" onsubmit="return confirm('¿Eliminar esta factura? No se puede deshacer.');">
         <button type="submit" class="btn secondary" style="color:#a33;">Eliminar</button>
       </form>
       <a class="btn" href="/compras/<%= factura.id %>/confirmar">Revisar precios y confirmar</a>
+    <% } else if (puedeCorregir) { %>
+      <a class="btn secondary" href="/compras/<%= factura.id %>/editar">Editar</a>
+      <form method="post" action="/compras/<%= factura.id %>/eliminar" style="display:inline;" onsubmit="return confirm('Esta factura ya está confirmada. Eliminarla no revierte el costo que ya se aplicó a los artículos, y se pierde el historial. ¿Eliminar igual?');">
+        <button type="submit" class="btn secondary" style="color:#a33;">Eliminar</button>
+      </form>
     <% } %>
     <a class="btn secondary" href="/compras">← Volver</a>
   </div>
@@ -82,7 +88,10 @@
 </table>
 
 <% if (factura.actualizo_costos) { %>
-  <p style="color:var(--ink-soft); font-size:.85rem; margin-top:16px;">Esta factura ya actualizó el costo de sus artículos — queda de solo lectura para no perder el historial de qué costo regía en cada momento.</p>
+  <p style="color:var(--ink-soft); font-size:.85rem; margin-top:16px;">
+    Esta factura ya actualizó el costo de sus artículos, así que queda de solo lectura para no perder el historial de qué costo regía en cada momento.
+    <% if (puedeCorregir) { %>Tenés permiso para corregirla igual — al guardar cambios se corrige el registro de la factura, pero no se vuelve a tocar el costo de los artículos ni se repite la revisión de precios.<% } %>
+  </p>
 <% } %>
 
 <%- include('../partials/foot') %>

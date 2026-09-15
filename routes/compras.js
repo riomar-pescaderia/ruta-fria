@@ -7,6 +7,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const proveedoresRouter = require('./proveedores');
 const { getConfig } = require('../lib/config');
+const { puedeEditarConfirmadas } = require('../lib/auth');
 
 const router = express.Router();
 
@@ -176,7 +177,9 @@ router.get('/:id/editar', async (req, res, next) => {
     const { rows } = await pool.query('select * from facturas_compra where id = $1', [req.params.id]);
     const factura = rows[0];
     if (!factura) return res.redirect('/compras');
-    if (factura.actualizo_costos) return res.redirect(`/compras/${factura.id}`);
+    if (factura.actualizo_costos && !puedeEditarConfirmadas(req.session.usuario)) {
+      return res.redirect(`/compras/${factura.id}`);
+    }
 
     const { rows: itemsGuardados } = await pool.query(
       'select * from facturas_compra_items where factura_id = $1 order by id',
@@ -220,12 +223,14 @@ router.post('/:id', async (req, res, next) => {
     const { rows } = await client.query('select * from facturas_compra where id = $1', [req.params.id]);
     const factura = rows[0];
     if (!factura) return res.redirect('/compras');
-    if (factura.actualizo_costos) return res.redirect(`/compras/${factura.id}`);
+    if (factura.actualizo_costos && !puedeEditarConfirmadas(req.session.usuario)) {
+      return res.redirect(`/compras/${factura.id}`);
+    }
 
     if (!proveedor_id || items.length === 0) {
       const { proveedores, articulos } = await datosFormulario();
       return res.render('compras/form', {
-        factura: { id: factura.id, proveedor_id, numero, fecha },
+        factura: { id: factura.id, proveedor_id, numero, fecha, actualizo_costos: factura.actualizo_costos },
         items: items.length ? items : [{}],
         proveedores,
         articulos,
@@ -237,6 +242,11 @@ router.post('/:id', async (req, res, next) => {
 
     const total = redondear2(items.reduce((acc, it) => acc + it.total, 0));
 
+    // Si es una corrección sobre una factura ya confirmada, no se vuelve a
+    // pisar el costo de los artículos ni se repite el paso de revisión —
+    // eso ya se decidió al confirmarla. Solo se corrige el registro de la
+    // factura y sus renglones (por eso se pierde el detalle de qué
+    // renglones habían aplicado costo, que quedaba en estado_costo).
     await client.query('BEGIN');
     await client.query(
       'update facturas_compra set proveedor_id=$1, numero=$2, fecha=$3, total=$4 where id=$5',
@@ -365,7 +375,9 @@ router.post('/:id/eliminar', async (req, res, next) => {
   try {
     const { rows } = await pool.query('select actualizo_costos from facturas_compra where id = $1', [req.params.id]);
     if (!rows[0]) return res.redirect('/compras');
-    if (rows[0].actualizo_costos) return res.redirect(`/compras/${req.params.id}`);
+    if (rows[0].actualizo_costos && !puedeEditarConfirmadas(req.session.usuario)) {
+      return res.redirect(`/compras/${req.params.id}`);
+    }
     await pool.query('delete from facturas_compra where id = $1', [req.params.id]);
     res.redirect('/compras');
   } catch (err) { next(err); }

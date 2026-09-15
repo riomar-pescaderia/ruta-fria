@@ -165,6 +165,12 @@ alter table usuarios add column if not exists acceso_compras boolean not null de
 alter table usuarios add column if not exists acceso_gastos boolean not null default false;
 alter table usuarios add column if not exists acceso_ventas boolean not null default false;
 
+-- Permiso especial (no es un módulo entero): habilita editar o eliminar
+-- una factura de compra que ya está confirmada, algo que por defecto
+-- solo puede hacer un administrador. Se guarda y se delega igual que los
+-- accesos por módulo, desde la pantalla de Usuarios.
+alter table usuarios add column if not exists permiso_editar_confirmadas boolean not null default false;
+
 -- Antes de que existieran los permisos por módulo, cualquier usuario
 -- cargado tenía acceso a todo. Para no dejar a nadie afuera de un día
 -- para el otro, la primera vez que corre este bloque (todavía no hay

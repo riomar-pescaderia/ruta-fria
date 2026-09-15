@@ -21,6 +21,14 @@
     <div class="check-row"><input type="checkbox" id="acceso_ventas" name="acceso_ventas" <%= usuario.acceso_ventas ? 'checked' : '' %>><label for="acceso_ventas" style="margin:0;">Venta / remito</label></div>
   </div>
 
+  <div>
+    <label style="margin-top:10px;">Permisos especiales (se ignora si es administrador)</label>
+    <div class="check-row">
+      <input type="checkbox" id="permiso_editar_confirmadas" name="permiso_editar_confirmadas" <%= usuario.permiso_editar_confirmadas ? 'checked' : '' %>>
+      <label for="permiso_editar_confirmadas" style="margin:0;">Editar y eliminar facturas de compra ya confirmadas</label>
+    </div>
+  </div>
+
   <p style="color:var(--ink-soft); font-size:.85rem;">Los cambios se aplican al toque, aunque la persona ya esté logueada — no hace falta que vuelva a entrar.</p>
 
   <div>

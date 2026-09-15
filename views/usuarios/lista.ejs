@@ -35,6 +35,9 @@
                 .filter(m => u['acceso_' + m])
                 .map(m => m[0].toUpperCase() + m.slice(1))
                 .join(', ') || 'Ninguno' %>
+          <% if (u.permiso_editar_confirmadas) { %>
+            <br><span style="font-size:.78rem;">+ Editar confirmadas</span>
+          <% } %>
         <% } %>
       </td>
       <td data-label="Estado"><%= u.activo ? 'Activo' : 'Desactivado' %></td>

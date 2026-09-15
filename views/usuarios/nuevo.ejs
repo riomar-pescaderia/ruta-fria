@@ -38,6 +38,14 @@
   </div>
 
   <div>
+    <label style="margin-top:10px;">Permisos especiales</label>
+    <div class="check-row">
+      <input type="checkbox" id="permiso_editar_confirmadas" name="permiso_editar_confirmadas" <%= permisos.editarConfirmadas ? 'checked' : '' %>>
+      <label for="permiso_editar_confirmadas" style="margin:0;">Editar y eliminar facturas de compra ya confirmadas</label>
+    </div>
+  </div>
+
+  <div>
     <button class="btn" type="submit">Crear usuario</button>
     <a class="btn secondary" href="/usuarios">Cancelar</a>
   </div>

@@ -8,6 +8,12 @@
   </div>
 <% } %>
 
+<% if (factura.actualizo_costos) { %>
+  <div class="pendiente" style="border-color:#f0d9a8; color:#8a5a12; margin-bottom:16px; padding:14px 20px;">
+    <p style="margin:0;">Esta factura ya está confirmada. Estás por corregirla con un permiso especial: al guardar se corrige el registro de la factura y sus renglones, pero <strong>no</strong> se vuelve a tocar el costo de los artículos ni se repite la revisión de precios — si el costo actual de algún artículo quedó mal, corregilo desde Artículos.</p>
+  </div>
+<% } %>
+
 <form class="card" method="post" action="<%= accion %>" style="max-width:900px;">
   <div style="display:flex; gap:12px; flex-wrap:wrap;">
     <div style="flex:2; min-width:220px;">
