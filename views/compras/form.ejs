@@ -38,10 +38,12 @@
     </div>
   </div>
 
+  <% const mapaArticulos = {}; articulos.forEach(a => { mapaArticulos[a.id] = a; }); %>
   <div style="overflow-x:auto;">
   <table id="tabla-items">
     <thead>
       <tr>
+        <th style="width:110px;">Código</th>
         <th style="min-width:220px;">Artículo</th>
         <th style="width:110px;">Cantidad</th>
         <th style="width:130px;">Precio unit.</th>
@@ -56,15 +58,15 @@
       </tr>
     </thead>
     <tbody id="filas-items">
-      <% items.forEach((it, i) => { %>
+      <% items.forEach((it, i) => {
+           const artSel = it.articulo_id ? mapaArticulos[it.articulo_id] : null; %>
       <tr>
+        <td data-label="Código">
+          <input class="f-codigo" type="text" placeholder="Código" autocomplete="off" value="<%= artSel ? artSel.codigo : '' %>">
+        </td>
         <td data-label="Artículo">
-          <select data-campo="articulo_id" name="items[<%= i %>][articulo_id]" required>
-            <option value="">— elegir —</option>
-            <% articulos.forEach(a => { %>
-              <option value="<%= a.id %>" <%= String(it.articulo_id) === String(a.id) ? 'selected' : '' %>><%= a.codigo %> — <%= a.nombre %></option>
-            <% }) %>
-          </select>
+          <input class="f-articulo-buscar" type="text" placeholder="Buscar por nombre o código" autocomplete="off" value="<%= artSel ? (artSel.codigo + ' — ' + artSel.nombre) : '' %>">
+          <input type="hidden" class="f-articulo-id" data-campo="articulo_id" name="items[<%= i %>][articulo_id]" value="<%= it.articulo_id || '' %>">
         </td>
         <td data-label="Cantidad">
           <input class="f-cantidad" data-campo="cantidad" type="number" step="0.01" min="0" name="items[<%= i %>][cantidad]" value="<%= it.cantidad || '' %>" required>
@@ -85,17 +87,17 @@
     </tbody>
     <tfoot>
       <tr>
-        <td colspan="4" style="text-align:right; border-bottom:none;">Neto</td>
+        <td colspan="5" style="text-align:right; border-bottom:none;">Neto</td>
         <td class="mono" id="total-neto" style="border-bottom:none;">$0.00</td>
         <td style="border-bottom:none;"></td>
       </tr>
       <tr>
-        <td colspan="4" style="text-align:right; border-bottom:none;">IVA</td>
+        <td colspan="5" style="text-align:right; border-bottom:none;">IVA</td>
         <td class="mono" id="total-iva" style="border-bottom:none;">$0.00</td>
         <td style="border-bottom:none;"></td>
       </tr>
       <tr>
-        <td colspan="4" style="text-align:right; font-weight:600; border-bottom:none;">Total</td>
+        <td colspan="5" style="text-align:right; font-weight:600; border-bottom:none;">Total</td>
         <td class="mono" id="total-factura" style="border-bottom:none; font-weight:600;">$0.00</td>
         <td style="border-bottom:none;"></td>
       </tr>
@@ -103,7 +105,7 @@
   </table>
   </div>
   <p style="color:var(--ink-soft); font-size:.85rem; margin-top:-8px;">
-    Casilla "IVA" tildada: el precio unitario cargado es <strong>sin IVA</strong> y el sistema le suma el <%= ivaPct %>% automáticamente (el caso más común). Destildada: el precio unitario cargado <strong>ya incluye el IVA</strong> integrado, tal cual viene en la factura. Usá "todos" para tildar o destildar la columna completa de una vez.
+    Podés cargar cada renglón escribiendo el código directamente, o buscando por nombre o código en la columna "Artículo" — se completan uno al otro solos. Casilla "IVA" tildada: el precio unitario cargado es <strong>sin IVA</strong> y el sistema le suma el <%= ivaPct %>% automáticamente (el caso más común). Destildada: el precio unitario cargado <strong>ya incluye el IVA</strong> integrado, tal cual viene en la factura. Usá "todos" para tildar o destildar la columna completa de una vez.
   </p>
 
   <div>
@@ -121,6 +123,78 @@
   var tbody = document.getElementById('filas-items');
   var checkTodos = document.getElementById('iva-todos');
   var IVA_PCT = <%- JSON.stringify(Number(ivaPct)) %>;
+
+  // Datos de artículos para el buscador de la columna "Artículo" y para
+  // completar el código automáticamente cuando se elige uno.
+  var ARTICULOS = <%- JSON.stringify(articulos.map(a => ({ id: String(a.id), codigo: a.codigo, nombre: a.nombre }))) %>;
+  var articulosPorId = {};
+  ARTICULOS.forEach(function (a) { articulosPorId[a.id] = a; });
+
+  function etiquetaArticulo(a) {
+    return a.codigo + ' — ' + a.nombre;
+  }
+
+  function buscarArticulos(texto) {
+    var t = texto.trim().toLowerCase();
+    if (!t) return ARTICULOS;
+    return ARTICULOS.filter(function (a) {
+      return a.codigo.toLowerCase().indexOf(t) !== -1 || a.nombre.toLowerCase().indexOf(t) !== -1;
+    });
+  }
+
+  // Un único panel flotante, reutilizado para la fila que esté activa en
+  // cada momento — más simple y liviano que uno por renglón, y evita que
+  // el "overflow-x:auto" de la tabla lo recorte (se posiciona con
+  // "position:fixed", relativo a la pantalla, no a la tabla).
+  var buscador = document.createElement('div');
+  buscador.className = 'buscador-flotante';
+  buscador.style.display = 'none';
+  document.body.appendChild(buscador);
+  var filaActiva = null;
+
+  function ocultarBuscador() {
+    buscador.style.display = 'none';
+    buscador.innerHTML = '';
+    filaActiva = null;
+  }
+
+  function fijarArticuloEnFila(tr, articulo) {
+    tr.querySelector('.f-articulo-id').value = articulo ? articulo.id : '';
+    tr.querySelector('.f-articulo-buscar').value = articulo ? etiquetaArticulo(articulo) : '';
+    if (articulo) tr.querySelector('.f-codigo').value = articulo.codigo;
+    actualizarTotales();
+  }
+
+  function mostrarBuscador(tr, coincidencias) {
+    filaActiva = tr;
+    buscador.innerHTML = '';
+    if (coincidencias.length === 0) {
+      var vacio = document.createElement('div');
+      vacio.style.cssText = 'padding:8px 12px; font-size:.85rem; color:var(--ink-soft);';
+      vacio.textContent = 'Sin resultados.';
+      buscador.appendChild(vacio);
+    } else {
+      coincidencias.slice(0, 30).forEach(function (a) {
+        var boton = document.createElement('button');
+        boton.type = 'button';
+        boton.textContent = etiquetaArticulo(a);
+        // "mousedown" (no "click") para que se ejecute antes de que el
+        // input pierda el foco y el buscador se cierre solo.
+        boton.addEventListener('mousedown', function (e) {
+          e.preventDefault();
+          fijarArticuloEnFila(tr, a);
+          ocultarBuscador();
+        });
+        buscador.appendChild(boton);
+      });
+    }
+    var input = tr.querySelector('.f-articulo-buscar');
+    var rect = input.getBoundingClientRect();
+    buscador.style.left = rect.left + 'px';
+    buscador.style.top = rect.bottom + 'px';
+    buscador.style.width = Math.max(rect.width, 240) + 'px';
+    buscador.style.display = 'block';
+  }
 
   // Misma lógica que calcularItem() en routes/compras.js:
   // sumarIva=true  → el precio cargado es neto (sin IVA), se le suma el IVA.
@@ -179,9 +253,11 @@
   document.getElementById('agregar-fila').addEventListener('click', function () {
     var filas = tbody.querySelectorAll('tr');
     var nueva = filas[filas.length - 1].cloneNode(true);
-    nueva.querySelectorAll('select').forEach(function (el) { el.selectedIndex = 0; });
     nueva.querySelectorAll('input[type=number]').forEach(function (el) { el.value = ''; });
     nueva.querySelectorAll('input[type=checkbox]').forEach(function (el) { el.checked = checkTodos.checked; });
+    nueva.querySelector('.f-codigo').value = '';
+    nueva.querySelector('.f-articulo-buscar').value = '';
+    nueva.querySelector('.f-articulo-id').value = '';
     nueva.querySelector('.f-subtotal').textContent = '0.00';
     nueva.querySelector('.f-desglose').textContent = '';
     tbody.appendChild(nueva);
@@ -204,11 +280,49 @@
     actualizarTotales();
   });
 
-  tbody.addEventListener('input', actualizarTotales);
+  tbody.addEventListener('input', function (e) {
+    actualizarTotales();
+    if (e.target.classList.contains('f-articulo-buscar')) {
+      var tr = e.target.closest('tr');
+      // si lo que quedó tipeado ya no coincide con el artículo elegido,
+      // se desvincula hasta que se elija uno de la lista de nuevo
+      var actual = articulosPorId[tr.querySelector('.f-articulo-id').value];
+      if (!actual || etiquetaArticulo(actual) !== e.target.value) {
+        tr.querySelector('.f-articulo-id').value = '';
+      }
+      mostrarBuscador(tr, buscarArticulos(e.target.value));
+    } else if (e.target.classList.contains('f-codigo')) {
+      var tr2 = e.target.closest('tr');
+      var codigoTexto = e.target.value.trim().toLowerCase();
+      var encontrado = codigoTexto && ARTICULOS.find(function (a) { return a.codigo.toLowerCase() === codigoTexto; });
+      if (encontrado) fijarArticuloEnFila(tr2, encontrado);
+    }
+  });
   tbody.addEventListener('change', function (e) {
     actualizarTotales();
     if (e.target.classList.contains('f-iva')) actualizarCheckTodos();
   });
+
+  // "focus" y "blur" no burbujean — hay que escucharlos en fase de
+  // "capture" para poder delegarlos igual que los demás eventos de fila.
+  tbody.addEventListener('focus', function (e) {
+    if (e.target.classList.contains('f-articulo-buscar')) {
+      mostrarBuscador(e.target.closest('tr'), buscarArticulos(e.target.value));
+    }
+  }, true);
+  tbody.addEventListener('blur', function (e) {
+    if (e.target.classList.contains('f-articulo-buscar')) {
+      // pequeño margen para que un click en una opción (mousedown) llegue
+      // a procesarse antes de que el buscador se cierre por el blur
+      var trBlur = e.target.closest('tr');
+      setTimeout(function () {
+        if (filaActiva === trBlur) ocultarBuscador();
+      }, 150);
+    }
+  }, true);
+  window.addEventListener('scroll', function () { if (filaActiva) ocultarBuscador(); }, true);
+  window.addEventListener('resize', ocultarBuscador);
+
   actualizarCheckTodos();
   actualizarTotales();
 })();

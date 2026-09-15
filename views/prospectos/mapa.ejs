@@ -23,7 +23,11 @@
   </p>
 <% } %>
 
-<table>
+<div style="max-width:340px; margin-bottom:14px;">
+  <input type="text" id="buscar-prospecto" placeholder="Buscar por nombre o dirección...">
+</div>
+<p id="sin-resultados-prospectos" class="empty" style="display:none;">No encontré ningún prospecto con ese nombre o dirección.</p>
+<table id="tabla-prospectos">
   <thead>
     <tr>
       <th>Nombre</th>
@@ -36,7 +40,7 @@
   </thead>
   <tbody>
     <% prospectos.forEach(p => { %>
-    <tr>
+    <tr data-buscar="<%= (p.nombre + ' ' + p.direccion).toLowerCase() %>">
       <td data-label="Nombre"><a href="/prospectos/<%= p.id %>"><%= p.nombre %></a></td>
       <td data-label="Dirección"><%= p.direccion %></td>
       <td data-label="Teléfono"><%= p.telefono || '—' %></td>
@@ -104,6 +108,22 @@
     } else {
       map.fitBounds(bounds, { padding: [30, 30] });
     }
+  }
+
+  var buscarInput = document.getElementById('buscar-prospecto');
+  if (buscarInput) {
+    var filasProspectos = document.querySelectorAll('#tabla-prospectos tbody tr');
+    var sinResultados = document.getElementById('sin-resultados-prospectos');
+    buscarInput.addEventListener('input', function () {
+      var texto = buscarInput.value.trim().toLowerCase();
+      var visibles = 0;
+      filasProspectos.forEach(function (tr) {
+        var coincide = !texto || tr.dataset.buscar.indexOf(texto) !== -1;
+        tr.hidden = !coincide;
+        if (coincide) visibles++;
+      });
+      sinResultados.style.display = visibles === 0 ? 'block' : 'none';
+    });
   }
 })();
 </script>
