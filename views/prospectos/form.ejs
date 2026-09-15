@@ -24,15 +24,15 @@
     <input type="text" id="telefono" name="telefono" value="<%= prospecto.telefono || '' %>">
   </div>
 
+  <% const clienteSel = prospecto.cliente_id ? clientes.find(c => String(c.id) === String(prospecto.cliente_id)) : null; %>
   <div>
-    <label for="cliente_id">¿Ya es cliente?</label>
-    <select id="cliente_id" name="cliente_id">
-      <option value="">Todavía no, es solo un prospecto</option>
-      <% clientes.forEach(c => { %>
-        <option value="<%= c.id %>" <%= String(prospecto.cliente_id) === String(c.id) ? 'selected' : '' %>><%= c.razon_social %></option>
-      <% }) %>
-    </select>
-    <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Si ya compró y está cargado en Clientes, vinculalo acá — así se distingue en el mapa con otro color en vez de quedar mezclado con los que todavía son solo prospectos.</p>
+    <label for="cliente_buscar">¿Ya es cliente?</label>
+    <div style="display:flex; gap:8px;">
+      <input type="text" id="cliente_buscar" placeholder="Buscar por nombre, CUIT/DNI o razón social..." autocomplete="off" value="<%= clienteSel ? clienteSel.razon_social : '' %>" style="flex:1;">
+      <button type="button" id="cliente-quitar" class="btn secondary">Quitar</button>
+    </div>
+    <input type="hidden" id="cliente_id" name="cliente_id" value="<%= prospecto.cliente_id || '' %>">
+    <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Si ya compró y está cargado en Clientes, buscalo acá y vinculalo — así se distingue en el mapa con otro color en vez de quedar mezclado con los que todavía son solo prospectos. Dejalo vacío si todavía es solo un prospecto.</p>
   </div>
 
   <div>
@@ -66,6 +66,89 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 (function () {
+  // Buscador del campo "¿Ya es cliente?" — mismo patrón que el buscador
+  // de artículos en Compras: un input de texto con un panel flotante de
+  // coincidencias, y un campo oculto que guarda el id real elegido.
+  var CLIENTES = <%- JSON.stringify(clientes.map(c => ({ id: String(c.id), razon_social: c.razon_social, cuit_dni: c.cuit_dni || '' }))) %>;
+  var clienteBuscarInput = document.getElementById('cliente_buscar');
+  var clienteIdInput = document.getElementById('cliente_id');
+  var clienteBuscador = document.createElement('div');
+  clienteBuscador.className = 'buscador-flotante';
+  clienteBuscador.style.display = 'none';
+  document.body.appendChild(clienteBuscador);
+
+  function etiquetaCliente(c) {
+    return c.razon_social + (c.cuit_dni ? ' — ' + c.cuit_dni : '');
+  }
+
+  function buscarClientes(texto) {
+    var t = texto.trim().toLowerCase();
+    if (!t) return CLIENTES;
+    return CLIENTES.filter(function (c) {
+      return c.razon_social.toLowerCase().indexOf(t) !== -1 || c.cuit_dni.toLowerCase().indexOf(t) !== -1;
+    });
+  }
+
+  function ocultarClienteBuscador() {
+    clienteBuscador.style.display = 'none';
+    clienteBuscador.innerHTML = '';
+  }
+
+  function fijarCliente(c) {
+    clienteIdInput.value = c ? c.id : '';
+    clienteBuscarInput.value = c ? etiquetaCliente(c) : '';
+  }
+
+  function mostrarClienteBuscador(coincidencias) {
+    clienteBuscador.innerHTML = '';
+    if (coincidencias.length === 0) {
+      var vacio = document.createElement('div');
+      vacio.style.cssText = 'padding:8px 12px; font-size:.85rem; color:var(--ink-soft);';
+      vacio.textContent = 'Sin resultados.';
+      clienteBuscador.appendChild(vacio);
+    } else {
+      coincidencias.slice(0, 30).forEach(function (c) {
+        var boton = document.createElement('button');
+        boton.type = 'button';
+        boton.textContent = etiquetaCliente(c);
+        // "mousedown" (no "click") para que se ejecute antes de que el
+        // input pierda el foco y el buscador se cierre solo.
+        boton.addEventListener('mousedown', function (e) {
+          e.preventDefault();
+          fijarCliente(c);
+          ocultarClienteBuscador();
+        });
+        clienteBuscador.appendChild(boton);
+      });
+    }
+    var rect = clienteBuscarInput.getBoundingClientRect();
+    clienteBuscador.style.left = rect.left + 'px';
+    clienteBuscador.style.top = rect.bottom + 'px';
+    clienteBuscador.style.width = Math.max(rect.width, 240) + 'px';
+    clienteBuscador.style.display = 'block';
+  }
+
+  clienteBuscarInput.addEventListener('focus', function () {
+    mostrarClienteBuscador(buscarClientes(clienteBuscarInput.value));
+  });
+  clienteBuscarInput.addEventListener('input', function () {
+    // si lo tipeado ya no coincide con el cliente elegido, se desvincula
+    // hasta que se elija uno de la lista de nuevo
+    var actual = CLIENTES.find(function (c) { return c.id === clienteIdInput.value; });
+    if (!actual || etiquetaCliente(actual) !== clienteBuscarInput.value) {
+      clienteIdInput.value = '';
+    }
+    mostrarClienteBuscador(buscarClientes(clienteBuscarInput.value));
+  });
+  clienteBuscarInput.addEventListener('blur', function () {
+    setTimeout(ocultarClienteBuscador, 150);
+  });
+  document.getElementById('cliente-quitar').addEventListener('click', function () {
+    fijarCliente(null);
+  });
+  window.addEventListener('scroll', function () { ocultarClienteBuscador(); }, true);
+  window.addEventListener('resize', ocultarClienteBuscador);
+
   var CENTRO_DEFECTO = [-27.4512, -58.9867]; // Resistencia, Chaco
   var latInput = document.getElementById('lat');
   var lngInput = document.getElementById('lng');

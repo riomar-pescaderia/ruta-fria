@@ -31,7 +31,7 @@ async function listarConVisitas() {
 }
 
 async function listarClientes() {
-  const { rows } = await pool.query('select id, razon_social from clientes order by razon_social');
+  const { rows } = await pool.query('select id, razon_social, cuit_dni from clientes order by razon_social');
   return rows;
 }
 
@@ -128,7 +128,10 @@ router.post('/:id', async (req, res, next) => {
        where id = $9`,
       [nombre.trim(), contacto || null, telefono || null, direccion.trim(), notas || null, lat, lng, cliente_id, req.params.id]
     );
-    res.redirect(`/prospectos/${req.params.id}`);
+    // Al editar (a diferencia de al crear) ya suele haber visitas
+    // registradas, así que conviene ir directo a esa sección en vez de
+    // quedar arriba, en los datos del prospecto.
+    res.redirect(`/prospectos/${req.params.id}#historial-visitas`);
   } catch (err) {
     const clientes = await listarClientes().catch(() => []);
     res.render('prospectos/form', {

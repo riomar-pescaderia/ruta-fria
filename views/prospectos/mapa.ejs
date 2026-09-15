@@ -104,13 +104,17 @@
 
   if (puntos.length > 0) {
     var bounds = [];
-    // Círculo de tamaño fijo para todos los puntos — la cantidad de
-    // visitas ya se distingue en la zona de calor, así que acá el color
-    // solo indica si el punto ya es cliente (verde) o todavía es un
-    // prospecto (naranja).
+    // "L.circle" (no "L.circleMarker") — el radio se define en metros
+    // sobre el terreno, no en píxeles de pantalla, así que el punto
+    // siempre representa el mismo tamaño real (más o menos lo que ocupa
+    // un local comercial) en vez de agrandarse a medida que se aleja el
+    // zoom y terminar tapando cuadras enteras. Al alejar mucho el zoom el
+    // punto puede volverse chico o perderse de vista — para eso está el
+    // listado de abajo.
+    var RADIO_METROS = 15;
     puntos.forEach(function (p) {
-      var marker = L.circleMarker([p.lat, p.lng], {
-        radius: 10,
+      var marker = L.circle([p.lat, p.lng], {
+        radius: RADIO_METROS,
         color: p.esCliente ? '#1b5e20' : '#a85c12',
         weight: 2,
         fillColor: p.esCliente ? '#2e7d32' : '#e8912d',

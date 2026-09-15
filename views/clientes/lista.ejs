@@ -8,7 +8,11 @@
 <% if (clientes.length === 0) { %>
   <p class="empty">Todavía no cargaste ningún cliente.</p>
 <% } else { %>
-<table>
+<div style="max-width:340px; margin-bottom:14px;">
+  <input type="text" id="buscar-cliente" placeholder="Buscar por nombre, CUIT/DNI o razón social...">
+</div>
+<p id="sin-resultados-clientes" class="empty" style="display:none;">No encontré ningún cliente con ese nombre, CUIT/DNI o razón social.</p>
+<table id="tabla-clientes">
   <thead>
     <tr>
       <th>Razón social</th>
@@ -21,7 +25,7 @@
   </thead>
   <tbody>
     <% clientes.forEach(c => { %>
-    <tr>
+    <tr data-buscar="<%= (c.razon_social + ' ' + (c.nombre_contacto || '') + ' ' + (c.cuit_dni || '')).toLowerCase() %>">
       <td data-label="Razón social"><%= c.razon_social %></td>
       <td data-label="Contacto"><%= c.nombre_contacto || '—' %></td>
       <td data-label="Teléfono" class="mono"><%= c.telefono || '—' %></td>
@@ -33,5 +37,24 @@
   </tbody>
 </table>
 <% } %>
+
+<script>
+(function () {
+  var input = document.getElementById('buscar-cliente');
+  if (!input) return;
+  var filas = document.querySelectorAll('#tabla-clientes tbody tr');
+  var sinResultados = document.getElementById('sin-resultados-clientes');
+  input.addEventListener('input', function () {
+    var texto = input.value.trim().toLowerCase();
+    var visibles = 0;
+    filas.forEach(function (tr) {
+      var coincide = !texto || tr.dataset.buscar.indexOf(texto) !== -1;
+      tr.hidden = !coincide;
+      if (coincide) visibles++;
+    });
+    sinResultados.style.display = visibles === 0 ? 'block' : 'none';
+  });
+})();
+</script>
 
 <%- include('../partials/foot') %>
