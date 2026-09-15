@@ -7,7 +7,8 @@ Sistema de gestión para el mayorista de pescados congelados. Node.js + Express 
 - **Clientes** — alta, edición y listado. ✅ funcionando
 - **Artículos** — alta, edición, listado, con la calculadora de precio (costo + IVA/IIBB + flete + margen → precio en efectivo → precio de lista). ✅ funcionando
 - **Usuarios** — login, alta de usuarios, permisos por módulo, rol de administrador. ✅ funcionando
-- **Compras** (facturas de proveedores) — proveedores (alta y listado) y facturas de compra con renglones por artículo. Una factura arranca en borrador (se puede seguir editando o borrar) y al confirmarla pisa el costo de cada artículo con el precio unitario cargado — a partir de ahí queda de solo lectura. ✅ funcionando
+- **Compras** (facturas de proveedores) — proveedores (alta y listado) y facturas de compra con renglones por artículo. Una factura arranca en borrador (se puede seguir editando o borrar) y al confirmarla pisa el costo de cada artículo con el precio unitario cargado — a partir de ahí queda de solo lectura, salvo para quien tenga el permiso especial de corregir facturas confirmadas. ✅ funcionando
+- **Historial de visitas** (prospectos, `/prospectos`) — carga de potenciales clientes con su dirección, geocodificada automáticamente (Nominatim/OpenStreetMap, con ajuste manual arrastrando el pin) y mostrada en un mapa (Leaflet) donde el tamaño de cada punto crece con la cantidad de visitas registradas. Separado a propósito de Clientes. ✅ funcionando
 - **Gastos generales** — pantalla placeholder, todavía sin construir
 - **Venta / remito** — pantalla placeholder, todavía sin construir
 
@@ -37,6 +38,10 @@ routes/      una ruta por módulo (clientes, articulos, ...)
 views/       plantillas EJS
 public/      CSS
 ```
+
+## Notas técnicas
+
+- **Geocodificación de direcciones** (Historial de visitas): usa Nominatim (`nominatim.openstreetmap.org`), un servicio gratuito sin API key. Necesita que el servidor tenga salida a internet — en Render funciona sin configuración extra. Si alguna dirección no se encuentra (común en zonas rurales o direcciones informales), el prospecto se guarda igual y el punto se puede marcar a mano arrastrando el pin en el mapa.
 
 ## Decisiones pendientes de confirmar
 

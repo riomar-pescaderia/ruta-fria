@@ -1,0 +1,111 @@
+<%- include('../partials/head') %>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+
+<div class="toolbar">
+  <h1>Historial de visitas</h1>
+  <a class="btn" href="/prospectos/nuevo">+ Nuevo prospecto</a>
+</div>
+
+<% const conUbicacion = prospectos.filter(p => p.lat !== null && p.lng !== null);
+   const sinUbicacion = prospectos.filter(p => p.lat === null || p.lng === null); %>
+
+<% if (prospectos.length === 0) { %>
+  <p class="empty">Todavía no cargaste ningún prospecto. Empezá con "+ Nuevo prospecto".</p>
+<% } else { %>
+
+<div id="mapa" style="height:460px; border:1px solid var(--line); border-radius:10px; margin-bottom:16px;"></div>
+
+<% if (sinUbicacion.length > 0) { %>
+  <p style="color:var(--ink-soft); font-size:.85rem;">
+    <%= sinUbicacion.length %> prospecto<%= sinUbicacion.length > 1 ? 's' : '' %> sin ubicar en el mapa —
+    <% sinUbicacion.forEach((p, i) => { %><a href="/prospectos/<%= p.id %>/editar"><%= p.nombre %></a><%= i < sinUbicacion.length - 1 ? ', ' : '' %><% }) %>.
+  </p>
+<% } %>
+
+<table>
+  <thead>
+    <tr>
+      <th>Nombre</th>
+      <th>Dirección</th>
+      <th>Teléfono</th>
+      <th>Visitas</th>
+      <th>Última visita</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <% prospectos.forEach(p => { %>
+    <tr>
+      <td data-label="Nombre"><a href="/prospectos/<%= p.id %>"><%= p.nombre %></a></td>
+      <td data-label="Dirección"><%= p.direccion %></td>
+      <td data-label="Teléfono"><%= p.telefono || '—' %></td>
+      <td data-label="Visitas" class="mono"><%= p.cantidad_visitas %></td>
+      <td data-label="Última visita"><%= p.ultima_visita ? new Date(p.ultima_visita).toLocaleDateString('es-AR') : '—' %></td>
+      <td data-label="" style="display:flex; gap:8px; flex-wrap:wrap;">
+        <a class="btn secondary" href="/prospectos/<%= p.id %>">Ver</a>
+        <a class="btn secondary" href="/prospectos/<%= p.id %>/editar">Editar</a>
+      </td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+
+<% } %>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function () {
+  var puntos = <%- JSON.stringify(conUbicacion.map(p => ({
+    id: p.id,
+    nombre: p.nombre,
+    direccion: p.direccion,
+    telefono: p.telefono,
+    lat: Number(p.lat),
+    lng: Number(p.lng),
+    visitas: p.cantidad_visitas,
+    ultima: p.ultima_visita ? new Date(p.ultima_visita).toLocaleDateString('es-AR') : null,
+  }))) %>;
+
+  var mapaEl = document.getElementById('mapa');
+  if (!mapaEl) return;
+
+  var CENTRO_DEFECTO = [-27.4512, -58.9867]; // Resistencia, Chaco
+  var map = L.map('mapa').setView(CENTRO_DEFECTO, 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  }).addTo(map);
+
+  if (puntos.length > 0) {
+    var bounds = [];
+    puntos.forEach(function (p) {
+      // El radio del círculo crece con la cantidad de visitas, para que
+      // se note a simple vista dónde se visitó más seguido.
+      var radio = 8 + Math.min(p.visitas, 10) * 3;
+      var marker = L.circleMarker([p.lat, p.lng], {
+        radius: radio,
+        color: '#0b4f6c',
+        weight: 2,
+        fillColor: '#0e7c86',
+        fillOpacity: 0.55,
+      }).addTo(map);
+      var popup = '<strong>' + p.nombre + '</strong><br>' +
+        p.direccion +
+        (p.telefono ? '<br>Tel: ' + p.telefono : '') +
+        '<br>Visitas: ' + p.visitas +
+        (p.ultima ? ' (última: ' + p.ultima + ')' : '') +
+        '<br><a href="/prospectos/' + p.id + '">Ver detalle / registrar visita</a>';
+      marker.bindPopup(popup);
+      bounds.push([p.lat, p.lng]);
+    });
+    if (bounds.length === 1) {
+      map.setView(bounds[0], 15);
+    } else {
+      map.fitBounds(bounds, { padding: [30, 30] });
+    }
+  }
+})();
+</script>
+
+<%- include('../partials/foot') %>

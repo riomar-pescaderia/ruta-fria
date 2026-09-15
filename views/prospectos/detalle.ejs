@@ -1,0 +1,93 @@
+<%- include('../partials/head') %>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+
+<div class="toolbar">
+  <h1><%= prospecto.nombre %></h1>
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <a class="btn secondary" href="/prospectos/<%= prospecto.id %>/editar">Editar</a>
+    <form method="post" action="/prospectos/<%= prospecto.id %>/eliminar" style="display:inline;" onsubmit="return confirm('¿Eliminar este prospecto? Se deja de mostrar en el mapa y la lista, pero no se pierde el historial de visitas.');">
+      <button type="submit" class="btn secondary" style="color:#a33;">Eliminar</button>
+    </form>
+    <a class="btn secondary" href="/prospectos">← Volver</a>
+  </div>
+</div>
+
+<p style="color:var(--ink-soft);">
+  <%= prospecto.direccion %>
+  <% if (prospecto.telefono) { %> · Tel: <%= prospecto.telefono %><% } %>
+  <% if (prospecto.contacto) { %> · Contacto: <%= prospecto.contacto %><% } %>
+</p>
+
+<% if (prospecto.notas) { %>
+  <p style="color:var(--ink-soft); font-size:.9rem;"><%= prospecto.notas %></p>
+<% } %>
+
+<% if (prospecto.lat !== null && prospecto.lng !== null) { %>
+  <div id="mapa" style="height:280px; border:1px solid var(--line); border-radius:10px; margin-bottom:20px;"></div>
+<% } else { %>
+  <p class="pendiente" style="padding:14px 20px;">Este prospecto todavía no tiene ubicación en el mapa — <a href="/prospectos/<%= prospecto.id %>/editar">editalo</a> para buscarle la dirección.</p>
+<% } %>
+
+<div class="card" style="max-width:480px; margin-bottom:24px;">
+  <h2 style="font-size:1.05rem; margin:0 0 4px;">Registrar visita</h2>
+  <form method="post" action="/prospectos/<%= prospecto.id %>/visitas" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+    <div style="flex:1; min-width:140px;">
+      <label for="fecha">Fecha</label>
+      <input type="date" id="fecha" name="fecha" value="<%= new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }) %>">
+    </div>
+    <div style="flex:2; min-width:180px;">
+      <label for="nota">Nota (opcional)</label>
+      <input type="text" id="nota" name="nota" placeholder="Ej: pidió volver a fin de mes">
+    </div>
+    <div>
+      <button class="btn" type="submit">Registrar visita</button>
+    </div>
+  </form>
+</div>
+
+<h2 style="font-size:1.1rem;">Historial de visitas (<%= visitas.length %>)</h2>
+<% if (visitas.length === 0) { %>
+  <p class="empty">Todavía no se registró ninguna visita a este prospecto.</p>
+<% } else { %>
+<table>
+  <thead>
+    <tr>
+      <th>Fecha</th>
+      <th>Nota</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <% visitas.forEach(v => { %>
+    <tr>
+      <td data-label="Fecha" class="mono"><%= new Date(v.fecha).toLocaleDateString('es-AR') %></td>
+      <td data-label="Nota"><%= v.nota || '—' %></td>
+      <td data-label="">
+        <form method="post" action="/prospectos/<%= prospecto.id %>/visitas/<%= v.id %>/eliminar" style="margin:0;" onsubmit="return confirm('¿Eliminar esta visita del historial?');">
+          <button type="submit" class="btn secondary" style="color:#a33; font-size:.8rem;">Quitar</button>
+        </form>
+      </td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+<% } %>
+
+<% if (prospecto.lat !== null && prospecto.lng !== null) { %>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function () {
+  var lat = <%- JSON.stringify(Number(prospecto.lat)) %>;
+  var lng = <%- JSON.stringify(Number(prospecto.lng)) %>;
+  var map = L.map('mapa').setView([lat, lng], 15);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  }).addTo(map);
+  L.marker([lat, lng]).addTo(map).bindPopup(<%- JSON.stringify(prospecto.nombre) %>);
+})();
+</script>
+<% } %>
+
+<%- include('../partials/foot') %>

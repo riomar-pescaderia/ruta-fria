@@ -7,7 +7,7 @@ const pool = require('../db/pool');
 const { MODULOS, crearUsuario, cambiarPassword, actualizarPermisos, alternarEstado } = require('../lib/auth');
 
 const COLUMNAS_USUARIO = `id, username, nombre, activo, es_admin,
-            acceso_clientes, acceso_articulos, acceso_compras, acceso_gastos, acceso_ventas,
+            acceso_clientes, acceso_articulos, acceso_compras, acceso_gastos, acceso_ventas, acceso_prospectos,
             permiso_editar_confirmadas`;
 
 function leerAccesos(body) {

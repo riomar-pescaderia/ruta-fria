@@ -111,6 +111,35 @@ alter table facturas_compra_items add column if not exists estado_costo text;
 alter table facturas_compra_items add column if not exists neto numeric;
 alter table facturas_compra_items add column if not exists iva numeric;
 
+-- Historial de visitas a potenciales clientes (prospectos), aparte de
+-- Clientes para no mezclar a quien todavía no compró con quien ya
+-- concretó una venta. Cada prospecto se carga una vez con su dirección
+-- (geocodificada a lat/lng para ubicarlo en el mapa) y después cada
+-- visita que se le hace es una fila en prospectos_visitas — así el mapa
+-- puede mostrar cuántas veces se visitó cada punto y cuándo.
+create table if not exists prospectos (
+  id serial primary key,
+  nombre text not null,
+  contacto text,
+  telefono text,
+  direccion text not null,
+  notas text,
+  lat numeric,
+  lng numeric,
+  activo boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists prospectos_visitas (
+  id serial primary key,
+  prospecto_id integer not null references prospectos(id) on delete cascade,
+  fecha date not null default current_date,
+  nota text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_prospectos_visitas_prospecto on prospectos_visitas(prospecto_id);
+
 create table if not exists gastos (
   id serial primary key,
   fecha date not null default current_date,
@@ -164,6 +193,7 @@ alter table usuarios add column if not exists acceso_articulos boolean not null 
 alter table usuarios add column if not exists acceso_compras boolean not null default false;
 alter table usuarios add column if not exists acceso_gastos boolean not null default false;
 alter table usuarios add column if not exists acceso_ventas boolean not null default false;
+alter table usuarios add column if not exists acceso_prospectos boolean not null default false;
 
 -- Permiso especial (no es un módulo entero): habilita editar o eliminar
 -- una factura de compra que ya está confirmada, algo que por defecto
@@ -186,11 +216,13 @@ begin
       acceso_articulos = true,
       acceso_compras = true,
       acceso_gastos = true,
-      acceso_ventas = true;
+      acceso_ventas = true,
+      acceso_prospectos = true;
   end if;
 end $$;
 
 create index if not exists idx_facturas_compra_items_factura on facturas_compra_items(factura_id);
+create index if not exists idx_prospectos_activo on prospectos(activo);
 create index if not exists idx_ventas_items_venta on ventas_items(venta_id);
 create index if not exists idx_gastos_fecha on gastos(fecha);
 create index if not exists idx_ventas_fecha on ventas(fecha);
