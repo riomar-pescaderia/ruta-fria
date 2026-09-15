@@ -11,7 +11,7 @@ const pool = require('../db/pool');
 const proveedoresRouter = require('./proveedores');
 const { getConfig } = require('../lib/config');
 const { puedeEditarConfirmadas } = require('../lib/auth');
-const { CATEGORIAS_GASTO, esClaveValida } = require('../lib/categoriasGasto');
+const { CATEGORIAS_GASTO, esClaveValida, categoriaPorClave } = require('../lib/categoriasGasto');
 
 const router = express.Router();
 
@@ -76,6 +76,16 @@ function leerCategoria(body) {
   return esClaveValida(body.categoria) ? body.categoria : 'mercaderia';
 }
 
+// El subtipo es opcional y depende de la categoría: si no es uno de los
+// que esa categoría admite (o la categoría no tiene subtipos), se guarda
+// null en vez de dejar pasar cualquier texto suelto.
+function leerSubtipo(body, categoria) {
+  const cat = categoriaPorClave(categoria);
+  const subtipo = (body.subtipo || '').trim();
+  if (!cat || !subtipo || !cat.subtipos.includes(subtipo)) return null;
+  return subtipo;
+}
+
 // Lee los renglones que vienen del formulario (items[0][...], items[1][...]),
 // descarta los incompletos (fila vacía que quedó de sobra) y calcula el
 // precio final, el total y el desglose neto/IVA de cada uno. El
@@ -131,7 +141,7 @@ router.get('/nueva', async (req, res, next) => {
   try {
     const [{ proveedores, articulos }, config] = await Promise.all([datosFormulario(), getConfig()]);
     res.render('compras/form', {
-      factura: { fecha: hoyAr(), categoria: 'mercaderia' },
+      factura: { fecha: hoyAr(), categoria: 'mercaderia', subtipo: null },
       items: [{}],
       proveedores,
       articulos,
@@ -146,6 +156,7 @@ router.get('/nueva', async (req, res, next) => {
 router.post('/', async (req, res, next) => {
   const { proveedor_id, numero, fecha } = req.body;
   const categoria = leerCategoria(req.body);
+  const subtipo = leerSubtipo(req.body, categoria);
   let config, items;
   try {
     config = await getConfig();
@@ -156,7 +167,7 @@ router.post('/', async (req, res, next) => {
     try {
       const { proveedores, articulos } = await datosFormulario();
       return res.render('compras/form', {
-        factura: { proveedor_id, numero, fecha, categoria },
+        factura: { proveedor_id, numero, fecha, categoria, subtipo },
         items: items.length ? items : [{}],
         proveedores,
         articulos,
@@ -175,9 +186,9 @@ router.post('/', async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
-      `insert into facturas_compra (proveedor_id, numero, fecha, total, categoria)
-       values ($1,$2,$3,$4,$5) returning id`,
-      [proveedor_id, numero || null, fecha || hoyAr(), total, categoria]
+      `insert into facturas_compra (proveedor_id, numero, fecha, total, categoria, subtipo)
+       values ($1,$2,$3,$4,$5,$6) returning id`,
+      [proveedor_id, numero || null, fecha || hoyAr(), total, categoria, subtipo]
     );
     const facturaId = rows[0].id;
     for (const it of items) {
@@ -242,6 +253,7 @@ router.get('/:id/editar', async (req, res, next) => {
 router.post('/:id', async (req, res, next) => {
   const { proveedor_id, numero, fecha } = req.body;
   const categoria = leerCategoria(req.body);
+  const subtipo = leerSubtipo(req.body, categoria);
   let config, items;
   try {
     config = await getConfig();
@@ -259,7 +271,7 @@ router.post('/:id', async (req, res, next) => {
     if (!proveedor_id || items.length === 0) {
       const { proveedores, articulos } = await datosFormulario();
       return res.render('compras/form', {
-        factura: { id: factura.id, proveedor_id, numero, fecha, categoria, actualizo_costos: factura.actualizo_costos },
+        factura: { id: factura.id, proveedor_id, numero, fecha, categoria, subtipo, actualizo_costos: factura.actualizo_costos },
         items: items.length ? items : [{}],
         proveedores,
         articulos,
@@ -281,8 +293,8 @@ router.post('/:id', async (req, res, next) => {
     // renglones habían aplicado costo, que quedaba en estado_costo).
     await client.query('BEGIN');
     await client.query(
-      'update facturas_compra set proveedor_id=$1, numero=$2, fecha=$3, total=$4, categoria=$5 where id=$6',
-      [proveedor_id, numero || null, fecha || fechaInput(factura.fecha), total, categoria, factura.id]
+      'update facturas_compra set proveedor_id=$1, numero=$2, fecha=$3, total=$4, categoria=$5, subtipo=$6 where id=$7',
+      [proveedor_id, numero || null, fecha || fechaInput(factura.fecha), total, categoria, subtipo, factura.id]
     );
     await client.query('delete from facturas_compra_items where factura_id = $1', [factura.id]);
     for (const it of items) {

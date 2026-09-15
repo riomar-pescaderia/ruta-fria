@@ -25,6 +25,17 @@
   </div>
 
   <div>
+    <label for="cliente_id">¿Ya es cliente?</label>
+    <select id="cliente_id" name="cliente_id">
+      <option value="">Todavía no, es solo un prospecto</option>
+      <% clientes.forEach(c => { %>
+        <option value="<%= c.id %>" <%= String(prospecto.cliente_id) === String(c.id) ? 'selected' : '' %>><%= c.razon_social %></option>
+      <% }) %>
+    </select>
+    <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Si ya compró y está cargado en Clientes, vinculalo acá — así se distingue en el mapa con otro color en vez de quedar mezclado con los que todavía son solo prospectos.</p>
+  </div>
+
+  <div>
     <label for="direccion">Dirección</label>
     <div style="display:flex; gap:8px;">
       <input type="text" id="direccion" name="direccion" value="<%= prospecto.direccion || '' %>" placeholder="Calle, número, ciudad (ej: Monteagudo 1599, Resistencia)" required style="flex:1;">

@@ -14,6 +14,20 @@
   <p class="empty">Todavía no cargaste ningún prospecto. Empezá con "+ Nuevo prospecto".</p>
 <% } else { %>
 
+<div id="controles-mapa" style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:10px;">
+  <label style="display:flex; align-items:center; gap:6px; font-size:.85rem;">
+    <input type="checkbox" id="toggle-calor" checked style="width:auto;"> Mostrar zonas de calor
+  </label>
+  <div id="leyenda-calor" style="display:flex; align-items:center; gap:6px; font-size:.75rem; color:var(--ink-soft);">
+    <span>Menos visitado</span>
+    <span style="display:inline-block; width:120px; height:10px; border-radius:4px; background:linear-gradient(to right, #2b6cb0, #38a3a5, #ffd166, #f4845f, #d7263d);"></span>
+    <span>Más visitado</span>
+  </div>
+  <div style="display:flex; align-items:center; gap:12px; font-size:.75rem; color:var(--ink-soft);">
+    <span style="display:flex; align-items:center; gap:5px;"><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#2e7d32; border:2px solid #1b5e20;"></span> Cliente</span>
+    <span style="display:flex; align-items:center; gap:5px;"><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:#e8912d; border:2px solid #a85c12;"></span> Prospecto</span>
+  </div>
+</div>
 <div id="mapa" style="height:460px; border:1px solid var(--line); border-radius:10px; margin-bottom:16px;"></div>
 
 <% if (sinUbicacion.length > 0) { %>
@@ -31,6 +45,7 @@
   <thead>
     <tr>
       <th>Nombre</th>
+      <th>Estado</th>
       <th>Dirección</th>
       <th>Teléfono</th>
       <th>Visitas</th>
@@ -42,6 +57,9 @@
     <% prospectos.forEach(p => { %>
     <tr data-buscar="<%= (p.nombre + ' ' + p.direccion).toLowerCase() %>">
       <td data-label="Nombre"><a href="/prospectos/<%= p.id %>"><%= p.nombre %></a></td>
+      <td data-label="Estado">
+        <% if (p.cliente_id) { %><span class="badge cliente">Cliente</span><% } else { %><span class="badge prospecto">Prospecto</span><% } %>
+      </td>
       <td data-label="Dirección"><%= p.direccion %></td>
       <td data-label="Teléfono"><%= p.telefono || '—' %></td>
       <td data-label="Visitas" class="mono"><%= p.cantidad_visitas %></td>
@@ -58,6 +76,7 @@
 <% } %>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script>
 (function () {
   var puntos = <%- JSON.stringify(conUbicacion.map(p => ({
@@ -69,6 +88,8 @@
     lng: Number(p.lng),
     visitas: p.cantidad_visitas,
     ultima: p.ultima_visita ? new Date(p.ultima_visita).toLocaleDateString('es-AR') : null,
+    esCliente: !!p.cliente_id,
+    clienteNombre: p.cliente_nombre || null,
   }))) %>;
 
   var mapaEl = document.getElementById('mapa');
@@ -83,18 +104,20 @@
 
   if (puntos.length > 0) {
     var bounds = [];
+    // Círculo de tamaño fijo para todos los puntos — la cantidad de
+    // visitas ya se distingue en la zona de calor, así que acá el color
+    // solo indica si el punto ya es cliente (verde) o todavía es un
+    // prospecto (naranja).
     puntos.forEach(function (p) {
-      // El radio del círculo crece con la cantidad de visitas, para que
-      // se note a simple vista dónde se visitó más seguido.
-      var radio = 8 + Math.min(p.visitas, 10) * 3;
       var marker = L.circleMarker([p.lat, p.lng], {
-        radius: radio,
-        color: '#0b4f6c',
+        radius: 10,
+        color: p.esCliente ? '#1b5e20' : '#a85c12',
         weight: 2,
-        fillColor: '#0e7c86',
-        fillOpacity: 0.55,
+        fillColor: p.esCliente ? '#2e7d32' : '#e8912d',
+        fillOpacity: 0.75,
       }).addTo(map);
       var popup = '<strong>' + p.nombre + '</strong><br>' +
+        (p.esCliente ? 'Cliente' + (p.clienteNombre ? ': ' + p.clienteNombre : '') : 'Prospecto') + '<br>' +
         p.direccion +
         (p.telefono ? '<br>Tel: ' + p.telefono : '') +
         '<br>Visitas: ' + p.visitas +
@@ -108,6 +131,43 @@
     } else {
       map.fitBounds(bounds, { padding: [30, 30] });
     }
+
+    // Zona de calor: solo los puntos que ya tuvieron alguna visita pesan
+    // en el cálculo (uno sin visitas no debería marcar "zona caliente").
+    // El radio y el blur son grandes a propósito para que se lean zonas,
+    // no puntos sueltos — a eso apunta el pedido.
+    var puntosConVisitas = puntos.filter(function (p) { return p.visitas > 0; });
+    var toggleCalor = document.getElementById('toggle-calor');
+    var leyendaCalor = document.getElementById('leyenda-calor');
+    if (typeof L.heatLayer === 'function' && puntosConVisitas.length > 0) {
+      var maxVisitas = puntosConVisitas.reduce(function (max, p) { return Math.max(max, p.visitas); }, 1);
+      var capaCalor = L.heatLayer(
+        puntosConVisitas.map(function (p) { return [p.lat, p.lng, p.visitas]; }),
+        {
+          radius: 35,
+          blur: 25,
+          maxZoom: 17,
+          max: maxVisitas,
+          gradient: { 0.2: '#2b6cb0', 0.4: '#38a3a5', 0.6: '#ffd166', 0.8: '#f4845f', 1.0: '#d7263d' },
+        }
+      );
+      if (toggleCalor.checked) capaCalor.addTo(map);
+      toggleCalor.addEventListener('change', function () {
+        if (toggleCalor.checked) {
+          capaCalor.addTo(map);
+          leyendaCalor.style.display = 'flex';
+        } else {
+          map.removeLayer(capaCalor);
+          leyendaCalor.style.display = 'none';
+        }
+      });
+    } else {
+      // No hay librería de calor cargada, o ningún prospecto tiene
+      // visitas todavía: no tiene sentido ofrecer el toggle.
+      document.getElementById('controles-mapa').style.display = 'none';
+    }
+  } else {
+    document.getElementById('controles-mapa').style.display = 'none';
   }
 
   var buscarInput = document.getElementById('buscar-prospecto');

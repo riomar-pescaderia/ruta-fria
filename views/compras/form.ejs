@@ -30,6 +30,12 @@
         <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Si es "Mercadería" se cargan artículos del catálogo y se pueden actualizar sus costos. Cualquier otra categoría (servicios, insumos, etc.) se carga a mano, sin vincularse a ningún artículo de stock.</p>
       <% } %>
     </div>
+    <div style="flex:1; min-width:220px;" id="grupo-subtipo">
+      <label for="subtipo">Subtipo</label>
+      <select id="subtipo" name="subtipo">
+        <option value="">— sin subtipo —</option>
+      </select>
+    </div>
   </div>
 
   <div style="display:flex; gap:12px; flex-wrap:wrap;">
@@ -150,6 +156,37 @@
   var categoriaSelect = document.getElementById('categoria');
   var categoriaAnterior = categoriaSelect.value;
   function esMercaderia() { return categoriaSelect.value === 'mercaderia'; }
+
+  // Subtipo dentro de la categoría (por ejemplo "Electricidad" dentro de
+  // "Servicios") — el listado de opciones depende de qué categoría esté
+  // elegida, así que se arma de nuevo cada vez que cambia.
+  var SUBTIPOS_POR_CATEGORIA = <%- JSON.stringify(Object.fromEntries(categorias.map(c => [c.clave, c.subtipos]))) %>;
+  var SUBTIPO_INICIAL = <%- JSON.stringify(factura.subtipo || '') %>;
+  var subtipoSelect = document.getElementById('subtipo');
+  var grupoSubtipo = document.getElementById('grupo-subtipo');
+
+  function actualizarSubtipos(preservar) {
+    var lista = SUBTIPOS_POR_CATEGORIA[categoriaSelect.value] || [];
+    var valorPrevio = preservar ? subtipoSelect.value : '';
+    subtipoSelect.innerHTML = '';
+    var opcionVacia = document.createElement('option');
+    opcionVacia.value = '';
+    opcionVacia.textContent = '— sin subtipo —';
+    subtipoSelect.appendChild(opcionVacia);
+    lista.forEach(function (s) {
+      var opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = s;
+      subtipoSelect.appendChild(opt);
+    });
+    if (lista.length === 0) {
+      grupoSubtipo.style.display = 'none';
+      subtipoSelect.value = '';
+    } else {
+      grupoSubtipo.style.display = '';
+      if (valorPrevio && lista.indexOf(valorPrevio) !== -1) subtipoSelect.value = valorPrevio;
+    }
+  }
 
   function actualizarPlaceholders() {
     var esM = esMercaderia();
@@ -393,11 +430,16 @@
     }
     categoriaAnterior = categoriaSelect.value;
     actualizarPlaceholders();
+    actualizarSubtipos(false);
     actualizarTotales();
   });
 
   actualizarCheckTodos();
   actualizarPlaceholders();
+  actualizarSubtipos(false);
+  if (SUBTIPO_INICIAL && (SUBTIPOS_POR_CATEGORIA[categoriaSelect.value] || []).indexOf(SUBTIPO_INICIAL) !== -1) {
+    subtipoSelect.value = SUBTIPO_INICIAL;
+  }
   actualizarTotales();
 })();
 </script>

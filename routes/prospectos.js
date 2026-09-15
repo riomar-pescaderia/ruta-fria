@@ -11,19 +11,27 @@ function redondearCoord(n) {
   return n === null || n === undefined || n === '' ? null : Number(n);
 }
 
-// Trae todos los prospectos activos con la cantidad de visitas y la fecha
-// de la última, para la lista y el mapa principal.
+// Trae todos los prospectos activos con la cantidad de visitas, la fecha
+// de la última y el nombre del cliente vinculado (si ya lo es), para la
+// lista y el mapa principal.
 async function listarConVisitas() {
   const { rows } = await pool.query(`
     select p.*,
            count(v.id)::int as cantidad_visitas,
-           max(v.fecha) as ultima_visita
+           max(v.fecha) as ultima_visita,
+           c.razon_social as cliente_nombre
     from prospectos p
     left join prospectos_visitas v on v.prospecto_id = p.id
+    left join clientes c on c.id = p.cliente_id
     where p.activo = true
-    group by p.id
+    group by p.id, c.razon_social
     order by p.nombre
   `);
+  return rows;
+}
+
+async function listarClientes() {
+  const { rows } = await pool.query('select id, razon_social from clientes order by razon_social');
   return rows;
 }
 
@@ -34,12 +42,16 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.get('/nuevo', (req, res) => {
-  res.render('prospectos/form', { prospecto: {}, error: null, accion: '/prospectos' });
+router.get('/nuevo', async (req, res, next) => {
+  try {
+    const clientes = await listarClientes();
+    res.render('prospectos/form', { prospecto: {}, clientes, error: null, accion: '/prospectos' });
+  } catch (err) { next(err); }
 });
 
 router.post('/', async (req, res, next) => {
   const { nombre, contacto, telefono, direccion, notas } = req.body;
+  const cliente_id = req.body.cliente_id || null;
   let lat = redondearCoord(req.body.lat);
   let lng = redondearCoord(req.body.lng);
   try {
@@ -56,14 +68,16 @@ router.post('/', async (req, res, next) => {
     }
 
     const { rows } = await pool.query(
-      `insert into prospectos (nombre, contacto, telefono, direccion, notas, lat, lng)
-       values ($1,$2,$3,$4,$5,$6,$7) returning id`,
-      [nombre.trim(), contacto || null, telefono || null, direccion.trim(), notas || null, lat, lng]
+      `insert into prospectos (nombre, contacto, telefono, direccion, notas, lat, lng, cliente_id)
+       values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
+      [nombre.trim(), contacto || null, telefono || null, direccion.trim(), notas || null, lat, lng, cliente_id]
     );
     res.redirect(`/prospectos/${rows[0].id}`);
   } catch (err) {
+    const clientes = await listarClientes().catch(() => []);
     res.render('prospectos/form', {
-      prospecto: { nombre, contacto, telefono, direccion, notas, lat, lng },
+      prospecto: { nombre, contacto, telefono, direccion, notas, lat, lng, cliente_id },
+      clientes,
       error: err.message,
       accion: '/prospectos',
     });
@@ -86,14 +100,18 @@ router.post('/geocodificar', async (req, res) => {
 
 router.get('/:id/editar', async (req, res, next) => {
   try {
-    const { rows } = await pool.query('select * from prospectos where id = $1', [req.params.id]);
+    const [{ rows }, clientes] = await Promise.all([
+      pool.query('select * from prospectos where id = $1', [req.params.id]),
+      listarClientes(),
+    ]);
     if (!rows[0]) return res.redirect('/prospectos');
-    res.render('prospectos/form', { prospecto: rows[0], error: null, accion: `/prospectos/${rows[0].id}` });
+    res.render('prospectos/form', { prospecto: rows[0], clientes, error: null, accion: `/prospectos/${rows[0].id}` });
   } catch (err) { next(err); }
 });
 
 router.post('/:id', async (req, res, next) => {
   const { nombre, contacto, telefono, direccion, notas } = req.body;
+  const cliente_id = req.body.cliente_id || null;
   let lat = redondearCoord(req.body.lat);
   let lng = redondearCoord(req.body.lng);
   try {
@@ -106,14 +124,16 @@ router.post('/:id', async (req, res, next) => {
     }
 
     await pool.query(
-      `update prospectos set nombre=$1, contacto=$2, telefono=$3, direccion=$4, notas=$5, lat=$6, lng=$7
-       where id = $8`,
-      [nombre.trim(), contacto || null, telefono || null, direccion.trim(), notas || null, lat, lng, req.params.id]
+      `update prospectos set nombre=$1, contacto=$2, telefono=$3, direccion=$4, notas=$5, lat=$6, lng=$7, cliente_id=$8
+       where id = $9`,
+      [nombre.trim(), contacto || null, telefono || null, direccion.trim(), notas || null, lat, lng, cliente_id, req.params.id]
     );
     res.redirect(`/prospectos/${req.params.id}`);
   } catch (err) {
+    const clientes = await listarClientes().catch(() => []);
     res.render('prospectos/form', {
-      prospecto: { id: req.params.id, nombre, contacto, telefono, direccion, notas, lat, lng },
+      prospecto: { id: req.params.id, nombre, contacto, telefono, direccion, notas, lat, lng, cliente_id },
+      clientes,
       error: err.message,
       accion: `/prospectos/${req.params.id}`,
     });
@@ -122,7 +142,13 @@ router.post('/:id', async (req, res, next) => {
 
 router.get('/:id', async (req, res, next) => {
   try {
-    const { rows } = await pool.query('select * from prospectos where id = $1', [req.params.id]);
+    const { rows } = await pool.query(
+      `select p.*, c.razon_social as cliente_nombre
+       from prospectos p
+       left join clientes c on c.id = p.cliente_id
+       where p.id = $1`,
+      [req.params.id]
+    );
     const prospecto = rows[0];
     if (!prospecto) return res.redirect('/prospectos');
 

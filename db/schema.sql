@@ -119,6 +119,12 @@ alter table facturas_compra_items add column if not exists iva numeric;
 -- default.
 alter table facturas_compra add column if not exists categoria text not null default 'mercaderia';
 
+-- Subtipo dentro de la categoría (ver lib/categoriasGasto.js), por ejemplo
+-- "Electricidad" dentro de "Servicios" — opcional, para poder sacar
+-- informes más finos. Las categorías que no tienen subtipos (Mercadería,
+-- Inversión, Otros) quedan siempre en null.
+alter table facturas_compra add column if not exists subtipo text;
+
 -- Para una factura que no es de mercadería, el renglón no tiene un
 -- artículo real: "codigo_manual" y "descripcion" son lo que se tipeó a
 -- mano en esos casos, y quedan null cuando el renglón sí es de un
@@ -167,6 +173,11 @@ create table if not exists prospectos_visitas (
 );
 
 create index if not exists idx_prospectos_visitas_prospecto on prospectos_visitas(prospecto_id);
+
+-- Si el prospecto ya compró y está cargado en Clientes, se vincula acá —
+-- así el mapa puede distinguir de un vistazo quién ya es cliente de quién
+-- todavía es solo una visita. Null mientras siga siendo solo un prospecto.
+alter table prospectos add column if not exists cliente_id integer references clientes(id);
 
 create table if not exists gastos (
   id serial primary key,

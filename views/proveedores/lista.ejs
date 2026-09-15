@@ -8,6 +8,10 @@
   </div>
 </div>
 
+<% if (error) { %>
+  <p style="color:#b3261e;"><%= error %></p>
+<% } %>
+
 <% if (proveedores.length === 0) { %>
   <p class="empty">Todavía no cargaste ningún proveedor.</p>
 <% } else { %>
@@ -26,7 +30,12 @@
       <td data-label="Nombre"><%= p.nombre %></td>
       <td data-label="Contacto"><%= p.contacto || '—' %></td>
       <td data-label="Teléfono" class="mono"><%= p.telefono || '—' %></td>
-      <td data-label=""><a class="btn secondary" href="/compras/proveedores/<%= p.id %>/editar">Editar</a></td>
+      <td data-label="" style="display:flex; gap:8px; flex-wrap:wrap;">
+        <a class="btn secondary" href="/compras/proveedores/<%= p.id %>/editar">Editar</a>
+        <form method="post" action="/compras/proveedores/<%= p.id %>/eliminar" style="display:inline;" onsubmit="return confirm('¿Eliminar este proveedor? No se puede deshacer.');">
+          <button type="submit" class="btn secondary" style="color:#a33;">Eliminar</button>
+        </form>
+      </td>
     </tr>
     <% }) %>
   </tbody>

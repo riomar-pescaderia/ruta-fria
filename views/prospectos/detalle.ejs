@@ -14,7 +14,12 @@
 </div>
 
 <p style="color:var(--ink-soft);">
-  <%= prospecto.direccion %>
+  <% if (prospecto.cliente_id) { %>
+    <span class="badge cliente">Cliente<%= prospecto.cliente_nombre ? ': ' + prospecto.cliente_nombre : '' %></span>
+  <% } else { %>
+    <span class="badge prospecto">Prospecto</span>
+  <% } %>
+  · <%= prospecto.direccion %>
   <% if (prospecto.telefono) { %> · Tel: <%= prospecto.telefono %><% } %>
   <% if (prospecto.contacto) { %> · Contacto: <%= prospecto.contacto %><% } %>
 </p>
