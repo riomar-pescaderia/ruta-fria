@@ -5,7 +5,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
-const { geocodificarDireccion } = require('../lib/geocode');
+const { geocodificarDireccion, buscarDirecciones } = require('../lib/geocode');
 
 function redondearCoord(n) {
   return n === null || n === undefined || n === '' ? null : Number(n);
@@ -70,14 +70,18 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-// Usado desde el formulario (JS) para ubicar la dirección tipeada antes de
-// guardar, sin recargar la página — devuelve JSON, nunca una vista. Va
-// antes de las rutas "/:id..." para que Express no confunda la palabra
+// Usado desde el formulario (JS) para buscar la dirección tipeada antes de
+// guardar, sin recargar la página — devuelve JSON con varias opciones
+// (una misma calle y altura puede existir en más de una provincia) para
+// que la persona elija cuál es la correcta, en vez de asumir la primera.
+// Va antes de las rutas "/:id..." para que Express no confunda la palabra
 // "geocodificar" con un id de prospecto.
 router.post('/geocodificar', async (req, res) => {
-  const geo = await geocodificarDireccion(req.body.direccion);
-  if (!geo) return res.status(404).json({ error: 'No se encontró esa dirección. Marcá el punto a mano en el mapa.' });
-  res.json(geo);
+  const opciones = await buscarDirecciones(req.body.direccion, 5);
+  if (opciones.length === 0) {
+    return res.status(404).json({ error: 'No se encontró esa dirección. Marcá el punto a mano en el mapa.' });
+  }
+  res.json({ opciones });
 });
 
 router.get('/:id/editar', async (req, res, next) => {

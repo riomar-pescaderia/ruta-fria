@@ -27,12 +27,13 @@
   <div>
     <label for="direccion">Dirección</label>
     <div style="display:flex; gap:8px;">
-      <input type="text" id="direccion" name="direccion" value="<%= prospecto.direccion || '' %>" placeholder="Calle, número, ciudad" required style="flex:1;">
+      <input type="text" id="direccion" name="direccion" value="<%= prospecto.direccion || '' %>" placeholder="Calle, número, ciudad (ej: Monteagudo 1599, Resistencia)" required style="flex:1;">
       <button type="button" id="buscar-direccion" class="btn secondary" style="white-space:nowrap;">Buscar dirección</button>
     </div>
     <p id="estado-geo" style="color:var(--ink-soft); font-size:.82rem; margin:6px 0 0;">
       Buscá la dirección para ubicarla en el mapa, o arrastrá el marcador para ajustarla a mano.
     </p>
+    <ul id="opciones-direccion" style="list-style:none; margin:8px 0 0; padding:0; display:none; border:1px solid var(--line); border-radius:8px; overflow:hidden;"></ul>
   </div>
 
   <div id="mapa-form" style="height:320px; border:1px solid var(--line); border-radius:10px;"></div>
@@ -58,6 +59,7 @@
   var latInput = document.getElementById('lat');
   var lngInput = document.getElementById('lng');
   var estadoGeo = document.getElementById('estado-geo');
+  var listaOpciones = document.getElementById('opciones-direccion');
 
   var latInicial = latInput.value ? Number(latInput.value) : null;
   var lngInicial = lngInput.value ? Number(lngInput.value) : null;
@@ -69,6 +71,31 @@
   }).addTo(map);
 
   var marker = null;
+
+  function ocultarOpciones() {
+    listaOpciones.style.display = 'none';
+    listaOpciones.innerHTML = '';
+  }
+
+  function mostrarOpciones(opciones) {
+    listaOpciones.innerHTML = '';
+    opciones.forEach(function (op, i) {
+      var li = document.createElement('li');
+      var boton = document.createElement('button');
+      boton.type = 'button';
+      boton.textContent = op.etiqueta;
+      boton.style.cssText = 'display:block; width:100%; text-align:left; padding:9px 12px; border:none; background:' +
+        (i % 2 === 0 ? '#fff' : '#f5f7f4') + '; cursor:pointer; font-size:.85rem; border-bottom:1px solid var(--line);';
+      boton.addEventListener('click', function () {
+        ubicarMarcador(op.lat, op.lng, true);
+        estadoGeo.textContent = '📍 ' + op.etiqueta + ' — si no es exacto, arrastrá el marcador hasta el lugar correcto.';
+        ocultarOpciones();
+      });
+      li.appendChild(boton);
+      listaOpciones.appendChild(li);
+    });
+    listaOpciones.style.display = opciones.length ? 'block' : 'none';
+  }
 
   function ubicarMarcador(lat, lng, centrar) {
     latInput.value = lat;
@@ -92,11 +119,12 @@
   }
 
   // Un click en cualquier parte del mapa también mueve (o crea) el
-  // marcador — para cuando la búsqueda automática no encuentra nada o da
-  // un resultado impreciso, algo común en pueblos chicos o zonas rurales.
+  // marcador — para cuando ninguna opción de la búsqueda es la correcta,
+  // o directamente se prefiere marcar el punto a mano.
   map.on('click', function (e) {
     ubicarMarcador(e.latlng.lat, e.latlng.lng, false);
     estadoGeo.textContent = 'Punto marcado a mano.';
+    ocultarOpciones();
   });
 
   document.getElementById('buscar-direccion').addEventListener('click', function () {
@@ -106,6 +134,7 @@
       return;
     }
     estadoGeo.textContent = 'Buscando...';
+    ocultarOpciones();
     fetch('/prospectos/geocodificar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -117,8 +146,16 @@
           estadoGeo.textContent = res.data.error || 'No se encontró esa dirección. Marcá el punto a mano en el mapa.';
           return;
         }
-        ubicarMarcador(res.data.lat, res.data.lng, true);
-        estadoGeo.textContent = 'Ubicado — si no es exacto, arrastrá el marcador hasta el lugar correcto.';
+        var opciones = res.data.opciones || [];
+        if (opciones.length === 1) {
+          // Un solo resultado: se ubica directo, pero mostrando de dónde
+          // es para poder corregir con un click en el mapa si no es así.
+          ubicarMarcador(opciones[0].lat, opciones[0].lng, true);
+          estadoGeo.textContent = '📍 ' + opciones[0].etiqueta + ' — si no es exacto, arrastrá el marcador o hacé click en el mapa.';
+        } else {
+          estadoGeo.textContent = 'Encontré ' + opciones.length + ' lugares posibles — elegí el correcto:';
+          mostrarOpciones(opciones);
+        }
       })
       .catch(function () {
         estadoGeo.textContent = 'No se pudo buscar la dirección ahora mismo. Marcá el punto a mano en el mapa.';
