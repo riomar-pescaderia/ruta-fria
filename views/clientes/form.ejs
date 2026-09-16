@@ -1,5 +1,7 @@
 <%- include('../partials/head') %>
 
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+
 <h1><%= cliente.id ? 'Editar cliente' : 'Nuevo cliente' %></h1>
 
 <form class="card" method="post" action="<%= accion %>">
@@ -16,9 +18,22 @@
     <input type="text" id="telefono" name="telefono" value="<%= cliente.telefono || '' %>">
   </div>
   <div>
-    <label for="direccion">Dirección</label>
-    <input type="text" id="direccion" name="direccion" value="<%= cliente.direccion || '' %>">
+    <label for="direccion">Dirección (opcional)</label>
+    <div class="fila-input-boton">
+      <input type="text" id="direccion" name="direccion" value="<%= cliente.direccion || '' %>" placeholder="Calle, número, ciudad (ej: Monteagudo 1599, Resistencia)">
+      <button type="button" id="buscar-direccion" class="btn secondary">Buscar dirección</button>
+    </div>
+    <p id="estado-geo" style="color:var(--ink-soft); font-size:.82rem; margin:6px 0 0;">
+      Buscá la dirección para ubicarla en el mapa — así el sistema puede avisar si coincide con un domicilio ya cargado en Historial de visitas.
+    </p>
+    <ul id="opciones-direccion" style="list-style:none; margin:8px 0 0; padding:0; display:none; border:1px solid var(--line); border-radius:8px; overflow:hidden;"></ul>
   </div>
+
+  <div id="mapa-form" style="height:320px; border:1px solid var(--line); border-radius:10px;"></div>
+
+  <input type="hidden" id="lat" name="lat" value="<%= cliente.lat != null ? cliente.lat : '' %>">
+  <input type="hidden" id="lng" name="lng" value="<%= cliente.lng != null ? cliente.lng : '' %>">
+
   <div>
     <label for="condicion_iva">Condición de IVA</label>
     <select id="condicion_iva" name="condicion_iva">
@@ -47,5 +62,118 @@
     <a class="btn secondary" href="/clientes">Cancelar</a>
   </div>
 </form>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function () {
+  // Mismo buscador de dirección + mapa que Historial de visitas (ver
+  // views/prospectos/form.ejs) — la diferencia es que acá la dirección es
+  // opcional: sin ubicación, el cliente se guarda igual, solo que no se
+  // puede avisar si coincide con el domicilio de algún prospecto.
+  var CENTRO_DEFECTO = [-27.4512, -58.9867]; // Resistencia, Chaco
+  var latInput = document.getElementById('lat');
+  var lngInput = document.getElementById('lng');
+  var estadoGeo = document.getElementById('estado-geo');
+  var listaOpciones = document.getElementById('opciones-direccion');
+
+  var latInicial = latInput.value ? Number(latInput.value) : null;
+  var lngInicial = lngInput.value ? Number(lngInput.value) : null;
+
+  var map = L.map('mapa-form').setView(latInicial != null ? [latInicial, lngInicial] : CENTRO_DEFECTO, latInicial != null ? 15 : 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  }).addTo(map);
+
+  var marker = null;
+
+  function ocultarOpciones() {
+    listaOpciones.style.display = 'none';
+    listaOpciones.innerHTML = '';
+  }
+
+  function mostrarOpciones(opciones) {
+    listaOpciones.innerHTML = '';
+    opciones.forEach(function (op, i) {
+      var li = document.createElement('li');
+      var boton = document.createElement('button');
+      boton.type = 'button';
+      boton.textContent = op.etiqueta;
+      boton.style.cssText = 'display:block; width:100%; text-align:left; padding:9px 12px; border:none; background:' +
+        (i % 2 === 0 ? '#fff' : '#f5f7f4') + '; cursor:pointer; font-size:.85rem; border-bottom:1px solid var(--line);';
+      boton.addEventListener('click', function () {
+        ubicarMarcador(op.lat, op.lng, true);
+        estadoGeo.textContent = '📍 ' + op.etiqueta + ' — si no es exacto, arrastrá el marcador hasta el lugar correcto.';
+        ocultarOpciones();
+      });
+      li.appendChild(boton);
+      listaOpciones.appendChild(li);
+    });
+    listaOpciones.style.display = opciones.length ? 'block' : 'none';
+  }
+
+  function ubicarMarcador(lat, lng, centrar) {
+    latInput.value = lat;
+    lngInput.value = lng;
+    if (marker) {
+      marker.setLatLng([lat, lng]);
+    } else {
+      marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+      marker.on('dragend', function () {
+        var pos = marker.getLatLng();
+        latInput.value = pos.lat;
+        lngInput.value = pos.lng;
+        estadoGeo.textContent = 'Punto ajustado a mano.';
+      });
+    }
+    if (centrar) map.setView([lat, lng], 16);
+  }
+
+  if (latInicial != null && lngInicial != null) {
+    ubicarMarcador(latInicial, lngInicial, false);
+  }
+
+  map.on('click', function (e) {
+    ubicarMarcador(e.latlng.lat, e.latlng.lng, false);
+    estadoGeo.textContent = 'Punto marcado a mano.';
+    ocultarOpciones();
+  });
+
+  document.getElementById('buscar-direccion').addEventListener('click', function () {
+    var direccion = document.getElementById('direccion').value.trim();
+    if (!direccion) {
+      estadoGeo.textContent = 'Escribí primero una dirección.';
+      return;
+    }
+    estadoGeo.textContent = 'Buscando...';
+    ocultarOpciones();
+    fetch('/clientes/geocodificar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ direccion: direccion }),
+    })
+      .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          estadoGeo.textContent = res.data.error || 'No se encontró esa dirección. Marcá el punto a mano en el mapa.';
+          return;
+        }
+        var opciones = res.data.opciones || [];
+        if (opciones.length === 1) {
+          ubicarMarcador(opciones[0].lat, opciones[0].lng, true);
+          estadoGeo.textContent = '📍 ' + opciones[0].etiqueta + ' — si no es exacto, arrastrá el marcador o hacé click en el mapa.';
+          document.getElementById('mapa-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+          estadoGeo.textContent = 'Encontré ' + opciones.length + ' lugares posibles — elegí el correcto:';
+          mostrarOpciones(opciones);
+          listaOpciones.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      })
+      .catch(function () {
+        estadoGeo.textContent = 'No se pudo buscar la dirección ahora mismo. Marcá el punto a mano en el mapa.';
+      });
+  });
+})();
+</script>
 
 <%- include('../partials/foot') %>

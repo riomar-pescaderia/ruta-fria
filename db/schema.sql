@@ -200,6 +200,14 @@ create index if not exists idx_prospectos_visitas_prospecto on prospectos_visita
 -- desde un botón de "Vincular" en el detalle del prospecto.
 alter table prospectos add column if not exists cliente_id integer references clientes(id);
 
+-- Arregla prospectos ya "eliminados" (inactivos) de antes de que borrar
+-- un prospecto también soltara este vínculo: si quedaron con cliente_id
+-- cargado, esa referencia fantasma podía bloquear para siempre el
+-- borrado del cliente en Clientes, sin ninguna forma de arreglarlo desde
+-- la interfaz. Es una limpieza de una sola vez — una vez que no quedan
+-- casos así, no vuelve a tocar nada.
+update prospectos set cliente_id = null where activo = false and cliente_id is not null;
+
 -- CUIT/DNI del negocio, opcional mientras es solo un prospecto — sirve
 -- como dato de referencia y, sobre todo, como la forma más confiable de
 -- reconocerlo automáticamente si más adelante se carga como cliente.
@@ -439,6 +447,13 @@ begin
       acceso_cuenta_corriente = true;
   end if;
 end $$;
+
+-- Para poder reconocer un posible vínculo con un prospecto por domicilio
+-- (además de por CUIT/DNI o teléfono, ver lib/vinculacion.js), el cliente
+-- necesita quedar ubicado igual que un prospecto: geocodificado a lat/lng,
+-- no solo con la dirección en texto libre.
+alter table clientes add column if not exists lat numeric;
+alter table clientes add column if not exists lng numeric;
 
 create index if not exists idx_facturas_compra_items_factura on facturas_compra_items(factura_id);
 create index if not exists idx_prospectos_activo on prospectos(activo);

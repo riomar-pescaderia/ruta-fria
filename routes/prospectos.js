@@ -204,8 +204,9 @@ router.get('/:id', async (req, res, next) => {
     ]);
 
     // Si todavía no está vinculado a ningún cliente, se buscan
-    // sugerencias (nombre parecido) para ofrecer un click de "Vincular",
-    // y se trae la lista de clientes para el buscador manual de respaldo.
+    // sugerencias (nombre parecido o mismo domicilio) para ofrecer un
+    // click de "Vincular", y se trae la lista de clientes para el
+    // buscador manual de respaldo.
     let sugerencias = [];
     let clientes = [];
     if (!prospecto.cliente_id) {
@@ -259,7 +260,12 @@ router.post('/:id/eliminar', async (req, res, next) => {
     // No se borra de verdad — se marca inactivo, para no perder el
     // historial de visitas si se cargó por error o el prospecto ya no
     // interesa; simplemente deja de aparecer en el mapa y la lista.
-    await pool.query('update prospectos set activo = false where id = $1', [req.params.id]);
+    // También se suelta el vínculo con Clientes (si tenía uno): un
+    // prospecto inactivo ya no se puede ver ni volver a vincular desde
+    // ningún lado, así que dejarlo cargado solo podía terminar bloqueando
+    // para siempre el borrado de ese cliente por una referencia que ya no
+    // se usa ni se ve en ningún lado.
+    await pool.query('update prospectos set activo = false, cliente_id = null where id = $1', [req.params.id]);
     res.redirect('/prospectos');
   } catch (err) { next(err); }
 });

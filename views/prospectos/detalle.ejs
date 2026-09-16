@@ -38,9 +38,23 @@
   <% } else { %>
     <p style="margin:0 0 10px;"><span class="badge prospecto">Todavía no es cliente</span></p>
 
-    <% if (sugerencias.length > 0) { %>
+    <% const sugerenciasNombre = sugerencias.filter(s => s.porNombre); %>
+    <% const sugerenciasDomicilio = sugerencias.filter(s => s.porDomicilio && !s.porNombre); %>
+
+    <% if (sugerenciasNombre.length > 0) { %>
       <p style="font-size:.85rem; color:var(--ink-soft); margin-bottom:6px;">Encontré un cliente cargado con el mismo nombre — ¿es el mismo negocio?</p>
-      <% sugerencias.forEach(s => { %>
+      <% sugerenciasNombre.forEach(s => { %>
+        <form method="post" action="/prospectos/<%= prospecto.id %>/vincular" style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+          <input type="hidden" name="cliente_id" value="<%= s.id %>">
+          <span style="flex:1; font-size:.92rem;"><%= s.razon_social %><%= s.cuit_dni ? ' — ' + s.cuit_dni : '' %></span>
+          <button type="submit" class="btn secondary">Vincular</button>
+        </form>
+      <% }) %>
+    <% } %>
+
+    <% if (sugerenciasDomicilio.length > 0) { %>
+      <p style="font-size:.85rem; color:var(--ink-soft); margin-bottom:6px;">Encontré un cliente cargado en el mismo domicilio — ¿es el mismo negocio?</p>
+      <% sugerenciasDomicilio.forEach(s => { %>
         <form method="post" action="/prospectos/<%= prospecto.id %>/vincular" style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
           <input type="hidden" name="cliente_id" value="<%= s.id %>">
           <span style="flex:1; font-size:.92rem;"><%= s.razon_social %><%= s.cuit_dni ? ' — ' + s.cuit_dni : '' %></span>
@@ -61,12 +75,6 @@
     </details>
   <% } %>
 </div>
-
-<% if (prospecto.lat !== null && prospecto.lng !== null) { %>
-  <div id="mapa" style="height:280px; border:1px solid var(--line); border-radius:10px; margin-bottom:20px;"></div>
-<% } else { %>
-  <p class="pendiente" style="padding:14px 20px;">Este prospecto todavía no tiene ubicación en el mapa — <a href="/prospectos/<%= prospecto.id %>/editar">editalo</a> para buscarle la dirección.</p>
-<% } %>
 
 <div class="card" style="max-width:480px; margin-bottom:24px;">
   <h2 style="font-size:1.05rem; margin:0 0 4px;">Registrar visita</h2>
@@ -111,6 +119,13 @@
     <% }) %>
   </tbody>
 </table>
+<% } %>
+
+<h2 style="font-size:1.1rem;">Ubicación</h2>
+<% if (prospecto.lat !== null && prospecto.lng !== null) { %>
+  <div id="mapa" style="height:280px; border:1px solid var(--line); border-radius:10px; margin-bottom:20px;"></div>
+<% } else { %>
+  <p class="pendiente" style="padding:14px 20px;">Este prospecto todavía no tiene ubicación en el mapa — <a href="/prospectos/<%= prospecto.id %>/editar">editalo</a> para buscarle la dirección.</p>
 <% } %>
 
 <% if (!prospecto.cliente_id) { %>

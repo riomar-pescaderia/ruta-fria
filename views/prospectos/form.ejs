@@ -24,11 +24,11 @@
   <div>
     <label>Contactos (opcional)</label>
     <div id="contactos-lista">
-      <% (contactos.length ? contactos : [{}]).forEach(c => { %>
+      <% (contactos.length ? contactos : [{}]).forEach((c, i) => { %>
       <div class="fila-contacto fila-input-boton">
         <input type="text" name="contacto_nombre[]" placeholder="Nombre" value="<%= c.nombre || '' %>">
         <input type="text" name="contacto_telefono[]" placeholder="Teléfono" value="<%= c.telefono || '' %>">
-        <button type="button" class="btn secondary quitar-contacto">Quitar</button>
+        <% if (i > 0) { %><button type="button" class="btn secondary quitar-contacto">Quitar</button><% } %>
       </div>
       <% }) %>
     </div>

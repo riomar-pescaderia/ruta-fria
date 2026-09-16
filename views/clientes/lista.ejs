@@ -50,21 +50,94 @@
 </table>
 <% } %>
 
+<div id="modal-vinculo" class="modal-overlay" hidden>
+  <div class="modal-card">
+    <h2 style="font-size:1.05rem; margin:0 0 8px;">Posible vínculo por domicilio</h2>
+    <p style="font-size:.88rem; color:var(--ink-soft); margin:0 0 14px;">
+      Encontré <span id="modal-vinculo-cantidad"></span> en Historial de visitas cargado en el mismo domicilio que este cliente — ¿es el mismo negocio?
+    </p>
+    <div id="modal-vinculo-lista"></div>
+    <div style="text-align:right; margin-top:6px;">
+      <button type="button" id="modal-vinculo-cerrar" class="btn secondary">Ignorar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   var input = document.getElementById('buscar-cliente');
-  if (!input) return;
-  var filas = document.querySelectorAll('#tabla-clientes tbody tr');
-  var sinResultados = document.getElementById('sin-resultados-clientes');
-  input.addEventListener('input', function () {
-    var texto = input.value.trim().toLowerCase();
-    var visibles = 0;
-    filas.forEach(function (tr) {
-      var coincide = !texto || tr.dataset.buscar.indexOf(texto) !== -1;
-      tr.hidden = !coincide;
-      if (coincide) visibles++;
+  if (input) {
+    var filas = document.querySelectorAll('#tabla-clientes tbody tr');
+    var sinResultados = document.getElementById('sin-resultados-clientes');
+    input.addEventListener('input', function () {
+      var texto = input.value.trim().toLowerCase();
+      var visibles = 0;
+      filas.forEach(function (tr) {
+        var coincide = !texto || tr.dataset.buscar.indexOf(texto) !== -1;
+        tr.hidden = !coincide;
+        if (coincide) visibles++;
+      });
+      sinResultados.style.display = visibles === 0 ? 'block' : 'none';
     });
-    sinResultados.style.display = visibles === 0 ? 'block' : 'none';
+  }
+
+  // Cartel de "posible vínculo por domicilio": al volver del alta o edición
+  // de un cliente, si quedó geocodificado, se consulta si hay algún
+  // prospecto sin vincular en Historial de visitas con el mismo domicilio
+  // — y si lo hay, se avisa con este cartel en vez de vincularlo solo (ver
+  // lib/vinculacion.js y routes/clientes.js).
+  var clienteId = <%- JSON.stringify(vinculoSugerido) %>;
+  if (!clienteId) return;
+
+  // Saca el parámetro de la URL para que no vuelva a aparecer si se
+  // refresca la página después de cerrarlo.
+  var url = new URL(window.location.href);
+  url.searchParams.delete('vinculo_sugerido');
+  window.history.replaceState({}, '', url);
+
+  fetch('/clientes/' + encodeURIComponent(clienteId) + '/sugerencias-domicilio')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var sugerencias = data.sugerencias || [];
+      if (sugerencias.length === 0) return;
+
+      var modal = document.getElementById('modal-vinculo');
+      var lista = document.getElementById('modal-vinculo-lista');
+      document.getElementById('modal-vinculo-cantidad').textContent =
+        sugerencias.length === 1 ? 'un prospecto' : (sugerencias.length + ' prospectos');
+
+      sugerencias.forEach(function (p) {
+        var form = document.createElement('form');
+        form.method = 'post';
+        form.action = '/clientes/' + encodeURIComponent(clienteId) + '/vincular-prospecto';
+        form.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:8px;';
+
+        var oculto = document.createElement('input');
+        oculto.type = 'hidden';
+        oculto.name = 'prospecto_id';
+        oculto.value = p.id;
+
+        var etiqueta = document.createElement('span');
+        etiqueta.style.cssText = 'flex:1; font-size:.92rem;';
+        etiqueta.textContent = p.nombre + (p.direccion ? ' — ' + p.direccion : '');
+
+        var boton = document.createElement('button');
+        boton.type = 'submit';
+        boton.className = 'btn secondary';
+        boton.textContent = 'Vincular';
+
+        form.appendChild(oculto);
+        form.appendChild(etiqueta);
+        form.appendChild(boton);
+        lista.appendChild(form);
+      });
+
+      modal.hidden = false;
+    })
+    .catch(function () { /* si falla la consulta, simplemente no se muestra el cartel */ });
+
+  document.getElementById('modal-vinculo-cerrar').addEventListener('click', function () {
+    document.getElementById('modal-vinculo').hidden = true;
   });
 })();
 </script>

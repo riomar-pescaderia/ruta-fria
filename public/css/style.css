@@ -302,6 +302,28 @@ tr[hidden] { display: none !important; }
 .buscador-flotante button:last-child { border-bottom: none; }
 .buscador-flotante button:hover, .buscador-flotante button:focus { background: var(--bg); }
 
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(16, 30, 46, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-overlay[hidden] { display: none; }
+.modal-card {
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(16, 30, 46, 0.28);
+  padding: 22px 24px;
+  max-width: 420px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
 .badge { display: inline-block; padding: 3px 11px; border-radius: 999px; font-size: .78rem; font-weight: 600; }
 .badge.confirmada, .badge.aplicado { background: var(--blue-soft); color: var(--navy); }
 .badge.borrador { background: var(--orange-soft); color: #8a5a12; }

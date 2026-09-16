@@ -39,7 +39,7 @@
       <td data-label="Rol"><%= u.es_admin ? 'Administrador' : 'Empleado' %></td>
       <td data-label="Accesos" style="font-size:.85rem; color:var(--ink-soft);">
         <% if (u.es_admin) { %>Todos<% } else { %>
-          <% const ETIQUETAS_MODULO = { prospectos: 'Historial visitas', ventas: 'Venta / remito', cuenta_corriente: 'Cuenta corriente', mapa: 'Mapa' }; %>
+          <% const ETIQUETAS_MODULO = { prospectos: 'Historial visitas', ventas: 'Venta / remito', cuenta_corriente: 'Cuenta corriente', mapa: 'Mapa de visitas' }; %>
           <%= ['clientes','articulos','prospectos','mapa','ventas','cuenta_corriente','compras','gastos','stock']
                 .filter(m => u['acceso_' + m])
                 .map(m => ETIQUETAS_MODULO[m] || (m[0].toUpperCase() + m.slice(1)))
