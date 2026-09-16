@@ -104,7 +104,11 @@ router.post('/', async (req, res, next) => {
       [nombre.trim(), direccion.trim(), notas || null, lat, lng, cuit_dni || null, clienteCoincidente ? clienteCoincidente.id : null]
     );
     await guardarContactos(rows[0].id, contactos);
-    res.redirect(`/prospectos/${rows[0].id}`);
+    // "recien_guardado=1" hace que, si el prospecto quedó sin vincular pero
+    // hay algún cliente parecido (mismo nombre o domicilio), el aviso
+    // aparezca como ventana emergente al llegar a esta página — no cada
+    // vez que se la visite después (ver prospectos/detalle.ejs).
+    res.redirect(`/prospectos/${rows[0].id}?recien_guardado=1`);
   } catch (err) {
     res.render('prospectos/form', {
       prospecto: { nombre, direccion, notas, lat, lng, cuit_dni },
@@ -174,8 +178,10 @@ router.post('/:id', async (req, res, next) => {
     await guardarContactos(req.params.id, contactos);
     // Al editar (a diferencia de al crear) ya suele haber visitas
     // registradas, así que conviene ir directo a esa sección en vez de
-    // quedar arriba, en los datos del prospecto.
-    res.redirect(`/prospectos/${req.params.id}#historial-visitas`);
+    // quedar arriba, en los datos del prospecto. "recien_guardado=1" es lo
+    // mismo que al crear — dispara el cartel de posible vínculo como
+    // ventana emergente, si corresponde (ver prospectos/detalle.ejs).
+    res.redirect(`/prospectos/${req.params.id}?recien_guardado=1#historial-visitas`);
   } catch (err) {
     res.render('prospectos/form', {
       prospecto: { id: req.params.id, nombre, direccion, notas, lat, lng, cuit_dni },

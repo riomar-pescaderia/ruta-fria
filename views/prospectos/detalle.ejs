@@ -38,8 +38,25 @@
   <% } else { %>
     <p style="margin:0 0 10px;"><span class="badge prospecto">Todavía no es cliente</span></p>
 
-    <% const sugerenciasNombre = sugerencias.filter(s => s.porNombre); %>
-    <% const sugerenciasDomicilio = sugerencias.filter(s => s.porDomicilio && !s.porNombre); %>
+    <details>
+      <summary style="cursor:pointer; font-size:.85rem; color:var(--ink-soft);">Buscar y vincular a otro cliente</summary>
+      <form method="post" action="/prospectos/<%= prospecto.id %>/vincular" style="margin-top:10px;">
+        <div class="fila-input-boton" style="margin-bottom:0;">
+          <input type="text" id="cliente_buscar" placeholder="Buscar por nombre, CUIT/DNI o razón social..." autocomplete="off">
+          <button type="submit" class="btn secondary">Vincular</button>
+        </div>
+        <input type="hidden" id="cliente_id" name="cliente_id" value="">
+      </form>
+    </details>
+  <% } %>
+</div>
+
+<% const sugerenciasNombre = !prospecto.cliente_id ? sugerencias.filter(s => s.porNombre) : []; %>
+<% const sugerenciasDomicilio = !prospecto.cliente_id ? sugerencias.filter(s => s.porDomicilio && !s.porNombre) : []; %>
+<% if (sugerenciasNombre.length > 0 || sugerenciasDomicilio.length > 0) { %>
+<div id="modal-vinculo-prospecto" class="modal-overlay" hidden>
+  <div class="modal-card">
+    <h2 style="font-size:1.05rem; margin:0 0 8px;">Posible vínculo con un cliente</h2>
 
     <% if (sugerenciasNombre.length > 0) { %>
       <p style="font-size:.85rem; color:var(--ink-soft); margin-bottom:6px;">Encontré un cliente cargado con el mismo nombre — ¿es el mismo negocio?</p>
@@ -63,18 +80,35 @@
       <% }) %>
     <% } %>
 
-    <details>
-      <summary style="cursor:pointer; font-size:.85rem; color:var(--ink-soft);">Buscar y vincular a otro cliente</summary>
-      <form method="post" action="/prospectos/<%= prospecto.id %>/vincular" style="margin-top:10px;">
-        <div class="fila-input-boton" style="margin-bottom:0;">
-          <input type="text" id="cliente_buscar" placeholder="Buscar por nombre, CUIT/DNI o razón social..." autocomplete="off">
-          <button type="submit" class="btn secondary">Vincular</button>
-        </div>
-        <input type="hidden" id="cliente_id" name="cliente_id" value="">
-      </form>
-    </details>
-  <% } %>
+    <div style="text-align:right; margin-top:6px;">
+      <button type="button" id="modal-vinculo-prospecto-cerrar" class="btn secondary">Ignorar</button>
+    </div>
+  </div>
 </div>
+<script>
+(function () {
+  // El cartel de posible vínculo solo aparece como ventana emergente justo
+  // al terminar de cargar o editar el prospecto (?recien_guardado=1 en la
+  // URL del redirect, ver routes/prospectos.js) — no queda escrito de
+  // forma permanente en el perfil cada vez que se lo visita. Si se
+  // ignora, sigue estando el buscador manual ("Buscar y vincular a otro
+  // cliente") para vincularlo más adelante a mano.
+  var modal = document.getElementById('modal-vinculo-prospecto');
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('recien_guardado') === '1') {
+    modal.hidden = false;
+  }
+  var url = new URL(window.location.href);
+  if (url.searchParams.has('recien_guardado')) {
+    url.searchParams.delete('recien_guardado');
+    window.history.replaceState({}, '', url);
+  }
+  document.getElementById('modal-vinculo-prospecto-cerrar').addEventListener('click', function () {
+    modal.hidden = true;
+  });
+})();
+</script>
+<% } %>
 
 <div class="card" style="max-width:480px; margin-bottom:24px;">
   <h2 style="font-size:1.05rem; margin:0 0 4px;">Registrar visita</h2>
