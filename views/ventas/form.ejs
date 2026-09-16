@@ -13,11 +13,9 @@
   <div style="display:flex; gap:12px; flex-wrap:wrap;">
     <div style="flex:2; min-width:240px;">
       <label for="cliente_buscar">Cliente</label>
-      <input type="text" id="cliente_buscar" placeholder="Buscar por razón social, CUIT/DNI..." autocomplete="off" value="<%= clienteSel ? clienteSel.razon_social : '' %>" required>
+      <input type="text" id="cliente_buscar" name="cliente_texto" placeholder="Buscar por razón social, CUIT/DNI... o escribir uno nuevo" autocomplete="off" value="<%= clienteSel ? clienteSel.razon_social : (venta.cliente_texto || '') %>" required>
       <input type="hidden" id="cliente_id" name="cliente_id" value="<%= venta.cliente_id || '' %>">
-      <% if (clientes.length === 0) { %>
-        <p style="color:var(--ink-soft); font-size:.85rem; margin:6px 0 0;">Todavía no cargaste ningún cliente — <a href="/clientes/nuevo">creá uno primero</a>.</p>
-      <% } %>
+      <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Si el cliente todavía no está agendado, escribí el nombre igual y guardá la venta — se crea solo con ese nombre, y después podés completar el resto de sus datos desde el detalle de la venta.</p>
     </div>
     <div style="flex:1; min-width:150px;">
       <label for="fecha">Fecha</label>
@@ -63,7 +61,9 @@
            const artSel = it.articulo_id ? mapaArticulos[it.articulo_id] : null;
            const articuloValor = artSel ? (artSel.codigo + ' — ' + artSel.nombre) : ''; %>
       <tr>
-        <td data-label="Código" class="mono f-codigo-display"><%= artSel ? artSel.codigo : '' %></td>
+        <td data-label="Código">
+          <input class="f-codigo" type="text" placeholder="Código" autocomplete="off" value="<%= artSel ? artSel.codigo : '' %>">
+        </td>
         <td data-label="Artículo">
           <input class="f-articulo-buscar" type="text" placeholder="Buscar por nombre o código" autocomplete="off" value="<%= articuloValor %>">
           <input type="hidden" class="f-articulo-id" data-campo="articulo_id" name="items[<%= i %>][articulo_id]" value="<%= it.articulo_id || '' %>">
@@ -150,7 +150,7 @@
   function fijarArticuloEnFila(tr, articulo) {
     tr.querySelector('.f-articulo-id').value = articulo ? articulo.id : '';
     tr.querySelector('.f-articulo-buscar').value = articulo ? etiquetaArticulo(articulo) : '';
-    tr.querySelector('.f-codigo-display').textContent = articulo ? articulo.codigo : '';
+    if (articulo) tr.querySelector('.f-codigo').value = articulo.codigo;
     var precioInput = tr.querySelector('.f-precio');
     // Solo sugiere el precio si el renglón todavía no tenía uno cargado —
     // así no pisa un precio que ya se había ajustado a mano.
@@ -215,7 +215,7 @@
     var filas = tbody.querySelectorAll('tr');
     var nueva = filas[filas.length - 1].cloneNode(true);
     nueva.querySelectorAll('input[type=number]').forEach(function (el) { el.value = ''; });
-    nueva.querySelector('.f-codigo-display').textContent = '';
+    nueva.querySelector('.f-codigo').value = '';
     nueva.querySelector('.f-articulo-buscar').value = '';
     nueva.querySelector('.f-articulo-id').value = '';
     nueva.querySelector('.f-subtotal').textContent = '0.00';
@@ -242,9 +242,23 @@
       var actual = articulosPorId[tr.querySelector('.f-articulo-id').value];
       if (!actual || etiquetaArticulo(actual) !== e.target.value) {
         tr.querySelector('.f-articulo-id').value = '';
-        tr.querySelector('.f-codigo-display').textContent = '';
       }
       mostrarBuscador(tr, buscarArticulos(e.target.value));
+    } else if (e.target.classList.contains('f-codigo')) {
+      // igual que en Compras: tipear un código que coincide con un
+      // artículo lo completa solo (y sugiere su precio, más abajo).
+      var tr2 = e.target.closest('tr');
+      var codigoTexto = e.target.value.trim().toLowerCase();
+      var encontrado = codigoTexto && ARTICULOS.find(function (a) { return a.codigo.toLowerCase() === codigoTexto; });
+      if (encontrado) {
+        fijarArticuloEnFila(tr2, encontrado);
+      } else if (tr2.querySelector('.f-articulo-id').value) {
+        // el código se borró o ya no coincide con ningún artículo: se
+        // desvincula el artículo que estaba elegido, en vez de dejarlo
+        // pegado a un código que ya no está
+        tr2.querySelector('.f-articulo-id').value = '';
+        tr2.querySelector('.f-articulo-buscar').value = '';
+      }
     }
   });
 

@@ -71,6 +71,30 @@ function leerItems(body) {
     .filter((it) => it.cantidad > 0 && it.precio_unitario > 0);
 }
 
+// Si vino un cliente_id (elegido del buscador) se usa tal cual. Si no,
+// pero se tipeó un nombre a mano — pensado para cargar la venta ya mismo
+// en la calle sin tener que agendar antes al cliente — se reutiliza un
+// cliente existente con ese mismo nombre si lo hay (para no duplicar si
+// en realidad ya estaba cargado y no se eligió de la lista) o se crea uno
+// nuevo con ese nombre y nada más: el resto de sus datos se completa
+// después, desde el link "Completar datos del cliente" que queda en el
+// detalle de la venta.
+async function resolverClienteId(cliente_id, clienteTexto) {
+  if (cliente_id) return cliente_id;
+  const nombre = (clienteTexto || '').trim();
+  if (!nombre) return null;
+  const { rows: existentes } = await pool.query(
+    'select id from clientes where lower(razon_social) = lower($1) limit 1',
+    [nombre]
+  );
+  if (existentes[0]) return existentes[0].id;
+  const { rows } = await pool.query(
+    'insert into clientes (razon_social) values ($1) returning id',
+    [nombre]
+  );
+  return rows[0].id;
+}
+
 router.get('/', async (req, res, next) => {
   try {
     const { rows: ventas } = await pool.query(
@@ -97,21 +121,23 @@ router.get('/nueva', async (req, res, next) => {
 });
 
 router.post('/', async (req, res, next) => {
-  const { cliente_id, fecha, notas } = req.body;
+  const { fecha, notas } = req.body;
+  const clienteTexto = (req.body.cliente_texto || '').trim();
+  let cliente_id = req.body.cliente_id || null;
   const forma_pago = FORMAS_PAGO.includes(req.body.forma_pago) ? req.body.forma_pago : null;
   const origen = ORIGENES.includes(req.body.origen) ? req.body.origen : 'deposito';
   const items = leerItems(req.body);
 
-  if (!cliente_id || !forma_pago || items.length === 0) {
+  if ((!cliente_id && !clienteTexto) || !forma_pago || items.length === 0) {
     try {
       const { clientes, articulos } = await datosFormulario();
       return res.render('ventas/form', {
-        venta: { cliente_id, fecha, forma_pago: req.body.forma_pago, origen, notas },
+        venta: { cliente_id, cliente_texto: clienteTexto, fecha, forma_pago: req.body.forma_pago, origen, notas },
         items: items.length ? items : [{}],
         clientes,
         articulos,
-        error: !cliente_id
-          ? 'Elegí un cliente.'
+        error: (!cliente_id && !clienteTexto)
+          ? 'Elegí un cliente o escribí su nombre.'
           : !forma_pago
           ? 'Elegí una forma de pago.'
           : 'Agregá al menos un renglón con artículo, cantidad y precio mayores a 0.',
@@ -119,6 +145,10 @@ router.post('/', async (req, res, next) => {
       });
     } catch (err) { return next(err); }
   }
+
+  try {
+    cliente_id = await resolverClienteId(cliente_id, clienteTexto);
+  } catch (err) { return next(err); }
 
   const total = redondear2(items.reduce((acc, it) => acc + it.subtotal, 0));
   const client = await pool.connect();
@@ -175,7 +205,9 @@ router.get('/:id/editar', async (req, res, next) => {
 });
 
 router.post('/:id', async (req, res, next) => {
-  const { cliente_id, fecha, notas } = req.body;
+  const { fecha, notas } = req.body;
+  const clienteTexto = (req.body.cliente_texto || '').trim();
+  let cliente_id = req.body.cliente_id || null;
   const forma_pago = FORMAS_PAGO.includes(req.body.forma_pago) ? req.body.forma_pago : null;
   const origen = ORIGENES.includes(req.body.origen) ? req.body.origen : 'deposito';
   const items = leerItems(req.body);
@@ -185,21 +217,23 @@ router.post('/:id', async (req, res, next) => {
     const venta = rows[0];
     if (!venta) return res.redirect('/ventas');
 
-    if (!cliente_id || !forma_pago || items.length === 0) {
+    if ((!cliente_id && !clienteTexto) || !forma_pago || items.length === 0) {
       const { clientes, articulos } = await datosFormulario();
       return res.render('ventas/form', {
-        venta: { id: venta.id, cliente_id, fecha, forma_pago: req.body.forma_pago, origen, notas },
+        venta: { id: venta.id, cliente_id, cliente_texto: clienteTexto, fecha, forma_pago: req.body.forma_pago, origen, notas },
         items: items.length ? items : [{}],
         clientes,
         articulos,
-        error: !cliente_id
-          ? 'Elegí un cliente.'
+        error: (!cliente_id && !clienteTexto)
+          ? 'Elegí un cliente o escribí su nombre.'
           : !forma_pago
           ? 'Elegí una forma de pago.'
           : 'Agregá al menos un renglón con artículo, cantidad y precio mayores a 0.',
         accion: `/ventas/${venta.id}`,
       });
     }
+
+    cliente_id = await resolverClienteId(cliente_id, clienteTexto);
 
     const total = redondear2(items.reduce((acc, it) => acc + it.subtotal, 0));
     const fechaVenta = fecha || fechaInput(venta.fecha);
