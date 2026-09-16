@@ -195,7 +195,36 @@ create index if not exists idx_prospectos_visitas_prospecto on prospectos_visita
 -- Si el prospecto ya compró y está cargado en Clientes, se vincula acá —
 -- así el mapa puede distinguir de un vistazo quién ya es cliente de quién
 -- todavía es solo una visita. Null mientras siga siendo solo un prospecto.
+-- Ya no se elige a mano desde el formulario del prospecto: se completa
+-- solo (por CUIT/DNI o teléfono coincidente, ver lib/vinculacion.js) o
+-- desde un botón de "Vincular" en el detalle del prospecto.
 alter table prospectos add column if not exists cliente_id integer references clientes(id);
+
+-- CUIT/DNI del negocio, opcional mientras es solo un prospecto — sirve
+-- como dato de referencia y, sobre todo, como la forma más confiable de
+-- reconocerlo automáticamente si más adelante se carga como cliente.
+alter table prospectos add column if not exists cuit_dni text;
+
+-- Un prospecto puede tener más de una persona de contacto (dueño,
+-- encargado, etc.), cada una con su propio teléfono. Reemplaza a las
+-- columnas sueltas "contacto"/"telefono" de prospectos, que quedan nada
+-- más para no perder los datos ya cargados — la migración de abajo copia
+-- ese contacto único como el primero de la lista la primera vez que corre.
+create table if not exists prospectos_contactos (
+  id serial primary key,
+  prospecto_id integer not null references prospectos(id) on delete cascade,
+  nombre text,
+  telefono text,
+  orden integer not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_prospectos_contactos_prospecto on prospectos_contactos(prospecto_id);
+
+insert into prospectos_contactos (prospecto_id, nombre, telefono, orden)
+select p.id, p.contacto, p.telefono, 0
+from prospectos p
+where (p.contacto is not null or p.telefono is not null)
+  and not exists (select 1 from prospectos_contactos pc where pc.prospecto_id = p.id);
 
 create table if not exists gastos (
   id serial primary key,
@@ -352,11 +381,42 @@ alter table usuarios add column if not exists acceso_prospectos boolean not null
 alter table usuarios add column if not exists acceso_stock boolean not null default false;
 alter table usuarios add column if not exists acceso_cuenta_corriente boolean not null default false;
 
+-- Acceso al módulo "Mapa" (antes vivía adentro de Historial de visitas,
+-- ahora es una sección aparte con su propio permiso).
+alter table usuarios add column if not exists acceso_mapa boolean not null default false;
+
 -- Permiso especial (no es un módulo entero): habilita editar o eliminar
 -- una factura de compra que ya está confirmada, algo que por defecto
 -- solo puede hacer un administrador. Se guarda y se delega igual que los
 -- accesos por módulo, desde la pantalla de Usuarios.
 alter table usuarios add column if not exists permiso_editar_confirmadas boolean not null default false;
+
+-- Copia de la contraseña cifrada de forma reversible (no el hash de
+-- bcrypt, que no se puede revertir), para que un administrador pueda
+-- verla desde Usuarios si la necesita. Se guarda cifrada con AES-256-GCM
+-- (ver lib/auth.js), nunca en texto plano. Los usuarios creados antes de
+-- este cambio quedan con este campo vacío hasta que se les cambie la
+-- contraseña una vez.
+alter table usuarios add column if not exists password_visible text;
+
+-- El login y el alta de usuarios no distinguen mayúsculas de minúsculas
+-- en el nombre de usuario ("Juan" y "juan" son la misma cuenta). El
+-- índice único evita que se puedan crear dos cuentas que solo difieran
+-- en mayúsculas/minúsculas; si por algo ya existiera ese choque en datos
+-- viejos, se salta la creación del índice en vez de romper el arranque
+-- (la comparación case-insensitive en el código sigue funcionando igual).
+do $$
+begin
+  if not exists (
+    select 1 from (
+      select lower(username) as u from usuarios group by lower(username) having count(*) > 1
+    ) dup
+  ) and not exists (
+    select 1 from pg_indexes where indexname = 'usuarios_username_lower_idx'
+  ) then
+    create unique index usuarios_username_lower_idx on usuarios (lower(username));
+  end if;
+end $$;
 
 -- Antes de que existieran los permisos por módulo, cualquier usuario
 -- cargado tenía acceso a todo. Para no dejar a nadie afuera de un día

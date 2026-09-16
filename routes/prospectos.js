@@ -1,33 +1,16 @@
 // Historial de visitas a potenciales clientes (prospectos) — separado de
 // Clientes a propósito: acá se cargan direcciones de gente que todavía no
 // compró, para planificar y llevar registro de las visitas que se les
-// hacen, con un mapa que muestra cada punto y cuántas veces se visitó.
+// hacen. El mapa que muestra cada punto vive aparte, en /mapa.
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const { geocodificarDireccion, buscarDirecciones } = require('../lib/geocode');
+const { listarConVisitas } = require('../lib/prospectosCompartido');
+const { buscarClienteCoincidente, buscarSugerenciasCliente } = require('../lib/vinculacion');
 
 function redondearCoord(n) {
   return n === null || n === undefined || n === '' ? null : Number(n);
-}
-
-// Trae todos los prospectos activos con la cantidad de visitas, la fecha
-// de la última y el nombre del cliente vinculado (si ya lo es), para la
-// lista y el mapa principal.
-async function listarConVisitas() {
-  const { rows } = await pool.query(`
-    select p.*,
-           count(v.id)::int as cantidad_visitas,
-           max(v.fecha) as ultima_visita,
-           c.razon_social as cliente_nombre
-    from prospectos p
-    left join prospectos_visitas v on v.prospecto_id = p.id
-    left join clientes c on c.id = p.cliente_id
-    where p.activo = true
-    group by p.id, c.razon_social
-    order by p.nombre
-  `);
-  return rows;
 }
 
 async function listarClientes() {
@@ -35,27 +18,67 @@ async function listarClientes() {
   return rows;
 }
 
+// El formulario manda los contactos como listas paralelas
+// (contacto_nombre[], contacto_telefono[]) — una posición por fila. Se
+// arma un array de {nombre, telefono} descartando las filas totalmente
+// vacías (p. ej. una fila que se agregó de más y se dejó sin completar).
+function leerContactos(body) {
+  let nombres = body['contacto_nombre[]'];
+  let telefonos = body['contacto_telefono[]'];
+  if (nombres === undefined && telefonos === undefined) return [];
+  if (!Array.isArray(nombres)) nombres = nombres === undefined ? [] : [nombres];
+  if (!Array.isArray(telefonos)) telefonos = telefonos === undefined ? [] : [telefonos];
+  const cantidad = Math.max(nombres.length, telefonos.length);
+  const contactos = [];
+  for (let i = 0; i < cantidad; i++) {
+    const nombre = (nombres[i] || '').trim();
+    const telefono = (telefonos[i] || '').trim();
+    if (nombre || telefono) contactos.push({ nombre: nombre || null, telefono: telefono || null });
+  }
+  return contactos;
+}
+
+async function guardarContactos(prospectoId, contactos) {
+  // Reemplaza todos los contactos del prospecto — más simple que calcular
+  // altas/bajas/cambios fila por fila, y acá no hace falta conservar ids.
+  await pool.query('delete from prospectos_contactos where prospecto_id = $1', [prospectoId]);
+  for (let i = 0; i < contactos.length; i++) {
+    const c = contactos[i];
+    await pool.query(
+      'insert into prospectos_contactos (prospecto_id, nombre, telefono, orden) values ($1,$2,$3,$4)',
+      [prospectoId, c.nombre, c.telefono, i]
+    );
+  }
+}
+
+async function traerContactos(prospectoId) {
+  const { rows } = await pool.query(
+    'select * from prospectos_contactos where prospecto_id = $1 order by orden, id',
+    [prospectoId]
+  );
+  return rows;
+}
+
 router.get('/', async (req, res, next) => {
   try {
     const prospectos = await listarConVisitas();
-    res.render('prospectos/mapa', { prospectos });
+    res.render('prospectos/lista', { prospectos });
   } catch (err) { next(err); }
 });
 
 router.get('/nuevo', async (req, res, next) => {
   try {
-    const clientes = await listarClientes();
-    res.render('prospectos/form', { prospecto: {}, clientes, error: null, accion: '/prospectos' });
+    res.render('prospectos/form', { prospecto: {}, contactos: [], error: null, accion: '/prospectos' });
   } catch (err) { next(err); }
 });
 
 router.post('/', async (req, res, next) => {
-  const { nombre, contacto, telefono, direccion, notas } = req.body;
-  const cliente_id = req.body.cliente_id || null;
+  const { nombre, direccion, notas, cuit_dni } = req.body;
+  const contactos = leerContactos(req.body);
   let lat = redondearCoord(req.body.lat);
   let lng = redondearCoord(req.body.lng);
   try {
-    if (!nombre || !nombre.trim()) throw new Error('Falta el nombre.');
+    if (!nombre || !nombre.trim()) throw new Error('Falta el nombre del negocio.');
     if (!direccion || !direccion.trim()) throw new Error('Falta la dirección.');
 
     // Si el formulario no llegó con coordenadas (el JS del navegador no
@@ -67,17 +90,25 @@ router.post('/', async (req, res, next) => {
       if (geo) { lat = geo.lat; lng = geo.lng; }
     }
 
+    // Se intenta reconocer solo si el negocio ya está cargado como
+    // cliente (por CUIT/DNI o teléfono coincidente) — ver lib/vinculacion.
+    const clienteCoincidente = await buscarClienteCoincidente({
+      nombre: nombre.trim(),
+      cuitDni: cuit_dni,
+      telefonos: contactos.map((c) => c.telefono),
+    });
+
     const { rows } = await pool.query(
-      `insert into prospectos (nombre, contacto, telefono, direccion, notas, lat, lng, cliente_id)
-       values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
-      [nombre.trim(), contacto || null, telefono || null, direccion.trim(), notas || null, lat, lng, cliente_id]
+      `insert into prospectos (nombre, direccion, notas, lat, lng, cuit_dni, cliente_id)
+       values ($1,$2,$3,$4,$5,$6,$7) returning id`,
+      [nombre.trim(), direccion.trim(), notas || null, lat, lng, cuit_dni || null, clienteCoincidente ? clienteCoincidente.id : null]
     );
+    await guardarContactos(rows[0].id, contactos);
     res.redirect(`/prospectos/${rows[0].id}`);
   } catch (err) {
-    const clientes = await listarClientes().catch(() => []);
     res.render('prospectos/form', {
-      prospecto: { nombre, contacto, telefono, direccion, notas, lat, lng, cliente_id },
-      clientes,
+      prospecto: { nombre, direccion, notas, lat, lng, cuit_dni },
+      contactos,
       error: err.message,
       accion: '/prospectos',
     });
@@ -100,22 +131,20 @@ router.post('/geocodificar', async (req, res) => {
 
 router.get('/:id/editar', async (req, res, next) => {
   try {
-    const [{ rows }, clientes] = await Promise.all([
-      pool.query('select * from prospectos where id = $1', [req.params.id]),
-      listarClientes(),
-    ]);
+    const { rows } = await pool.query('select * from prospectos where id = $1', [req.params.id]);
     if (!rows[0]) return res.redirect('/prospectos');
-    res.render('prospectos/form', { prospecto: rows[0], clientes, error: null, accion: `/prospectos/${rows[0].id}` });
+    const contactos = await traerContactos(req.params.id);
+    res.render('prospectos/form', { prospecto: rows[0], contactos, error: null, accion: `/prospectos/${rows[0].id}` });
   } catch (err) { next(err); }
 });
 
 router.post('/:id', async (req, res, next) => {
-  const { nombre, contacto, telefono, direccion, notas } = req.body;
-  const cliente_id = req.body.cliente_id || null;
+  const { nombre, direccion, notas, cuit_dni } = req.body;
+  const contactos = leerContactos(req.body);
   let lat = redondearCoord(req.body.lat);
   let lng = redondearCoord(req.body.lng);
   try {
-    if (!nombre || !nombre.trim()) throw new Error('Falta el nombre.');
+    if (!nombre || !nombre.trim()) throw new Error('Falta el nombre del negocio.');
     if (!direccion || !direccion.trim()) throw new Error('Falta la dirección.');
 
     if (lat === null || lng === null) {
@@ -123,20 +152,34 @@ router.post('/:id', async (req, res, next) => {
       if (geo) { lat = geo.lat; lng = geo.lng; }
     }
 
+    const { rows: actualRows } = await pool.query('select cliente_id from prospectos where id = $1', [req.params.id]);
+    let clienteId = actualRows[0] ? actualRows[0].cliente_id : null;
+    // No se pisa un vínculo que ya existe (manual o automático) — solo se
+    // intenta reconocer de nuevo si todavía sigue sin vincular, por si
+    // ahora sí hay coincidencia (p. ej. se acaba de completar el CUIT).
+    if (!clienteId) {
+      const clienteCoincidente = await buscarClienteCoincidente({
+        nombre: nombre.trim(),
+        cuitDni: cuit_dni,
+        telefonos: contactos.map((c) => c.telefono),
+      });
+      if (clienteCoincidente) clienteId = clienteCoincidente.id;
+    }
+
     await pool.query(
-      `update prospectos set nombre=$1, contacto=$2, telefono=$3, direccion=$4, notas=$5, lat=$6, lng=$7, cliente_id=$8
-       where id = $9`,
-      [nombre.trim(), contacto || null, telefono || null, direccion.trim(), notas || null, lat, lng, cliente_id, req.params.id]
+      `update prospectos set nombre=$1, direccion=$2, notas=$3, lat=$4, lng=$5, cuit_dni=$6, cliente_id=$7
+       where id = $8`,
+      [nombre.trim(), direccion.trim(), notas || null, lat, lng, cuit_dni || null, clienteId, req.params.id]
     );
+    await guardarContactos(req.params.id, contactos);
     // Al editar (a diferencia de al crear) ya suele haber visitas
     // registradas, así que conviene ir directo a esa sección en vez de
     // quedar arriba, en los datos del prospecto.
     res.redirect(`/prospectos/${req.params.id}#historial-visitas`);
   } catch (err) {
-    const clientes = await listarClientes().catch(() => []);
     res.render('prospectos/form', {
-      prospecto: { id: req.params.id, nombre, contacto, telefono, direccion, notas, lat, lng, cliente_id },
-      clientes,
+      prospecto: { id: req.params.id, nombre, direccion, notas, lat, lng, cuit_dni },
+      contactos,
       error: err.message,
       accion: `/prospectos/${req.params.id}`,
     });
@@ -155,11 +198,41 @@ router.get('/:id', async (req, res, next) => {
     const prospecto = rows[0];
     if (!prospecto) return res.redirect('/prospectos');
 
-    const { rows: visitas } = await pool.query(
-      'select * from prospectos_visitas where prospecto_id = $1 order by fecha desc, id desc',
-      [prospecto.id]
-    );
-    res.render('prospectos/detalle', { prospecto, visitas });
+    const [{ rows: visitas }, contactos] = await Promise.all([
+      pool.query('select * from prospectos_visitas where prospecto_id = $1 order by fecha desc, id desc', [prospecto.id]),
+      traerContactos(prospecto.id),
+    ]);
+
+    // Si todavía no está vinculado a ningún cliente, se buscan
+    // sugerencias (nombre parecido) para ofrecer un click de "Vincular",
+    // y se trae la lista de clientes para el buscador manual de respaldo.
+    let sugerencias = [];
+    let clientes = [];
+    if (!prospecto.cliente_id) {
+      [sugerencias, clientes] = await Promise.all([
+        buscarSugerenciasCliente(prospecto),
+        listarClientes(),
+      ]);
+    }
+
+    res.render('prospectos/detalle', { prospecto, visitas, contactos, sugerencias, clientes });
+  } catch (err) { next(err); }
+});
+
+router.post('/:id/vincular', async (req, res, next) => {
+  try {
+    const clienteId = req.body.cliente_id || null;
+    if (clienteId) {
+      await pool.query('update prospectos set cliente_id = $1 where id = $2', [clienteId, req.params.id]);
+    }
+    res.redirect(`/prospectos/${req.params.id}`);
+  } catch (err) { next(err); }
+});
+
+router.post('/:id/desvincular', async (req, res, next) => {
+  try {
+    await pool.query('update prospectos set cliente_id = null where id = $1', [req.params.id]);
+    res.redirect(`/prospectos/${req.params.id}`);
   } catch (err) { next(err); }
 });
 

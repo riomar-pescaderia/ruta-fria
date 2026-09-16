@@ -1,5 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
+const { vincularProspectosDeCliente } = require('../lib/vinculacion');
 
 const router = express.Router();
 
@@ -24,12 +25,16 @@ router.get('/nuevo', (req, res) => {
 router.post('/', async (req, res, next) => {
   try {
     const c = req.body;
-    await pool.query(
+    const { rows } = await pool.query(
       `insert into clientes
         (razon_social, nombre_contacto, telefono, direccion, condicion_iva, cuit_dni, condicion_pago, notas)
-       values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+       values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
       [c.razon_social, c.nombre_contacto, c.telefono, c.direccion, c.condicion_iva, c.cuit_dni, c.condicion_pago, c.notas]
     );
+    // Si este negocio ya estaba cargado como prospecto en Historial de
+    // visitas (mismo CUIT/DNI o mismo teléfono), se vincula solo — ver
+    // lib/vinculacion.js.
+    await vincularProspectosDeCliente(rows[0].id);
     res.redirect('/clientes');
   } catch (err) { next(err); }
 });
@@ -50,6 +55,9 @@ router.post('/:id', async (req, res, next) => {
         condicion_iva=$5, cuit_dni=$6, condicion_pago=$7, notas=$8 where id=$9`,
       [c.razon_social, c.nombre_contacto, c.telefono, c.direccion, c.condicion_iva, c.cuit_dni, c.condicion_pago, c.notas, req.params.id]
     );
+    // Por si recién ahora se completó el CUIT/DNI o el teléfono y eso
+    // permite reconocer un prospecto que antes no se pudo vincular solo.
+    await vincularProspectosDeCliente(req.params.id);
     res.redirect('/clientes');
   } catch (err) { next(err); }
 });

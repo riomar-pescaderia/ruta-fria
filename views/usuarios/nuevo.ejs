@@ -33,6 +33,7 @@
     <div class="check-row"><input type="checkbox" id="acceso_clientes" name="acceso_clientes" <%= accesos.clientes ? 'checked' : '' %>><label for="acceso_clientes" style="margin:0;">Clientes</label></div>
     <div class="check-row"><input type="checkbox" id="acceso_articulos" name="acceso_articulos" <%= accesos.articulos ? 'checked' : '' %>><label for="acceso_articulos" style="margin:0;">Artículos</label></div>
     <div class="check-row"><input type="checkbox" id="acceso_prospectos" name="acceso_prospectos" <%= accesos.prospectos ? 'checked' : '' %>><label for="acceso_prospectos" style="margin:0;">Historial visitas</label></div>
+    <div class="check-row"><input type="checkbox" id="acceso_mapa" name="acceso_mapa" <%= accesos.mapa ? 'checked' : '' %>><label for="acceso_mapa" style="margin:0;">Mapa</label></div>
     <div class="check-row"><input type="checkbox" id="acceso_ventas" name="acceso_ventas" <%= accesos.ventas ? 'checked' : '' %>><label for="acceso_ventas" style="margin:0;">Venta / remito</label></div>
     <div class="check-row"><input type="checkbox" id="acceso_cuenta_corriente" name="acceso_cuenta_corriente" <%= accesos.cuenta_corriente ? 'checked' : '' %>><label for="acceso_cuenta_corriente" style="margin:0;">Cuenta corriente</label></div>
     <div class="check-row"><input type="checkbox" id="acceso_compras" name="acceso_compras" <%= accesos.compras ? 'checked' : '' %>><label for="acceso_compras" style="margin:0;">Compras</label></div>
@@ -54,4 +55,5 @@
   </div>
 </form>
 
+<script src="/js/password-toggle.js"></script>
 <%- include('../partials/foot') %>

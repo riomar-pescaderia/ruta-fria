@@ -4,10 +4,10 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
-const { MODULOS, crearUsuario, cambiarPassword, actualizarPermisos, alternarEstado } = require('../lib/auth');
+const { MODULOS, crearUsuario, cambiarPassword, actualizarPermisos, alternarEstado, decryptPassword } = require('../lib/auth');
 
 const COLUMNAS_USUARIO = `id, username, nombre, activo, es_admin,
-            acceso_clientes, acceso_articulos, acceso_compras, acceso_gastos, acceso_ventas, acceso_prospectos, acceso_stock, acceso_cuenta_corriente,
+            acceso_clientes, acceso_articulos, acceso_compras, acceso_gastos, acceso_ventas, acceso_prospectos, acceso_stock, acceso_cuenta_corriente, acceso_mapa,
             permiso_editar_confirmadas`;
 
 function leerAccesos(body) {
@@ -21,8 +21,13 @@ function leerPermisos(body) {
 }
 
 router.get('/', async (req, res) => {
-  const { rows } = await pool.query(`select ${COLUMNAS_USUARIO} from usuarios order by username`);
-  res.render('usuarios/lista', { usuarios: rows, sesionId: req.session.usuario.id, error: req.query.error || null });
+  const { rows } = await pool.query(`select ${COLUMNAS_USUARIO}, password_visible from usuarios order by username`);
+  // se descifra acá, no en la vista, para no pasearse la clave de
+  // cifrado por las plantillas — la vista solo recibe el texto plano
+  // (o null si es un usuario viejo al que todavía no le cambiaron la
+  // contraseña desde que existe esta función).
+  const usuarios = rows.map((u) => ({ ...u, password_plano: decryptPassword(u.password_visible) }));
+  res.render('usuarios/lista', { usuarios, sesionId: req.session.usuario.id, error: req.query.error || null });
 });
 
 router.get('/nuevo', (req, res) => {

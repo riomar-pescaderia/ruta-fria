@@ -2,7 +2,7 @@
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 
-<h1><%= prospecto.id ? 'Editar prospecto' : 'Nuevo prospecto' %></h1>
+<h1><%= prospecto.id ? 'Editar visita' : 'Nueva visita' %></h1>
 
 <% if (error) { %>
   <div class="pendiente" style="border-color:#e3b8b8; color:#7a2b2b; margin-bottom:16px; padding:14px 20px;">
@@ -12,34 +12,34 @@
 
 <form class="card" method="post" action="<%= accion %>" style="max-width:640px;">
   <div>
-    <label for="nombre">Nombre</label>
+    <label for="nombre">Nombre del negocio</label>
     <input type="text" id="nombre" name="nombre" value="<%= prospecto.nombre || '' %>" required autofocus>
   </div>
+
   <div>
-    <label for="contacto">Persona de contacto (opcional)</label>
-    <input type="text" id="contacto" name="contacto" value="<%= prospecto.contacto || '' %>">
-  </div>
-  <div>
-    <label for="telefono">Teléfono (opcional)</label>
-    <input type="text" id="telefono" name="telefono" value="<%= prospecto.telefono || '' %>">
+    <label for="cuit_dni">CUIT / DNI (opcional)</label>
+    <input type="text" id="cuit_dni" name="cuit_dni" value="<%= prospecto.cuit_dni || '' %>" placeholder="Si lo sabés — ayuda a reconocerlo solo si más adelante se carga como cliente">
   </div>
 
-  <% const clienteSel = prospecto.cliente_id ? clientes.find(c => String(c.id) === String(prospecto.cliente_id)) : null; %>
   <div>
-    <label for="cliente_buscar">¿Ya es cliente?</label>
-    <div style="display:flex; gap:8px;">
-      <input type="text" id="cliente_buscar" placeholder="Buscar por nombre, CUIT/DNI o razón social..." autocomplete="off" value="<%= clienteSel ? clienteSel.razon_social : '' %>" style="flex:1;">
-      <button type="button" id="cliente-quitar" class="btn secondary">Quitar</button>
+    <label>Contactos (opcional)</label>
+    <div id="contactos-lista">
+      <% (contactos.length ? contactos : [{}]).forEach(c => { %>
+      <div class="fila-contacto fila-input-boton">
+        <input type="text" name="contacto_nombre[]" placeholder="Nombre" value="<%= c.nombre || '' %>">
+        <input type="text" name="contacto_telefono[]" placeholder="Teléfono" value="<%= c.telefono || '' %>">
+        <button type="button" class="btn secondary quitar-contacto">Quitar</button>
+      </div>
+      <% }) %>
     </div>
-    <input type="hidden" id="cliente_id" name="cliente_id" value="<%= prospecto.cliente_id || '' %>">
-    <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Si ya compró y está cargado en Clientes, buscalo acá y vinculalo — así se distingue en el mapa con otro color en vez de quedar mezclado con los que todavía son solo prospectos. Dejalo vacío si todavía es solo un prospecto.</p>
+    <button type="button" id="agregar-contacto" class="btn secondary">+ Agregar contacto</button>
   </div>
 
   <div>
     <label for="direccion">Dirección</label>
-    <div style="display:flex; gap:8px;">
-      <input type="text" id="direccion" name="direccion" value="<%= prospecto.direccion || '' %>" placeholder="Calle, número, ciudad (ej: Monteagudo 1599, Resistencia)" required style="flex:1;">
-      <button type="button" id="buscar-direccion" class="btn secondary" style="white-space:nowrap;">Buscar dirección</button>
+    <div class="fila-input-boton">
+      <input type="text" id="direccion" name="direccion" value="<%= prospecto.direccion || '' %>" placeholder="Calle, número, ciudad (ej: Monteagudo 1599, Resistencia)" required>
+      <button type="button" id="buscar-direccion" class="btn secondary">Buscar dirección</button>
     </div>
     <p id="estado-geo" style="color:var(--ink-soft); font-size:.82rem; margin:6px 0 0;">
       Buscá la dirección para ubicarla en el mapa, o arrastrá el marcador para ajustarla a mano.
@@ -66,88 +66,31 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 (function () {
-  // Buscador del campo "¿Ya es cliente?" — mismo patrón que el buscador
-  // de artículos en Compras: un input de texto con un panel flotante de
-  // coincidencias, y un campo oculto que guarda el id real elegido.
-  var CLIENTES = <%- JSON.stringify(clientes.map(c => ({ id: String(c.id), razon_social: c.razon_social, cuit_dni: c.cuit_dni || '' }))) %>;
-  var clienteBuscarInput = document.getElementById('cliente_buscar');
-  var clienteIdInput = document.getElementById('cliente_id');
-  var clienteBuscador = document.createElement('div');
-  clienteBuscador.className = 'buscador-flotante';
-  clienteBuscador.style.display = 'none';
-  document.body.appendChild(clienteBuscador);
+  // Repetidor de contactos: "+ Agregar contacto" clona una fila vacía;
+  // "Quitar" saca la fila donde se apretó el botón. Las filas vacías al
+  // guardar simplemente no se mandan como contacto (lo filtra el server).
+  var listaContactos = document.getElementById('contactos-lista');
+  var btnAgregarContacto = document.getElementById('agregar-contacto');
 
-  function etiquetaCliente(c) {
-    return c.razon_social + (c.cuit_dni ? ' — ' + c.cuit_dni : '');
+  function crearFilaContacto() {
+    var fila = document.createElement('div');
+    fila.className = 'fila-contacto fila-input-boton';
+    fila.innerHTML =
+      '<input type="text" name="contacto_nombre[]" placeholder="Nombre">' +
+      '<input type="text" name="contacto_telefono[]" placeholder="Teléfono">' +
+      '<button type="button" class="btn secondary quitar-contacto">Quitar</button>';
+    return fila;
   }
 
-  function buscarClientes(texto) {
-    var t = texto.trim().toLowerCase();
-    if (!t) return CLIENTES;
-    return CLIENTES.filter(function (c) {
-      return c.razon_social.toLowerCase().indexOf(t) !== -1 || c.cuit_dni.toLowerCase().indexOf(t) !== -1;
-    });
-  }
+  btnAgregarContacto.addEventListener('click', function () {
+    listaContactos.appendChild(crearFilaContacto());
+  });
 
-  function ocultarClienteBuscador() {
-    clienteBuscador.style.display = 'none';
-    clienteBuscador.innerHTML = '';
-  }
-
-  function fijarCliente(c) {
-    clienteIdInput.value = c ? c.id : '';
-    clienteBuscarInput.value = c ? etiquetaCliente(c) : '';
-  }
-
-  function mostrarClienteBuscador(coincidencias) {
-    clienteBuscador.innerHTML = '';
-    if (coincidencias.length === 0) {
-      var vacio = document.createElement('div');
-      vacio.style.cssText = 'padding:8px 12px; font-size:.85rem; color:var(--ink-soft);';
-      vacio.textContent = 'Sin resultados.';
-      clienteBuscador.appendChild(vacio);
-    } else {
-      coincidencias.slice(0, 30).forEach(function (c) {
-        var boton = document.createElement('button');
-        boton.type = 'button';
-        boton.textContent = etiquetaCliente(c);
-        // "mousedown" (no "click") para que se ejecute antes de que el
-        // input pierda el foco y el buscador se cierre solo.
-        boton.addEventListener('mousedown', function (e) {
-          e.preventDefault();
-          fijarCliente(c);
-          ocultarClienteBuscador();
-        });
-        clienteBuscador.appendChild(boton);
-      });
+  listaContactos.addEventListener('click', function (e) {
+    if (e.target.classList.contains('quitar-contacto')) {
+      e.target.closest('.fila-contacto').remove();
     }
-    var rect = clienteBuscarInput.getBoundingClientRect();
-    clienteBuscador.style.left = rect.left + 'px';
-    clienteBuscador.style.top = rect.bottom + 'px';
-    clienteBuscador.style.width = Math.max(rect.width, 240) + 'px';
-    clienteBuscador.style.display = 'block';
-  }
-
-  clienteBuscarInput.addEventListener('focus', function () {
-    mostrarClienteBuscador(buscarClientes(clienteBuscarInput.value));
   });
-  clienteBuscarInput.addEventListener('input', function () {
-    // si lo tipeado ya no coincide con el cliente elegido, se desvincula
-    // hasta que se elija uno de la lista de nuevo
-    var actual = CLIENTES.find(function (c) { return c.id === clienteIdInput.value; });
-    if (!actual || etiquetaCliente(actual) !== clienteBuscarInput.value) {
-      clienteIdInput.value = '';
-    }
-    mostrarClienteBuscador(buscarClientes(clienteBuscarInput.value));
-  });
-  clienteBuscarInput.addEventListener('blur', function () {
-    setTimeout(ocultarClienteBuscador, 150);
-  });
-  document.getElementById('cliente-quitar').addEventListener('click', function () {
-    fijarCliente(null);
-  });
-  window.addEventListener('scroll', function () { ocultarClienteBuscador(); }, true);
-  window.addEventListener('resize', ocultarClienteBuscador);
 
   var CENTRO_DEFECTO = [-27.4512, -58.9867]; // Resistencia, Chaco
   var latInput = document.getElementById('lat');
@@ -214,7 +157,9 @@
 
   // Un click en cualquier parte del mapa también mueve (o crea) el
   // marcador — para cuando ninguna opción de la búsqueda es la correcta,
-  // o directamente se prefiere marcar el punto a mano.
+  // o directamente se prefiere marcar el punto a mano. En celular, además
+  // de tocar en el mapa esto sirve como respaldo si el teclado tapa la
+  // lista de opciones.
   map.on('click', function (e) {
     ubicarMarcador(e.latlng.lat, e.latlng.lng, false);
     estadoGeo.textContent = 'Punto marcado a mano.';
@@ -246,20 +191,20 @@
           // es para poder corregir con un click en el mapa si no es así.
           ubicarMarcador(opciones[0].lat, opciones[0].lng, true);
           estadoGeo.textContent = '📍 ' + opciones[0].etiqueta + ' — si no es exacto, arrastrá el marcador o hacé click en el mapa.';
+          // En celular, después de buscar conviene bajar la vista hasta el
+          // mapa: el resultado quedó arriba, tapado por el teclado virtual
+          // que Android/iOS no cierran solos al tocar un botón.
+          document.getElementById('mapa-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
         } else {
           estadoGeo.textContent = 'Encontré ' + opciones.length + ' lugares posibles — elegí el correcto:';
           mostrarOpciones(opciones);
+          listaOpciones.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
       })
       .catch(function () {
         estadoGeo.textContent = 'No se pudo buscar la dirección ahora mismo. Marcá el punto a mano en el mapa.';
       });
   });
-
-  // El fetch de arriba manda JSON, así que hay que interceptar el submit
-  // normal del formulario solo para asegurarse de que las coordenadas ya
-  // estén en los campos ocultos — no bloquea el envío en ningún caso, un
-  // prospecto se puede guardar igual sin ubicación y ubicarlo después.
 })();
 </script>
 
