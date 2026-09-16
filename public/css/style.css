@@ -1,11 +1,22 @@
 :root {
-  --bg: #f5f7f4;
+  /* Paleta oficial Riomar Pescadería */
+  --navy: #1A2C4B;
+  --navy-deep: #101d33;
+  --blue: #46A3DB;
+  --blue-soft: #e9f4fb;
+  --orange: #F6A30B;
+  --orange-deep: #d88a05;
+  --orange-soft: #fef2dd;
+
+  --bg: #f3f5f8;
   --surface: #ffffff;
-  --ink: #10242e;
-  --ink-soft: #4c6470;
-  --accent: #0e7c86;
-  --accent-deep: #0b4f6c;
-  --line: #dce4e1;
+  --ink: #16232f;
+  --ink-soft: #5d6b78;
+  --line: #e2e7ec;
+
+  /* alias para compatibilidad con estilos existentes */
+  --accent: var(--orange);
+  --accent-deep: var(--orange-deep);
 }
 
 * { box-sizing: border-box; }
@@ -14,85 +25,211 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.5;
 }
 
-header.app {
-  background: var(--accent-deep);
+h1, h2, h3 {
+  font-family: "Bebas Neue", "Inter", -apple-system, sans-serif;
+  letter-spacing: .03em;
+  font-weight: 400;
+}
+
+h1 { font-size: 2rem; margin: 0 0 18px; color: var(--navy); }
+
+/* ---------- Layout general: sidebar + contenido ---------- */
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  align-items: stretch;
+}
+
+.sidebar {
+  width: 236px;
+  flex-shrink: 0;
+  background: var(--navy);
   color: #fff;
-  padding: 14px 20px;
+  display: flex;
+  flex-direction: column;
+  padding: 22px 0 16px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sidebar .brand {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 10px;
+  padding: 0 20px 20px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,.12);
+}
+
+.brand-logo { width: 34px; height: auto; display: block; flex-shrink: 0; }
+
+.brand-text {
+  font-family: "Bebas Neue", "Inter", sans-serif;
+  font-size: 1.35rem;
+  letter-spacing: .04em;
+  color: #fff;
+}
+
+nav.app { display: flex; flex-direction: column; gap: 3px; padding: 8px 12px; flex: 1; }
+
+nav.app a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #c9dae8;
+  text-decoration: none;
+  padding: 9px 11px;
+  border-radius: 11px;
+  font-size: 0.92rem;
+}
+
+.nav-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: rgba(255,255,255,.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+nav.app a.active, nav.app a:hover {
+  background: var(--orange);
+  color: #fff;
+}
+nav.app a.active .nav-icon, nav.app a:hover .nav-icon {
+  background: rgba(255,255,255,.2);
+}
+nav.app a.active .nav-label { font-weight: 600; }
+
+.sidebar-user {
+  margin-top: auto;
+  padding: 16px 20px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #c9dae8;
+  font-size: 0.85rem;
+  border-top: 1px solid rgba(255,255,255,.12);
   flex-wrap: wrap;
 }
 
-header.app .brand { font-weight: 700; font-size: 1.1rem; }
-
-nav.app { display: flex; gap: 4px; flex-wrap: wrap; }
-
-nav.app a {
-  color: #d9eef0;
-  text-decoration: none;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 0.92rem;
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--orange);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .8rem;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
-nav.app a.active, nav.app a:hover { background: rgba(255,255,255,0.15); color: #fff; }
+.user-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-main { max-width: 920px; margin: 0 auto; padding: 24px 20px 60px; }
+.logout-btn {
+  color: #fff !important;
+  border-color: rgba(255,255,255,.35) !important;
+  font-size: .8rem;
+  padding: 5px 12px;
+}
 
-h1 { font-size: 1.5rem; margin: 0 0 18px; }
+.content-area { flex: 1; min-width: 0; }
+
+main { max-width: 960px; margin: 0 auto; padding: 32px 28px 60px; }
+
+/* Páginas previas al login (sin sidebar): login, configuración inicial */
+body > header.app {
+  background: var(--navy);
+  color: #fff;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+}
+body > header.app .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: "Bebas Neue", "Inter", sans-serif;
+  font-size: 1.35rem;
+  letter-spacing: .04em;
+}
+body > header.app .brand-logo { width: 30px; height: auto; }
+body > header.app + main { margin: 40px auto; }
+
+/* ---------- Componentes ---------- */
 
 .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
 
-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
-th { background: #eef2ef; font-size: 0.75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); }
+table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(22,35,47,.04); }
+th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
+th { background: var(--bg); font-size: 0.72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); font-weight: 600; }
 tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--blue-soft); }
 
 .btn {
   display: inline-block;
-  background: var(--accent);
+  background: var(--orange);
   color: #fff;
   border: none;
-  padding: 9px 16px;
-  border-radius: 6px;
+  padding: 10px 18px;
+  border-radius: 10px;
   text-decoration: none;
   font-size: 0.92rem;
+  font-weight: 600;
   cursor: pointer;
 }
-.btn:hover { background: var(--accent-deep); }
-.btn.secondary { background: transparent; color: var(--accent-deep); border: 1px solid var(--line); }
+.btn:hover { background: var(--orange-deep); }
+.btn.secondary { background: transparent; color: var(--navy); border: 1px solid var(--line); font-weight: 500; }
+.btn.secondary:hover { background: var(--bg); }
 
 form.card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 20px;
+  border-radius: 18px;
+  padding: 22px;
   max-width: 520px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  box-shadow: 0 1px 3px rgba(22,35,47,.04);
 }
 
 label { font-size: 0.85rem; color: var(--ink-soft); display: block; margin-bottom: 4px; }
 input[type=text], input[type=number], input[type=date], input[type=password], select, textarea {
   width: 100%;
-  padding: 8px 10px;
+  padding: 9px 11px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 9px;
   font-size: 0.95rem;
   font-family: inherit;
+  background: var(--surface);
+  color: var(--ink);
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-soft);
 }
 .check-row { display: flex; align-items: center; gap: 8px; }
 .check-row input { width: auto; }
 
+ul.plain { list-style: none; margin: 0; padding: 0; }
+
 .empty { color: var(--ink-soft); padding: 40px 0; text-align: center; }
 
-.pendiente { background: var(--surface); border: 1px dashed var(--line); border-radius: 10px; padding: 28px; color: var(--ink-soft); }
+.pendiente { background: var(--surface); border: 1px dashed var(--line); border-radius: 16px; padding: 28px; color: var(--ink-soft); }
 
 .mono { font-family: ui-monospace, "IBM Plex Mono", monospace; }
 
@@ -103,8 +240,8 @@ tr[hidden] { display: none !important; }
   z-index: 1000;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(16, 36, 46, 0.15);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(16, 30, 46, 0.16);
   max-height: 260px;
   overflow-y: auto;
 }
@@ -121,20 +258,46 @@ tr[hidden] { display: none !important; }
   color: var(--ink);
 }
 .buscador-flotante button:last-child { border-bottom: none; }
-.buscador-flotante button:hover, .buscador-flotante button:focus { background: #eef2ef; }
+.buscador-flotante button:hover, .buscador-flotante button:focus { background: var(--bg); }
 
-.badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .78rem; font-weight: 600; }
-.badge.confirmada, .badge.aplicado { background: #e3f3ef; color: var(--accent-deep); }
-.badge.borrador { background: #fdf3e3; color: #8a5a12; }
-.badge.no-aplicado { background: #eef2ef; color: var(--ink-soft); }
+.badge { display: inline-block; padding: 3px 11px; border-radius: 999px; font-size: .78rem; font-weight: 600; }
+.badge.confirmada, .badge.aplicado { background: var(--blue-soft); color: var(--navy); }
+.badge.borrador { background: var(--orange-soft); color: #8a5a12; }
+.badge.no-aplicado { background: var(--bg); color: var(--ink-soft); }
 .badge.cliente { background: #e2f3e6; color: #1e6b34; }
-.badge.prospecto { background: #fdf0dc; color: #b5650b; }
-.badge.emitido { background: #fdf3e3; color: #8a5a12; }
-.badge.entregado { background: #e3edfa; color: #1e4f8a; }
-.badge.cobrado { background: #e3f3ef; color: var(--accent-deep); }
+.badge.prospecto { background: var(--orange-soft); color: #b5650b; }
+.badge.emitido { background: var(--orange-soft); color: #8a5a12; }
+.badge.entregado { background: var(--blue-soft); color: #1e4f8a; }
+.badge.cobrado { background: #e2f3e6; color: #1e6b34; }
 
-tr.fila-cambio td { background: #fdf3e3; }
+tr.fila-cambio td { background: var(--orange-soft); }
 tr.fila-cambio td:nth-child(4) { color: #8a5a12; }
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 880px) {
+  .app-shell { flex-direction: column; }
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: static;
+    flex-direction: row;
+    align-items: center;
+    padding: 10px 14px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .sidebar .brand { border-bottom: none; padding: 0; margin: 0 8px 0 0; }
+  .brand-logo { width: 26px; }
+  .brand-text { font-size: 1.1rem; }
+  nav.app { flex-direction: row; flex-wrap: wrap; padding: 0; flex: 1; }
+  nav.app a { padding: 6px 9px; }
+  .nav-icon { width: 24px; height: 24px; }
+  .nav-label { display: none; }
+  .sidebar-user { margin-top: 0; border-top: none; padding: 0; }
+  .user-name { display: none; }
+  main { padding: 20px 16px 48px; }
+}
 
 @media (max-width: 560px) {
   main { padding: 16px; }
