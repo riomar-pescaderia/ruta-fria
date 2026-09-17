@@ -34,7 +34,6 @@
       <th>Precio efectivo</th>
       <th>Precio de lista</th>
       <th>Orden en listado PDF</th>
-      <th></th>
     </tr>
   </thead>
   <tbody>
@@ -54,12 +53,6 @@
             <option value="2" <%= a.prioridad_listado === 2 ? 'selected' : '' %>>Segundo orden</option>
             <option value="3" <%= a.prioridad_listado === 3 ? 'selected' : '' %>>Tercer orden</option>
           </select>
-        </form>
-      </td>
-      <td data-label="" class="col-acciones-lista" style="display:flex; gap:8px; flex-wrap:wrap;">
-        <a class="btn secondary" href="/articulos/<%= a.id %>/editar">Editar</a>
-        <form method="post" action="/articulos/<%= a.id %>/eliminar" style="display:inline; margin:0;" onsubmit="return confirm('¿Eliminar este artículo? No se puede deshacer.');">
-          <button type="submit" class="btn secondary" style="color:#a33;">Eliminar</button>
         </form>
       </td>
     </tr>

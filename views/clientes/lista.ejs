@@ -24,7 +24,6 @@
       <th>Teléfono</th>
       <th>Condición IVA</th>
       <th>Condición de pago</th>
-      <th></th>
     </tr>
   </thead>
   <tbody>
@@ -35,15 +34,6 @@
       <td data-label="Teléfono" class="mono col-mobile-oculta"><%= c.telefono || '—' %></td>
       <td data-label="Condición IVA" class="col-mobile-oculta"><%= c.condicion_iva || '—' %></td>
       <td data-label="Condición de pago" class="col-mobile-oculta"><%= c.condicion_pago || '—' %></td>
-      <td data-label="" class="col-acciones-lista" style="display:flex; gap:8px; flex-wrap:wrap;">
-        <a class="btn secondary" href="/clientes/<%= c.id %>/editar">Editar</a>
-        <% if (c.condicion_pago === 'cuenta_corriente' && usuario && (usuario.esAdmin || (usuario.accesos && usuario.accesos.cuenta_corriente))) { %>
-          <a class="btn secondary" href="/cuenta-corriente/<%= c.id %>">Cuenta corriente</a>
-        <% } %>
-        <form method="post" action="/clientes/<%= c.id %>/eliminar" style="display:inline; margin:0;" onsubmit="return confirm('¿Eliminar este cliente? No se puede deshacer.');">
-          <button type="submit" class="btn secondary" style="color:#a33;">Eliminar</button>
-        </form>
-      </td>
     </tr>
     <% }) %>
   </tbody>

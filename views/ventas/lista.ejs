@@ -21,7 +21,6 @@
       <th>Forma de pago</th>
       <th>Total</th>
       <th>Estado</th>
-      <th></th>
     </tr>
   </thead>
   <tbody>
@@ -35,7 +34,6 @@
       <td data-label="Forma de pago"><%= ETIQUETAS_FORMA_PAGO[v.forma_pago] || v.forma_pago %></td>
       <td data-label="Total" class="mono">$<%= Number(v.total).toFixed(2) %></td>
       <td data-label="Estado"><span class="badge <%= v.estado %>"><%= ETIQUETAS_ESTADO[v.estado] || v.estado %></span></td>
-      <td data-label="" class="col-acciones-lista"><a class="btn secondary" href="/ventas/<%= v.id %>">Ver</a></td>
     </tr>
     <% }) %>
   </tbody>

@@ -178,6 +178,12 @@ th { background: var(--bg); font-size: 0.72rem; text-transform: uppercase; lette
 tr:last-child td { border-bottom: none; }
 tbody tr:hover td { background: var(--blue-soft); }
 
+/* Filas "tocables": ventas/remitos, clientes, artículos y
+   visitas/prospectos ya no tienen columna de Ver/Editar/Eliminar — tocar
+   o clickear la fila (o el nombre) abre directo el perfil, ahí es donde
+   viven esas acciones. Vale para celular y para pantallas grandes. */
+tr[data-href] { cursor: pointer; }
+
 .btn {
   display: inline-block;
   background: var(--orange);
@@ -371,15 +377,6 @@ tr.fila-cambio td:nth-child(4) { color: #8a5a12; }
   td { border: none; padding: 4px 0; }
   td::before { content: attr(data-label); display: block; font-size: 0.72rem; color: var(--ink-soft); text-transform: uppercase; }
 
-  /* Listas "tocables": ventas/remitos, clientes, artículos y
-     visitas/prospectos. Tocar la fila abre directo el perfil (ver
-     public/js/filas-clickeables.js), así que acá ya no hace falta mostrar
-     "Ver"/"Editar"/"Eliminar" aparte — esas acciones quedan disponibles
-     una vez adentro del perfil. En pantallas más anchas esta clase no hace
-     nada y los botones se siguen viendo como antes. */
-  tr[data-href] { cursor: pointer; }
-  .col-acciones-lista { display: none; }
-
   /* Columnas secundarias que en el celular se ocultan de la lista (siguen
      estando disponibles adentro del perfil de cada artículo/cliente). */
   .col-mobile-oculta { display: none; }
@@ -419,28 +416,37 @@ tr.fila-cambio td:nth-child(4) { color: #8a5a12; }
   }
 
   /* Clientes: recuadros solo con el nombre — tocar uno abre el perfil
-     completo (editable) del cliente. */
+     completo (editable) del cliente. Una franja angosta por cliente, a lo
+     ancho de toda la pantalla (no una grilla de cuadraditos), para que el
+     nombre entre en un solo renglón en vez de partirse en dos o tres
+     líneas. */
   #tabla-clientes tbody {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
-    gap: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
   #tabla-clientes tr {
     display: flex;
     align-items: center;
-    justify-content: center;
-    text-align: center;
-    min-height: 60px;
+    justify-content: space-between;
+    text-align: left;
     border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 14px 10px;
+    border-radius: 12px;
+    padding: 12px 16px;
     background: var(--surface);
     box-shadow: 0 1px 3px rgba(22,35,47,.04);
+  }
+  #tabla-clientes tr::after {
+    content: '›';
+    color: var(--ink-soft);
+    font-size: 1.2rem;
+    line-height: 1;
+    margin-left: 10px;
   }
   #tabla-clientes td[data-label="Razón social"] {
     padding: 0;
     font-weight: 600;
-    font-size: .92rem;
+    font-size: .95rem;
   }
   #tabla-clientes td[data-label="Razón social"]::before { display: none; }
 }
