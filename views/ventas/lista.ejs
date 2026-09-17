@@ -28,14 +28,14 @@
     <% const ETIQUETAS_FORMA_PAGO = { efectivo: 'Efectivo', transferencia: 'Transferencia', cuenta_corriente: 'Cuenta corriente' };
        const ETIQUETAS_ESTADO = { emitido: 'Emitido', entregado: 'Entregado', cobrado: 'Cobrado' }; %>
     <% ventas.forEach(v => { %>
-    <tr data-buscar="<%= (v.cliente_nombre + ' ' + v.numero_remito).toLowerCase() %>">
+    <tr data-buscar="<%= (v.cliente_nombre + ' ' + v.numero_remito).toLowerCase() %>" data-href="/ventas/<%= v.id %>">
       <td data-label="Fecha"><%= new Date(v.fecha).toLocaleDateString('es-AR') %></td>
       <td data-label="Nº remito" class="mono">#<%= v.numero_remito %></td>
       <td data-label="Cliente"><%= v.cliente_nombre %></td>
       <td data-label="Forma de pago"><%= ETIQUETAS_FORMA_PAGO[v.forma_pago] || v.forma_pago %></td>
       <td data-label="Total" class="mono">$<%= Number(v.total).toFixed(2) %></td>
       <td data-label="Estado"><span class="badge <%= v.estado %>"><%= ETIQUETAS_ESTADO[v.estado] || v.estado %></span></td>
-      <td data-label=""><a class="btn secondary" href="/ventas/<%= v.id %>">Ver</a></td>
+      <td data-label="" class="col-acciones-lista"><a class="btn secondary" href="/ventas/<%= v.id %>">Ver</a></td>
     </tr>
     <% }) %>
   </tbody>

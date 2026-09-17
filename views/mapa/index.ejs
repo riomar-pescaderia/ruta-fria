@@ -108,15 +108,28 @@
     var toggleCalor = document.getElementById('toggle-calor');
     var leyendaCalor = document.getElementById('leyenda-calor');
     if (typeof L.heatLayer === 'function' && puntosConVisitas.length > 0) {
-      var maxVisitas = puntosConVisitas.reduce(function (max, p) { return Math.max(max, p.visitas); }, 1);
+      // La intensidad de cada punto ya NO se calcula en relación al local más
+      // visitado de todos (antes era así, y por eso un local con 2 o 3
+      // visitas se veía casi invisible al lado de uno con 20). Ahora se usa
+      // una escala fija: con la primera visita ya se nota, con la segunda
+      // se nota claramente, y a partir de VISITAS_INTENSIDAD_MAXIMA el color
+      // queda al tope (rojo) aunque haya todavía más visitas — así el mapa
+      // no depende de cuál sea el local más visitado en cada momento.
+      var VISITAS_INTENSIDAD_MAXIMA = 5;
+      var INTENSIDAD_PRIMERA_VISITA = 0.35;
+      function intensidadPorVisitas(visitas) {
+        if (visitas >= VISITAS_INTENSIDAD_MAXIMA) return 1;
+        var progreso = (visitas - 1) / (VISITAS_INTENSIDAD_MAXIMA - 1);
+        return INTENSIDAD_PRIMERA_VISITA + (1 - INTENSIDAD_PRIMERA_VISITA) * progreso;
+      }
       var capaCalor = L.heatLayer(
-        puntosConVisitas.map(function (p) { return [p.lat, p.lng, p.visitas]; }),
+        puntosConVisitas.map(function (p) { return [p.lat, p.lng, intensidadPorVisitas(p.visitas)]; }),
         {
           radius: 35,
           blur: 25,
           maxZoom: 17,
-          max: maxVisitas,
-          gradient: { 0.2: '#2b6cb0', 0.4: '#38a3a5', 0.6: '#ffd166', 0.8: '#f4845f', 1.0: '#d7263d' },
+          max: 1,
+          gradient: { 0.15: '#2b6cb0', 0.35: '#38a3a5', 0.55: '#ffd166', 0.75: '#f4845f', 1.0: '#d7263d' },
         }
       );
       if (toggleCalor.checked) capaCalor.addTo(map);

@@ -52,4 +52,12 @@
   </div>
 </form>
 
+<% if (articulo.id) { %>
+<div style="max-width:520px; margin-top:16px;">
+  <form method="post" action="/articulos/<%= articulo.id %>/eliminar" style="margin:0;" onsubmit="return confirm('¿Eliminar este artículo? No se puede deshacer.');">
+    <button type="submit" class="btn secondary" style="color:#a33;">Eliminar artículo</button>
+  </form>
+</div>
+<% } %>
+
 <%- include('../partials/foot') %>

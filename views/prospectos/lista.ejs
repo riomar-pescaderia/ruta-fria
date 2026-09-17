@@ -30,16 +30,16 @@
   </thead>
   <tbody>
     <% prospectos.forEach(p => { %>
-    <tr data-buscar="<%= (p.nombre + ' ' + p.direccion).toLowerCase() %>">
+    <tr data-buscar="<%= (p.nombre + ' ' + p.direccion).toLowerCase() %>" data-href="/prospectos/<%= p.id %>">
       <td data-label="Nombre del negocio"><a href="/prospectos/<%= p.id %>"><%= p.nombre %></a></td>
       <td data-label="Estado">
         <% if (p.cliente_id) { %><span class="badge cliente">Cliente</span><% } else { %><span class="badge prospecto">Prospecto</span><% } %>
       </td>
-      <td data-label="Dirección"><%= p.direccion %></td>
-      <td data-label="Teléfono"><%= p.telefono_principal || '—' %></td>
+      <td data-label="Dirección" class="col-mobile-oculta"><%= p.direccion %></td>
+      <td data-label="Teléfono" class="col-mobile-oculta"><%= p.telefono_principal || '—' %></td>
       <td data-label="Visitas" class="mono"><%= p.cantidad_visitas %></td>
-      <td data-label="Última visita"><%= p.ultima_visita ? new Date(p.ultima_visita).toLocaleDateString('es-AR') : '—' %></td>
-      <td data-label="" style="display:flex; gap:8px; flex-wrap:wrap;">
+      <td data-label="Última visita" class="col-mobile-oculta"><%= p.ultima_visita ? new Date(p.ultima_visita).toLocaleDateString('es-AR') : '—' %></td>
+      <td data-label="" class="col-acciones-lista" style="display:flex; gap:8px; flex-wrap:wrap;">
         <a class="btn secondary" href="/prospectos/<%= p.id %>">Ver</a>
         <a class="btn secondary" href="/prospectos/<%= p.id %>/editar">Editar</a>
         <form method="post" action="/prospectos/<%= p.id %>/eliminar" style="display:inline; margin:0;" onsubmit="return confirm('¿Eliminar este prospecto? Se deja de mostrar en el mapa y la lista, pero no se pierde el historial de visitas.');">

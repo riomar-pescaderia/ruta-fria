@@ -19,12 +19,17 @@ async function listarClientes() {
 }
 
 // El formulario manda los contactos como listas paralelas
-// (contacto_nombre[], contacto_telefono[]) — una posición por fila. Se
-// arma un array de {nombre, telefono} descartando las filas totalmente
-// vacías (p. ej. una fila que se agregó de más y se dejó sin completar).
+// (contacto_nombre[], contacto_telefono[]) — una posición por fila. El
+// parser de body (qs, con "extended: true" en server.js) ya interpreta esa
+// notación con corchetes como un array y lo deja en la clave SIN los
+// corchetes (body.contacto_nombre, no body['contacto_nombre[]']) — antes
+// se leía la clave con corchetes, que nunca existía, así que los contactos
+// quedaban vacíos aunque se hubieran tipeado. Se arma un array de
+// {nombre, telefono} descartando las filas totalmente vacías (p. ej. una
+// fila que se agregó de más y se dejó sin completar).
 function leerContactos(body) {
-  let nombres = body['contacto_nombre[]'];
-  let telefonos = body['contacto_telefono[]'];
+  let nombres = body.contacto_nombre;
+  let telefonos = body.contacto_telefono;
   if (nombres === undefined && telefonos === undefined) return [];
   if (!Array.isArray(nombres)) nombres = nombres === undefined ? [] : [nombres];
   if (!Array.isArray(telefonos)) telefonos = telefonos === undefined ? [] : [telefonos];

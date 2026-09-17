@@ -57,11 +57,22 @@
     <label for="notas">Notas</label>
     <textarea id="notas" name="notas" rows="2"><%= cliente.notas || '' %></textarea>
   </div>
-  <div>
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
     <button class="btn" type="submit">Guardar</button>
     <a class="btn secondary" href="/clientes">Cancelar</a>
   </div>
 </form>
+
+<% if (cliente.id) { %>
+<div style="max-width:520px; margin-top:16px; display:flex; gap:8px; flex-wrap:wrap;">
+  <% if (cliente.condicion_pago === 'cuenta_corriente' && usuario && (usuario.esAdmin || (usuario.accesos && usuario.accesos.cuenta_corriente))) { %>
+    <a class="btn secondary" href="/cuenta-corriente/<%= cliente.id %>">Cuenta corriente</a>
+  <% } %>
+  <form method="post" action="/clientes/<%= cliente.id %>/eliminar" style="margin:0;" onsubmit="return confirm('¿Eliminar este cliente? No se puede deshacer.');">
+    <button type="submit" class="btn secondary" style="color:#a33;">Eliminar cliente</button>
+  </form>
+</div>
+<% } %>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>

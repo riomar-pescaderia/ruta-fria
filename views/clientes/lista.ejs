@@ -29,13 +29,13 @@
   </thead>
   <tbody>
     <% clientes.forEach(c => { %>
-    <tr data-buscar="<%= (c.razon_social + ' ' + (c.nombre_contacto || '') + ' ' + (c.cuit_dni || '')).toLowerCase() %>">
+    <tr data-buscar="<%= (c.razon_social + ' ' + (c.nombre_contacto || '') + ' ' + (c.cuit_dni || '')).toLowerCase() %>" data-href="/clientes/<%= c.id %>/editar">
       <td data-label="Razón social"><%= c.razon_social %></td>
-      <td data-label="Contacto"><%= c.nombre_contacto || '—' %></td>
-      <td data-label="Teléfono" class="mono"><%= c.telefono || '—' %></td>
-      <td data-label="Condición IVA"><%= c.condicion_iva || '—' %></td>
-      <td data-label="Condición de pago"><%= c.condicion_pago || '—' %></td>
-      <td data-label="" style="display:flex; gap:8px; flex-wrap:wrap;">
+      <td data-label="Contacto" class="col-mobile-oculta"><%= c.nombre_contacto || '—' %></td>
+      <td data-label="Teléfono" class="mono col-mobile-oculta"><%= c.telefono || '—' %></td>
+      <td data-label="Condición IVA" class="col-mobile-oculta"><%= c.condicion_iva || '—' %></td>
+      <td data-label="Condición de pago" class="col-mobile-oculta"><%= c.condicion_pago || '—' %></td>
+      <td data-label="" class="col-acciones-lista" style="display:flex; gap:8px; flex-wrap:wrap;">
         <a class="btn secondary" href="/clientes/<%= c.id %>/editar">Editar</a>
         <% if (c.condicion_pago === 'cuenta_corriente' && usuario && (usuario.esAdmin || (usuario.accesos && usuario.accesos.cuenta_corriente))) { %>
           <a class="btn secondary" href="/cuenta-corriente/<%= c.id %>">Cuenta corriente</a>

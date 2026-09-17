@@ -39,14 +39,14 @@
   </thead>
   <tbody>
     <% articulos.forEach(a => { %>
-    <tr data-buscar="<%= (a.codigo + ' ' + a.nombre).toLowerCase() %>">
+    <tr data-buscar="<%= (a.codigo + ' ' + a.nombre).toLowerCase() %>" data-href="/articulos/<%= a.id %>/editar">
       <td data-label="Código" class="mono"><%= a.codigo %></td>
       <td data-label="Nombre"><%= a.nombre %></td>
-      <td data-label="Unidad"><%= a.unidad %></td>
-      <td data-label="Costo" class="mono"<% if (Number(a.unidad) !== 1) { %> title="$<%= Number(a.costo).toFixed(2) %>/kg ÷ <%= a.unidad %>"<% } %>>$<%= a.costoPorUnidad.toFixed(2) %></td>
-      <td data-label="Precio efectivo" class="mono">$<%= a.precioEfectivo.toFixed(0) %></td>
-      <td data-label="Precio de lista" class="mono">$<%= a.precioLista.toFixed(0) %></td>
-      <td data-label="Orden en listado PDF">
+      <td data-label="Unidad" class="col-mobile-oculta"><%= a.unidad %></td>
+      <td data-label="Costo" class="mono col-mobile-oculta"<% if (Number(a.unidad) !== 1) { %> title="$<%= Number(a.costo).toFixed(2) %>/kg ÷ <%= a.unidad %>"<% } %>>$<%= a.costoPorUnidad.toFixed(2) %></td>
+      <td data-label="Precio efectivo" data-corto="Efvo" class="mono">$<%= a.precioEfectivo.toFixed(0) %></td>
+      <td data-label="Precio de lista" data-corto="Lista" class="mono">$<%= a.precioLista.toFixed(0) %></td>
+      <td data-label="Orden en listado PDF" class="col-mobile-oculta">
         <form method="post" action="/articulos/<%= a.id %>/prioridad" style="margin:0;">
           <select name="prioridad_listado" onchange="this.form.submit()" style="max-width:150px;">
             <option value="" <%= !a.prioridad_listado ? 'selected' : '' %>>Sin prioridad</option>
@@ -56,7 +56,7 @@
           </select>
         </form>
       </td>
-      <td data-label="" style="display:flex; gap:8px; flex-wrap:wrap;">
+      <td data-label="" class="col-acciones-lista" style="display:flex; gap:8px; flex-wrap:wrap;">
         <a class="btn secondary" href="/articulos/<%= a.id %>/editar">Editar</a>
         <form method="post" action="/articulos/<%= a.id %>/eliminar" style="display:inline; margin:0;" onsubmit="return confirm('¿Eliminar este artículo? No se puede deshacer.');">
           <button type="submit" class="btn secondary" style="color:#a33;">Eliminar</button>

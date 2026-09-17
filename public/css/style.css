@@ -370,4 +370,77 @@ tr.fila-cambio td:nth-child(4) { color: #8a5a12; }
   tr { border-bottom: 2px solid var(--line); padding: 8px 0; }
   td { border: none; padding: 4px 0; }
   td::before { content: attr(data-label); display: block; font-size: 0.72rem; color: var(--ink-soft); text-transform: uppercase; }
+
+  /* Listas "tocables": ventas/remitos, clientes, artículos y
+     visitas/prospectos. Tocar la fila abre directo el perfil (ver
+     public/js/filas-clickeables.js), así que acá ya no hace falta mostrar
+     "Ver"/"Editar"/"Eliminar" aparte — esas acciones quedan disponibles
+     una vez adentro del perfil. En pantallas más anchas esta clase no hace
+     nada y los botones se siguen viendo como antes. */
+  tr[data-href] { cursor: pointer; }
+  .col-acciones-lista { display: none; }
+
+  /* Columnas secundarias que en el celular se ocultan de la lista (siguen
+     estando disponibles adentro del perfil de cada artículo/cliente). */
+  .col-mobile-oculta { display: none; }
+
+  /* Artículos: renglón compacto en vez de una tarjeta con 8 líneas por
+     artículo — solo código, nombre y los dos precios, en pocas líneas. */
+  #tabla-articulos tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 14px;
+    padding: 10px 2px;
+  }
+  #tabla-articulos td { padding: 0; }
+  #tabla-articulos td[data-label="Código"] {
+    order: 1; flex: 0 0 auto;
+    font-size: .72rem; color: var(--ink-soft);
+  }
+  #tabla-articulos td[data-label="Código"]::before { display: none; }
+  #tabla-articulos td[data-label="Nombre"] {
+    order: 2; flex: 1 1 100%;
+    font-weight: 600; font-size: .92rem;
+  }
+  #tabla-articulos td[data-label="Nombre"]::before { display: none; }
+  #tabla-articulos td[data-label="Precio efectivo"],
+  #tabla-articulos td[data-label="Precio de lista"] {
+    order: 3;
+    font-size: .82rem;
+  }
+  #tabla-articulos td[data-label="Precio efectivo"]::before,
+  #tabla-articulos td[data-label="Precio de lista"]::before {
+    content: attr(data-corto) ": ";
+    display: inline;
+    font-size: .72rem;
+    text-transform: none;
+    color: var(--ink-soft);
+  }
+
+  /* Clientes: recuadros solo con el nombre — tocar uno abre el perfil
+     completo (editable) del cliente. */
+  #tabla-clientes tbody {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+    gap: 10px;
+  }
+  #tabla-clientes tr {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-height: 60px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px 10px;
+    background: var(--surface);
+    box-shadow: 0 1px 3px rgba(22,35,47,.04);
+  }
+  #tabla-clientes td[data-label="Razón social"] {
+    padding: 0;
+    font-weight: 600;
+    font-size: .92rem;
+  }
+  #tabla-clientes td[data-label="Razón social"]::before { display: none; }
 }
