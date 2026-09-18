@@ -89,7 +89,7 @@
   </table>
   </div>
   <p style="color:var(--ink-soft); font-size:.85rem; margin-top:-8px;">
-    Al elegir un artículo se sugiere su precio según la forma de pago elegida arriba — se puede pisar a mano en cualquier renglón, y ese cambio no se vuelve a tocar solo.
+    Al elegir un artículo (o cambiarlo por otro) se completa su precio según la forma de pago elegida arriba, y cambiar la forma de pago actualiza el precio de todos los renglones ya cargados. Se puede pisar el precio a mano en cualquier renglón después de elegir el artículo — ese cambio se mantiene hasta que se vuelva a elegir un artículo en esa fila o se cambie la forma de pago.
   </p>
 
   <div>
@@ -152,9 +152,15 @@
     tr.querySelector('.f-articulo-buscar').value = articulo ? etiquetaArticulo(articulo) : '';
     if (articulo) tr.querySelector('.f-codigo').value = articulo.codigo;
     var precioInput = tr.querySelector('.f-precio');
-    // Solo sugiere el precio si el renglón todavía no tenía uno cargado —
-    // así no pisa un precio que ya se había ajustado a mano.
-    if (articulo && !precioInput.value) {
+    // Siempre se completa con el precio sugerido del artículo actual y la
+    // forma de pago vigente — tanto la primera vez que se elige un
+    // artículo en la fila como cuando se lo cambia por otro (antes, si la
+    // fila ya tenía un precio cargado, se dejaba el precio del artículo
+    // viejo sin actualizar). Si se quiere un precio distinto, se pisa a
+    // mano DESPUÉS de elegir el artículo — ese cambio se mantiene hasta
+    // que se vuelva a elegir un artículo en esa fila o cambie la forma de
+    // pago (ver el listener de "forma_pago" más abajo).
+    if (articulo) {
       precioInput.value = precioSugerido(articulo);
     }
     actualizarTotales();
@@ -279,6 +285,18 @@
   }, true);
   window.addEventListener('scroll', function () { if (filaActiva) ocultarBuscador(); }, true);
   window.addEventListener('resize', ocultarBuscador);
+
+  // Al cambiar la forma de pago, se recalcula el precio de todos los
+  // renglones que ya tienen un artículo elegido — antes este cambio no
+  // tocaba los renglones ya cargados y quedaban con el precio de la forma
+  // de pago anterior.
+  formaPagoSelect.addEventListener('change', function () {
+    tbody.querySelectorAll('tr').forEach(function (tr) {
+      var articulo = articulosPorId[tr.querySelector('.f-articulo-id').value];
+      if (articulo) tr.querySelector('.f-precio').value = precioSugerido(articulo);
+    });
+    actualizarTotales();
+  });
 
   // Buscador del cliente — mismo patrón que el de artículo, pero para un
   // único campo obligatorio en vez de una tabla de renglones.

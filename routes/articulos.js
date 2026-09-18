@@ -7,6 +7,16 @@ const { parseNumeroAr } = require('../lib/numeros');
 
 const router = express.Router();
 
+// Campo vacío = sin precio manual (se sigue calculando con la fórmula);
+// "0" es un valor válido a propósito (ver lib/precios.js), por eso no se
+// puede usar "|| null" acá (0 es falsy en JS y se perdería).
+function leerPrecioManual(body) {
+  const raw = (body.precio_manual || '').trim();
+  if (raw === '') return null;
+  const n = Number(raw.replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+}
+
 router.get('/', async (req, res, next) => {
   try {
     const [{ rows: articulos }, config] = await Promise.all([
@@ -135,9 +145,9 @@ router.post('/', async (req, res, next) => {
   try {
     const a = req.body;
     await pool.query(
-      `insert into articulos (codigo, nombre, unidad, costo, aplica_iva, aplica_iibb, flete_pct, margen_pct, stock)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [a.codigo, a.nombre, a.unidad || 1, a.costo || 0, !!a.aplica_iva, !!a.aplica_iibb, a.flete_pct || 0, a.margen_pct || 0, a.stock || null]
+      `insert into articulos (codigo, nombre, unidad, costo, aplica_iva, aplica_iibb, flete_pct, margen_pct, stock, precio_manual)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [a.codigo, a.nombre, a.unidad || 1, a.costo || 0, !!a.aplica_iva, !!a.aplica_iibb, a.flete_pct || 0, a.margen_pct || 0, a.stock || null, leerPrecioManual(a)]
     );
     res.redirect('/articulos');
   } catch (err) { next(err); }
@@ -154,11 +164,12 @@ router.get('/:id/editar', async (req, res, next) => {
 router.post('/:id', async (req, res, next) => {
   try {
     const a = req.body;
-    // el costo NO se edita a mano acá — llega desde Compras (facturas de proveedores)
+    // el costo NO se edita a mano acá — llega desde Compras (facturas de proveedores).
+    // El precio sí: precio_manual pisa el cálculo por costo+margen (ver lib/precios.js).
     await pool.query(
       `update articulos set codigo=$1, nombre=$2, unidad=$3, aplica_iva=$4, aplica_iibb=$5,
-        flete_pct=$6, margen_pct=$7, stock=$8 where id=$9`,
-      [a.codigo, a.nombre, a.unidad || 1, !!a.aplica_iva, !!a.aplica_iibb, a.flete_pct || 0, a.margen_pct || 0, a.stock || null, req.params.id]
+        flete_pct=$6, margen_pct=$7, stock=$8, precio_manual=$9 where id=$10`,
+      [a.codigo, a.nombre, a.unidad || 1, !!a.aplica_iva, !!a.aplica_iibb, a.flete_pct || 0, a.margen_pct || 0, a.stock || null, leerPrecioManual(a), req.params.id]
     );
     res.redirect('/articulos');
   } catch (err) { next(err); }

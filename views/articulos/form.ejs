@@ -43,6 +43,11 @@
     <input type="number" step="0.01" id="margen_pct" name="margen_pct" value="<%= articulo.margen_pct || 0 %>">
   </div>
   <div>
+    <label for="precio_manual">Precio en efectivo a mano (opcional)</label>
+    <input type="number" step="0.01" min="0" id="precio_manual" name="precio_manual" value="<%= (articulo.precio_manual !== null && articulo.precio_manual !== undefined) ? articulo.precio_manual : '' %>" placeholder="Vacío = se calcula solo con costo + margen">
+    <p style="color:var(--ink-soft); font-size:.85rem; margin:6px 0 0;">Si lo completás, se usa este precio en vez de calcularlo con costo + margen (el precio de lista se sigue calculando a partir de este). Se puede poner $0 a propósito: el artículo aparece como "Sin stock" en el listado de precios en PDF. Dejalo vacío para volver a que se calcule solo.</p>
+  </div>
+  <div>
     <label for="stock">Stock aproximado (opcional)</label>
     <input type="number" step="0.01" id="stock" name="stock" value="<%= articulo.stock || '' %>">
   </div>

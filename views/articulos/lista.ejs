@@ -174,8 +174,20 @@
       doc.text(String(a.codigo), xCodigo, y);
       var nombreTexto = a.nombre.length > 48 ? a.nombre.slice(0, 47) + '…' : a.nombre;
       doc.text(nombreTexto, xProducto, y);
-      doc.text('$' + Math.round(a.precioEfectivo), xEfectivo, y, { align: 'right' });
-      doc.text('$' + Math.round(a.precioLista), xLista, y, { align: 'right' });
+      // Un artículo sin precio cargado (o con precio en $0 a propósito, ver
+      // "Precio en efectivo a mano" en Editar artículo) se muestra como
+      // "Sin stock" en vez de $0 — nunca se manda un precio de $0 a un
+      // cliente en el listado.
+      if (a.precioEfectivo > 0) {
+        doc.text('$' + Math.round(a.precioEfectivo), xEfectivo, y, { align: 'right' });
+        doc.text('$' + Math.round(a.precioLista), xLista, y, { align: 'right' });
+      } else {
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(150);
+        doc.text('Sin stock', xLista, y, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(0);
+      }
       y += 6;
     });
 

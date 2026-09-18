@@ -62,6 +62,14 @@ alter table articulos add column if not exists contenido_gr numeric;
 -- nombre. No afecta en nada al resto del sistema, solo al PDF.
 alter table articulos add column if not exists prioridad_listado integer;
 
+-- Precio en efectivo cargado a mano, para pisar el que da la fórmula de
+-- costo + margen (ver lib/precios.js) — pensado para corregir un precio
+-- puntual o para artículos sin costo cargado todavía. null = seguir
+-- calculándolo con la fórmula, como hasta ahora; 0 es un valor válido a
+-- propósito, para marcar el artículo como "Sin stock" en el listado de
+-- precios en PDF (ver routes/articulos.js).
+alter table articulos add column if not exists precio_manual numeric;
+
 do $$
 begin
   if not exists (
