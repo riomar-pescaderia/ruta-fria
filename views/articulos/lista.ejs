@@ -93,7 +93,12 @@
     precioLista: a.precioLista,
     prioridad: a.prioridad_listado || null,
     activo: a.activo !== false,
+    stock: (a.stock === null || a.stock === undefined) ? null : Number(a.stock),
   }))) %>;
+
+  // Mismo umbral que en el apartado Stock: por debajo de esto ya se
+  // considera sin stock real para vender, aunque el número sea positivo.
+  var UMBRAL_SIN_STOCK = 0.5;
 
   var boton = document.getElementById('generar-listado-precios');
   if (!boton) return;
@@ -174,11 +179,14 @@
       doc.text(String(a.codigo), xCodigo, y);
       var nombreTexto = a.nombre.length > 48 ? a.nombre.slice(0, 47) + '…' : a.nombre;
       doc.text(nombreTexto, xProducto, y);
-      // Un artículo sin precio cargado (o con precio en $0 a propósito, ver
-      // "Precio en efectivo a mano" en Editar artículo) se muestra como
-      // "Sin stock" en vez de $0 — nunca se manda un precio de $0 a un
-      // cliente en el listado.
-      if (a.precioEfectivo > 0) {
+      // "Sin stock" se decide por el stock real (apartado Stock), no por
+      // el precio: por debajo del umbral se muestra así en vez del
+      // precio, aunque el número sea positivo (un resto de 0,2kg no
+      // alcanza para vender). Si el stock no se conoce todavía (null, el
+      // artículo nunca se sincronizó/tocó en Stock) se sigue mostrando el
+      // precio normal, para no marcar como agotado algo que en realidad
+      // no se sabe.
+      if (a.stock === null || a.stock >= UMBRAL_SIN_STOCK) {
         doc.text('$' + Math.round(a.precioEfectivo), xEfectivo, y, { align: 'right' });
         doc.text('$' + Math.round(a.precioLista), xLista, y, { align: 'right' });
       } else {

@@ -74,7 +74,11 @@
     <% articulos.forEach(a => {
       const stock = a.stock === null || a.stock === undefined ? null : Number(a.stock);
       const stockMinimo = a.stock_minimo === null || a.stock_minimo === undefined ? null : Number(a.stock_minimo);
-      const sinStock = stock !== null && stock <= 0;
+      // Por debajo de este umbral (aunque sea un número positivo chico,
+      // tipo 0,2kg que sobraron) ya se considera sin stock real para
+      // vender — no hace falta que llegue justo a 0 o a negativo.
+      const UMBRAL_SIN_STOCK = 0.5;
+      const sinStock = stock !== null && stock < UMBRAL_SIN_STOCK;
       const stockBajo = !sinStock && stock !== null && stockMinimo !== null && stock <= stockMinimo;
     %>
     <tr data-buscar="<%= (a.codigo + ' ' + a.nombre).toLowerCase() %>" data-href="/stock/<%= a.id %>">

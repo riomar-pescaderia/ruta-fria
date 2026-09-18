@@ -2,7 +2,10 @@
 
 <% const stock = articulo.stock === null || articulo.stock === undefined ? null : Number(articulo.stock);
    const stockMinimo = articulo.stock_minimo === null || articulo.stock_minimo === undefined ? null : Number(articulo.stock_minimo);
-   const sinStock = stock !== null && stock <= 0;
+   // Mismo umbral que en el listado: por debajo de esto ya se considera
+   // sin stock real para vender, aunque el número sea positivo.
+   const UMBRAL_SIN_STOCK = 0.5;
+   const sinStock = stock !== null && stock < UMBRAL_SIN_STOCK;
    const stockBajo = !sinStock && stock !== null && stockMinimo !== null && stock <= stockMinimo;
    const ETIQUETAS_TIPO = {
      venta: 'Venta',
