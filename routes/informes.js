@@ -75,7 +75,8 @@ async function totalesVenta({ desde, hasta }) {
   const { rows } = await pool.query(
     `select coalesce(sum(v.total),0)::numeric as total, count(distinct v.id)::int as cantidad,
             coalesce(sum(vi.cantidad),0)::numeric as unidades
-     from ventas v left join ventas_items vi on vi.venta_id = v.id
+     from ventas v
+     left join (select venta_id, sum(cantidad) as cantidad from ventas_items group by venta_id) vi on vi.venta_id = v.id
      where v.fecha::date >= $1 and v.fecha::date <= $2`,
     [desde, hasta]
   );
@@ -198,7 +199,8 @@ router.get('/gastos', async (req, res, next) => {
         `select to_char(date_trunc('month', v.fecha), 'YYYY-MM') as mes,
                 coalesce(sum(v.total),0)::numeric as total, count(distinct v.id)::int as cantidad,
                 coalesce(sum(vi.cantidad),0)::numeric as unidades
-         from ventas v left join ventas_items vi on vi.venta_id = v.id
+         from ventas v
+     left join (select venta_id, sum(cantidad) as cantidad from ventas_items group by venta_id) vi on vi.venta_id = v.id
          where v.fecha >= $1
          group by 1`,
         [desdeEvolucion]
@@ -238,7 +240,8 @@ router.get('/gastos', async (req, res, next) => {
         `select extract(isodow from v.fecha)::int as dow,
                 coalesce(sum(v.total),0)::numeric as total, count(distinct v.id)::int as cantidad,
                 coalesce(sum(vi.cantidad),0)::numeric as unidades
-         from ventas v left join ventas_items vi on vi.venta_id = v.id
+         from ventas v
+     left join (select venta_id, sum(cantidad) as cantidad from ventas_items group by venta_id) vi on vi.venta_id = v.id
          where v.fecha::date >= $1 and v.fecha::date <= $2
          group by 1`,
         [desde, hasta]
@@ -274,7 +277,8 @@ router.get('/gastos', async (req, res, next) => {
         `select ceil(extract(day from v.fecha)/7.0)::int as semana,
                 coalesce(sum(v.total),0)::numeric as total, count(distinct v.id)::int as cantidad,
                 coalesce(sum(vi.cantidad),0)::numeric as unidades
-         from ventas v left join ventas_items vi on vi.venta_id = v.id
+         from ventas v
+     left join (select venta_id, sum(cantidad) as cantidad from ventas_items group by venta_id) vi on vi.venta_id = v.id
          where v.fecha::date >= $1 and v.fecha::date <= $2
          group by 1`,
         [desde, hasta]
@@ -366,7 +370,8 @@ router.get('/ventas', async (req, res, next) => {
         `select to_char(date_trunc('month', v.fecha), 'YYYY-MM') as mes,
                 coalesce(sum(v.total),0)::numeric as total,
                 coalesce(sum(vi.cantidad),0)::numeric as unidades
-         from ventas v left join ventas_items vi on vi.venta_id = v.id
+         from ventas v
+     left join (select venta_id, sum(cantidad) as cantidad from ventas_items group by venta_id) vi on vi.venta_id = v.id
          where v.fecha >= $1
          group by 1`,
         [desdeEvolucion]
@@ -405,7 +410,8 @@ router.get('/ventas', async (req, res, next) => {
         `select extract(year from v.fecha)::int as anio,
                 coalesce(sum(v.total),0)::numeric as total,
                 coalesce(sum(vi.cantidad),0)::numeric as unidades
-         from ventas v left join ventas_items vi on vi.venta_id = v.id
+         from ventas v
+     left join (select venta_id, sum(cantidad) as cantidad from ventas_items group by venta_id) vi on vi.venta_id = v.id
          group by 1 order by 1`
       ),
       pool.query(
