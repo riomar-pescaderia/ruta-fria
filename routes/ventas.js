@@ -14,7 +14,7 @@ const pool = require('../db/pool');
 const { getConfig } = require('../lib/config');
 const { calcularPrecios } = require('../lib/precios');
 const { sincronizarMovimientoVenta } = require('../lib/cuentaCorriente');
-const { registrarMovimiento } = require('../lib/stock');
+const { registrarMovimiento, obtenerConfigStock } = require('../lib/stock');
 
 const router = express.Router();
 
@@ -157,6 +157,7 @@ router.post('/', async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const cfgStock = await obtenerConfigStock(client);
     const fechaVenta = fecha || hoyAr();
     const { rows } = await client.query(
       `insert into ventas (cliente_id, fecha, forma_pago, origen, notas, total)
@@ -170,13 +171,18 @@ router.post('/', async (req, res, next) => {
          values ($1,$2,$3,$4,$5)`,
         [ventaId, it.articulo_id, it.cantidad, it.precio_unitario, it.subtotal]
       );
-      await registrarMovimiento(client, {
-        articuloId: it.articulo_id,
-        tipo: 'venta',
-        cantidad: -it.cantidad,
-        usuarioId: req.session.usuario.id,
-        ventaId,
-      });
+      // En modo "planilla" el stock lo maneja únicamente la hoja externa
+      // (ver lib/stockPlanilla.js) — la venta no lo toca hasta que se
+      // vuelva al modo automático.
+      if (cfgStock.modo === 'automatico') {
+        await registrarMovimiento(client, {
+          articuloId: it.articulo_id,
+          tipo: 'venta',
+          cantidad: -it.cantidad,
+          usuarioId: req.session.usuario.id,
+          ventaId,
+        });
+      }
     }
     await sincronizarMovimientoVenta(client, {
       id: ventaId,
@@ -250,6 +256,7 @@ router.post('/:id', async (req, res, next) => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      const cfgStock = await obtenerConfigStock(client);
       await client.query(
         'update ventas set cliente_id=$1, fecha=$2, forma_pago=$3, origen=$4, notas=$5, total=$6 where id=$7',
         [cliente_id, fechaVenta, forma_pago, origen, notas || null, total, venta.id]
@@ -258,14 +265,16 @@ router.post('/:id', async (req, res, next) => {
         'select articulo_id, cantidad from ventas_items where venta_id = $1',
         [venta.id]
       );
-      for (const it of itemsViejos) {
-        await registrarMovimiento(client, {
-          articuloId: it.articulo_id,
-          tipo: 'venta_eliminada',
-          cantidad: it.cantidad,
-          usuarioId: req.session.usuario.id,
-          ventaId: venta.id,
-        });
+      if (cfgStock.modo === 'automatico') {
+        for (const it of itemsViejos) {
+          await registrarMovimiento(client, {
+            articuloId: it.articulo_id,
+            tipo: 'venta_eliminada',
+            cantidad: it.cantidad,
+            usuarioId: req.session.usuario.id,
+            ventaId: venta.id,
+          });
+        }
       }
       await client.query('delete from ventas_items where venta_id = $1', [venta.id]);
       for (const it of items) {
@@ -274,13 +283,15 @@ router.post('/:id', async (req, res, next) => {
            values ($1,$2,$3,$4,$5)`,
           [venta.id, it.articulo_id, it.cantidad, it.precio_unitario, it.subtotal]
         );
-        await registrarMovimiento(client, {
-          articuloId: it.articulo_id,
-          tipo: 'venta',
-          cantidad: -it.cantidad,
-          usuarioId: req.session.usuario.id,
-          ventaId: venta.id,
-        });
+        if (cfgStock.modo === 'automatico') {
+          await registrarMovimiento(client, {
+            articuloId: it.articulo_id,
+            tipo: 'venta',
+            cantidad: -it.cantidad,
+            usuarioId: req.session.usuario.id,
+            ventaId: venta.id,
+          });
+        }
       }
       await sincronizarMovimientoVenta(client, {
         id: venta.id,
@@ -338,18 +349,21 @@ router.post('/:id/eliminar', async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const cfgStock = await obtenerConfigStock(client);
     const { rows: itemsViejos } = await client.query(
       'select articulo_id, cantidad from ventas_items where venta_id = $1',
       [req.params.id]
     );
-    for (const it of itemsViejos) {
-      await registrarMovimiento(client, {
-        articuloId: it.articulo_id,
-        tipo: 'venta_eliminada',
-        cantidad: it.cantidad,
-        usuarioId: req.session.usuario.id,
-        ventaId: req.params.id,
-      });
+    if (cfgStock.modo === 'automatico') {
+      for (const it of itemsViejos) {
+        await registrarMovimiento(client, {
+          articuloId: it.articulo_id,
+          tipo: 'venta_eliminada',
+          cantidad: it.cantidad,
+          usuarioId: req.session.usuario.id,
+          ventaId: req.params.id,
+        });
+      }
     }
     // ventas_items tiene "on delete cascade" sobre venta_id, así que se
     // borran solos los renglones de esta venta.

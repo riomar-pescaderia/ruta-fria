@@ -12,7 +12,7 @@ const proveedoresRouter = require('./proveedores');
 const { getConfig } = require('../lib/config');
 const { puedeEditarConfirmadas } = require('../lib/auth');
 const { CATEGORIAS_GASTO, esClaveValida, categoriaPorClave } = require('../lib/categoriasGasto');
-const { registrarMovimiento } = require('../lib/stock');
+const { registrarMovimiento, obtenerConfigStock } = require('../lib/stock');
 
 const router = express.Router();
 
@@ -396,17 +396,22 @@ router.post('/:id/confirmar', async (req, res, next) => {
     const aplicar = req.body.aplicar || {};
 
     await client.query('BEGIN');
+    const cfgStock = await obtenerConfigStock(client);
     for (const it of items) {
       // El stock entra siempre con la mercadería confirmada, más allá de
       // si ese renglón en particular termina pisando el costo o no — son
-      // dos decisiones independientes.
-      await registrarMovimiento(client, {
-        articuloId: it.articulo_id,
-        tipo: 'compra',
-        cantidad: it.cantidad,
-        usuarioId: req.session.usuario.id,
-        facturaId: factura.id,
-      });
+      // dos decisiones independientes. Salvo en modo "planilla": ahí el
+      // stock lo maneja únicamente la hoja externa (ver
+      // lib/stockPlanilla.js), y confirmar una factura no lo toca.
+      if (cfgStock.modo === 'automatico') {
+        await registrarMovimiento(client, {
+          articuloId: it.articulo_id,
+          tipo: 'compra',
+          cantidad: it.cantidad,
+          usuarioId: req.session.usuario.id,
+          facturaId: factura.id,
+        });
+      }
       const cambia = Number(it.costo_actual) !== Number(it.precio_unitario);
       if (!cambia) {
         await client.query('update facturas_compra_items set estado_costo = $1 where id = $2', ['sin_cambio', it.id]);
@@ -440,10 +445,13 @@ router.post('/:id/eliminar', async (req, res, next) => {
     }
 
     await client.query('BEGIN');
+    const cfgStock = await obtenerConfigStock(client);
     // Si la factura ya había confirmado mercadería, revertir el stock que
     // entró en ese momento antes de borrarla (mismo espíritu que en
-    // ventas: el movimiento se deshace, no se recalcula nada más).
-    if (rows[0].actualizo_costos) {
+    // ventas: el movimiento se deshace, no se recalcula nada más). En
+    // modo "planilla" esa entrada nunca llegó a tocar articulos.stock,
+    // así que tampoco hay nada que revertir acá.
+    if (rows[0].actualizo_costos && cfgStock.modo === 'automatico') {
       const { rows: items } = await client.query(
         'select articulo_id, cantidad from facturas_compra_items where factura_id = $1 and articulo_id is not null',
         [req.params.id]

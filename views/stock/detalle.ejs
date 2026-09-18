@@ -10,7 +10,9 @@
      compra: 'Compra confirmada',
      compra_eliminada: 'Compra eliminada (reversión)',
      ajuste: 'Ajuste manual',
+     sincronizacion: 'Sincronización con planilla',
    };
+   const modoPlanilla = config && config.modo === 'planilla';
 %>
 
 <div class="toolbar">
@@ -35,8 +37,21 @@
   <p style="color:#b3261e;"><%= error %></p>
 <% } %>
 
+<% if (modoPlanilla) { %>
+<div style="max-width:420px; margin-bottom:16px;">
+  <p style="color:var(--ink-soft); font-size:.9rem;">
+    El stock de este artículo lo maneja la hoja "<%= (config && config.planilla_nombre) || 'externa' %>" — para cambiarlo, editá la planilla y volvé a entrar a Stock (o tocá "Sincronizar ahora").
+  </p>
+  <form method="post" action="/stock/sincronizar" style="margin:0;">
+    <input type="hidden" name="volver" value="<%= articulo.id %>">
+    <button type="submit" class="btn secondary" style="padding:4px 12px; font-size:.82rem;">Sincronizar ahora</button>
+  </form>
+</div>
+<% } %>
+
 <% if (usuario && usuario.esAdmin) { %>
 <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:20px;">
+  <% if (!modoPlanilla) { %>
   <form class="card" method="post" action="/stock/<%= articulo.id %>/ajustar" style="max-width:320px;">
     <h3 style="margin:0 0 4px;">Ajustar stock a mano</h3>
     <div>
@@ -51,6 +66,7 @@
       <button class="btn" type="submit">Guardar ajuste</button>
     </div>
   </form>
+  <% } %>
 
   <form class="card" method="post" action="/stock/<%= articulo.id %>/umbral" style="max-width:260px;">
     <h3 style="margin:0 0 4px;">Umbral de alerta</h3>

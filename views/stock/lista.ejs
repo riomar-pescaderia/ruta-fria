@@ -4,6 +4,56 @@
   <h1>Stock</h1>
 </div>
 
+<% if (config && config.modo === 'planilla') { %>
+  <% if (sync && sync.error) { %>
+  <p style="color:#a33; font-size:.9rem;">
+    No se pudo sincronizar con "<%= config.planilla_nombre || 'la planilla' %>": <%= sync.error %>
+    <% if (config.ultima_sincronizacion) { %>Mostrando los últimos valores conocidos, del <%= new Date(config.ultima_sincronizacion).toLocaleString('es-AR') %>.<% } %>
+  </p>
+  <% } else { %>
+  <p style="color:var(--ink-soft); font-size:.9rem;">
+    Stock sincronizado con "<%= config.planilla_nombre || 'la planilla' %>"<% if (config.ultima_sincronizacion) { %> — última actualización: <%= new Date(config.ultima_sincronizacion).toLocaleString('es-AR') %><% } %>.
+  </p>
+  <% } %>
+  <form method="post" action="/stock/sincronizar" style="margin-bottom:10px;">
+    <button type="submit" class="btn secondary" style="padding:4px 12px; font-size:.82rem;">Sincronizar ahora</button>
+  </form>
+  <% if (usuario && usuario.esAdmin && sync && ((sync.noEncontrados && sync.noEncontrados.length) || (sync.sinDatoEnHoja && sync.sinDatoEnHoja.length))) { %>
+  <details style="margin-bottom:14px; font-size:.85rem; color:var(--ink-soft);">
+    <summary style="cursor:pointer;">Revisar diferencias entre la planilla y el catálogo</summary>
+    <% if (sync.noEncontrados.length) { %><p>Códigos de la planilla que no existen como artículo: <%= sync.noEncontrados.join(', ') %></p><% } %>
+    <% if (sync.sinDatoEnHoja.length) { %><p>Artículos que no aparecen en la planilla (no se les tocó el stock): <%= sync.sinDatoEnHoja.join(', ') %></p><% } %>
+  </details>
+  <% } %>
+<% } %>
+
+<% if (usuario && usuario.esAdmin) { %>
+<details style="margin-bottom:18px;">
+  <summary style="cursor:pointer; font-weight:600;">Configurar origen del stock</summary>
+  <form class="card" method="post" action="/stock/configuracion" style="margin-top:10px; max-width:420px;">
+    <div>
+      <label for="modo">Modo</label>
+      <select id="modo" name="modo">
+        <option value="automatico" <%= (!config || config.modo === 'automatico') ? 'selected' : '' %>>Automático (con ventas y compras)</option>
+        <option value="planilla" <%= (config && config.modo === 'planilla') ? 'selected' : '' %>>Planilla externa</option>
+      </select>
+    </div>
+    <div>
+      <label for="planilla_url">Link de la hoja de Google Sheets</label>
+      <input type="text" id="planilla_url" name="planilla_url" value="<%= (config && config.planilla_url) || '' %>" placeholder="https://docs.google.com/spreadsheets/d/...">
+    </div>
+    <div>
+      <label for="planilla_nombre">Nombre para mostrar</label>
+      <input type="text" id="planilla_nombre" name="planilla_nombre" value="<%= (config && config.planilla_nombre) || '' %>" placeholder="Ej: Stock La Rioja 35">
+    </div>
+    <p style="color:var(--ink-soft); font-size:.85rem; margin:0;">Tiene que estar compartida como "Cualquier persona con el enlace puede ver". La hoja necesita una columna de código y una de cantidad (por ejemplo "Cod" y "Stock"). En modo planilla, ventas y compras dejan de mover el stock — siempre manda lo que diga la hoja.</p>
+    <div>
+      <button class="btn" type="submit">Guardar</button>
+    </div>
+  </form>
+</details>
+<% } %>
+
 <% if (articulos.length === 0) { %>
   <p class="empty">Todavía no hay artículos cargados.</p>
 <% } else { %>

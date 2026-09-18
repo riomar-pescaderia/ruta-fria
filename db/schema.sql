@@ -472,26 +472,59 @@ alter table articulos add column if not exists stock_minimo numeric;
 create table if not exists stock_movimientos (
   id serial primary key,
   articulo_id integer not null references articulos(id),
-  tipo text not null,   -- venta / venta_eliminada / compra / compra_eliminada / ajuste
+  tipo text not null,   -- venta / venta_eliminada / compra / compra_eliminada / ajuste / sincronizacion
   cantidad numeric not null,
   stock_resultante numeric not null,
-  motivo text,                                                    -- libre, sobre todo para "ajuste"
+  motivo text,                                                    -- libre, sobre todo para "ajuste"/"sincronizacion"
   referencia_venta_id integer references ventas(id) on delete set null,
   referencia_factura_id integer references facturas_compra(id) on delete set null,
   usuario_id integer references usuarios(id),
   fecha timestamptz not null default now()
 );
 
+-- Se recrea siempre (drop + add) en vez de "si no existe" porque la lista
+-- de tipos permitidos cambió (se agregó "sincronizacion") y un check ya
+-- creado con la lista vieja no se actualiza solo.
 do $$
 begin
-  if not exists (
+  if exists (
     select 1 from pg_constraint where conname = 'chk_stock_movimiento_tipo'
   ) then
-    alter table stock_movimientos
-      add constraint chk_stock_movimiento_tipo
-      check (tipo in ('venta', 'venta_eliminada', 'compra', 'compra_eliminada', 'ajuste'));
+    alter table stock_movimientos drop constraint chk_stock_movimiento_tipo;
   end if;
+  alter table stock_movimientos
+    add constraint chk_stock_movimiento_tipo
+    check (tipo in ('venta', 'venta_eliminada', 'compra', 'compra_eliminada', 'ajuste', 'sincronizacion'));
 end $$;
+
+-- Origen del stock: por defecto "automatico" (se mueve solo con ventas y
+-- compras confirmadas, más el ajuste a mano de un administrador — el modo
+-- pensado para cuando el depósito propio esté operativo). "planilla"
+-- es el modo puente para mientras tanto: el stock de TODOS los artículos
+-- sale únicamente de una hoja de cálculo externa (ver lib/stockPlanilla.js),
+-- que se vuelve a leer cada vez que se abre /stock — en ese modo, ventas y
+-- compras dejan de tocar articulos.stock. Tabla de una sola fila (id=1),
+-- para poder cambiar el modo desde la propia pantalla de Stock sin tocar
+-- código ni hacer un nuevo despliegue.
+create table if not exists stock_config (
+  id integer primary key default 1,
+  modo text not null default 'automatico' check (modo in ('automatico', 'planilla')),
+  planilla_url text,
+  planilla_nombre text,
+  ultima_sincronizacion timestamptz,
+  ultimo_error text,
+  constraint stock_config_singleton check (id = 1)
+);
+
+-- Arranca ya en modo "planilla", apuntando a la hoja real que se usa
+-- mientras el depósito propio está en refacción — se puede cambiar de
+-- modo o de link más adelante desde la propia pantalla de Stock.
+insert into stock_config (id, modo, planilla_url, planilla_nombre) values (
+  1, 'planilla',
+  'https://docs.google.com/spreadsheets/d/1Bmyy7ZV2jf3fUjLBaXvoCQcIPa-G8KOTMrDAchfLFd0/export?format=csv&gid=1265317247',
+  'Stock La Rioja 35'
+)
+on conflict (id) do nothing;
 
 create index if not exists idx_facturas_compra_items_factura on facturas_compra_items(factura_id);
 create index if not exists idx_prospectos_activo on prospectos(activo);
