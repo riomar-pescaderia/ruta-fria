@@ -536,6 +536,8 @@ tr.fila-cambio td:nth-child(4) { color: #8a5a12; }
 .kpi .kpi-variacion { font-weight: 600; }
 .kpi .kpi-variacion.positiva { color: #1e6b34; }
 .kpi .kpi-variacion.negativa { color: #a33; }
+.kpi.kpi-clickeable { cursor: pointer; transition: box-shadow .15s, transform .15s; }
+.kpi.kpi-clickeable:hover, .kpi.kpi-clickeable:focus-visible { box-shadow: 0 4px 14px rgba(22,35,47,.1); transform: translateY(-1px); }
 
 .informe-seccion { margin-bottom: 30px; }
 .informe-seccion h2 { font-size: 1.15rem; color: var(--navy); margin: 0 0 4px; }

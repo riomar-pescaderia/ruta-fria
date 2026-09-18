@@ -337,10 +337,27 @@ async function totalesCompraMercaderia({ desde, hasta }) {
 // calculado producto por producto (para eso habría que llevar costo
 // promedio ponderado por artículo), es la misma cuenta rápida que ya
 // venían haciendo a mano. Null si no hubo ventas en el período, para no
-// dividir por cero.
+// dividir por cero. Misma fórmula (ventas - costo) / ventas se reutiliza
+// para el margen de mercadería (costo = mercadería + flete) y para el
+// margen real del período (costo = TODO lo cargado en Compras, de
+// cualquier categoría) — lo único que cambia es qué se suma como costo.
 function margenMercaderia(venta, compra) {
   if (!venta) return null;
   return ((venta - compra) / venta) * 100;
+}
+
+// Total de TODO lo cargado en Compras en el período, sin filtrar por
+// categoría — mercadería, flete, y también los gastos operativos
+// (servicios, sueldos, alquileres, etc.). Sirve para el "margen real del
+// período", la rentabilidad de fondo del negocio contra TODO lo que
+// salió, no solo el costo de la mercadería que se revende.
+async function totalesComprasTodo({ desde, hasta }) {
+  const { rows } = await pool.query(
+    `select coalesce(sum(total),0)::numeric as total, count(*)::int as cantidad
+     from facturas_compra where fecha::date >= $1 and fecha::date <= $2`,
+    [desde, hasta]
+  );
+  return { total: Number(rows[0].total), cantidad: rows[0].cantidad };
 }
 
 router.get('/ventas', async (req, res, next) => {
@@ -353,15 +370,19 @@ router.get('/ventas', async (req, res, next) => {
     const desdeAnt = sumarDias(desde, -dias);
     const hastaAnt = sumarDias(desde, -1);
 
-    const [ventaActual, ventaAnterior, mercActual, mercAnterior] = await Promise.all([
+    const [ventaActual, ventaAnterior, mercActual, mercAnterior, comprasTodoActual, comprasTodoAnterior] = await Promise.all([
       totalesVenta({ desde, hasta }),
       totalesVenta({ desde: desdeAnt, hasta: hastaAnt }),
       totalesCompraMercaderia({ desde, hasta }),
       totalesCompraMercaderia({ desde: desdeAnt, hasta: hastaAnt }),
+      totalesComprasTodo({ desde, hasta }),
+      totalesComprasTodo({ desde: desdeAnt, hasta: hastaAnt }),
     ]);
 
     const margenActual = margenMercaderia(ventaActual.total, mercActual.total);
     const margenAnterior = margenMercaderia(ventaAnterior.total, mercAnterior.total);
+    const margenRealActual = margenMercaderia(ventaActual.total, comprasTodoActual.total);
+    const margenRealAnterior = margenMercaderia(ventaAnterior.total, comprasTodoAnterior.total);
 
     const resumen = {
       venta: { ...ventaActual, variacion: variacion(ventaActual.total, ventaAnterior.total) },
@@ -369,6 +390,10 @@ router.get('/ventas', async (req, res, next) => {
       margen: {
         valor: margenActual,
         variacionPuntos: margenActual !== null && margenAnterior !== null ? margenActual - margenAnterior : null,
+      },
+      margenReal: {
+        valor: margenRealActual,
+        variacionPuntos: margenRealActual !== null && margenRealAnterior !== null ? margenRealActual - margenRealAnterior : null,
       },
     };
 
@@ -462,7 +487,7 @@ router.get('/ventas', async (req, res, next) => {
          where v.fecha::date >= $3 and v.fecha::date <= $4
          group by vi.articulo_id
        )
-       select a.id as articulo_id, a.codigo, a.nombre,
+       select a.id as articulo_id, a.codigo, a.nombre, a.costo,
               coalesce(act.total,0)::numeric as total_actual, coalesce(act.cantidad,0)::numeric as cantidad_actual,
               coalesce(ant.total,0)::numeric as total_anterior, coalesce(ant.cantidad,0)::numeric as cantidad_anterior
        from articulos a
@@ -475,6 +500,7 @@ router.get('/ventas', async (req, res, next) => {
       articuloId: r.articulo_id,
       codigo: r.codigo,
       nombre: r.nombre,
+      costoActual: Number(r.costo),
       totalActual: Number(r.total_actual),
       cantidadActual: Number(r.cantidad_actual),
       totalAnterior: Number(r.total_anterior),
@@ -485,6 +511,24 @@ router.get('/ventas', async (req, res, next) => {
     const rankingPorCantidad = [...actividad].sort((a, b) => b.cantidadActual - a.cantidadActual).slice(0, 10);
     const maxMonto = rankingPorMonto.length ? rankingPorMonto[0].totalActual : 0;
     const maxCantidad = rankingPorCantidad.length ? rankingPorCantidad[0].cantidadActual : 0;
+
+    // Margen por producto: ventas del producto en el período contra el
+    // costo del artículo (el que hoy tiene cargado, el mismo que ya se
+    // pisa desde Compras al confirmar mercadería) multiplicado por lo
+    // vendido. No es el costo exacto de LO QUE se compró en ese período
+    // puntual para ese producto — eso mezclaría compras y ventas que no
+    // necesariamente coinciden en el tiempo, artículo por artículo — pero
+    // es la mejor referencia de rentabilidad por producto que se puede
+    // dar con el costo vigente, y usa tanto compras (de ahí viene el
+    // costo) como ventas (ingreso y cantidad).
+    const margenPorProducto = actividad
+      .filter((a) => a.totalActual > 0)
+      .map((a) => ({
+        ...a,
+        margenPct: ((a.totalActual - a.costoActual * a.cantidadActual) / a.totalActual) * 100,
+      }))
+      .sort((a, b) => b.margenPct - a.margenPct);
+    const rankingPorMargen = margenPorProducto.slice(0, 10);
 
     // Recomendaciones — reglas simples, no un modelo: "estrella" son los
     // que más venden y no cayeron respecto al período anterior;
@@ -520,6 +564,8 @@ router.get('/ventas', async (req, res, next) => {
       rankingPorCantidad,
       maxMonto,
       maxCantidad,
+      rankingPorMargen,
+      margenPorProducto,
       estrella,
       oportunidad,
       hoy,

@@ -498,8 +498,11 @@ alter table usuarios add column if not exists acceso_prospectos boolean not null
 alter table usuarios add column if not exists acceso_stock boolean not null default false;
 alter table usuarios add column if not exists acceso_cuenta_corriente boolean not null default false;
 
--- Acceso al módulo "Mapa" (antes vivía adentro de Historial de visitas,
--- ahora es una sección aparte con su propio permiso).
+-- Columna en desuso: el mapa fue una sección aparte con su propio
+-- permiso y volvió a vivir adentro de Historial de visitas (mismo
+-- permiso que "prospectos"). Se deja la columna sin tocar (no se
+-- borra una columna existente sin necesidad) pero la app ya no la lee
+-- ni la escribe.
 alter table usuarios add column if not exists acceso_mapa boolean not null default false;
 
 -- Permiso especial (no es un módulo entero): habilita editar o eliminar

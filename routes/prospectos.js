@@ -1,7 +1,8 @@
 // Historial de visitas a potenciales clientes (prospectos) — separado de
 // Clientes a propósito: acá se cargan direcciones de gente que todavía no
 // compró, para planificar y llevar registro de las visitas que se les
-// hacen. El mapa que muestra cada punto vive aparte, en /mapa.
+// hacen. El mapa que muestra cada punto vive acá mismo, en /prospectos/mapa
+// (antes fue una sección aparte con permiso propio; se volvió a unificar).
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
@@ -75,6 +76,15 @@ router.get('/', async (req, res, next) => {
 router.get('/nuevo', async (req, res, next) => {
   try {
     res.render('prospectos/form', { prospecto: {}, contactos: [], error: null, accion: '/prospectos' });
+  } catch (err) { next(err); }
+});
+
+// El mapa vive acá adentro (no en una sección aparte): es otra forma de
+// ver el mismo historial de visitas, con el mismo permiso de acceso.
+router.get('/mapa', async (req, res, next) => {
+  try {
+    const prospectos = await listarConVisitas();
+    res.render('prospectos/mapa', { prospectos });
   } catch (err) { next(err); }
 });
 

@@ -7,7 +7,7 @@
 </div>
 
 <p style="color:var(--ink-soft); font-size:.9rem; margin-top:-10px;">
-  Informes de solo lectura sobre lo vendido: kg, margen de mercadería, evolución, ranking de productos y recomendaciones.
+  Informes de solo lectura sobre lo vendido: kg, margen de mercadería y margen real, evolución, ranking de productos (por dinero, kg y margen) y recomendaciones.
 </p>
 
 <div class="rangos-rapidos">
@@ -52,7 +52,7 @@
       <% } %>
     </div>
   </div>
-  <div class="kpi">
+  <div class="kpi kpi-clickeable" id="kpi-margen-mercaderia" role="button" tabindex="0">
     <div class="kpi-etiqueta">Margen de mercadería</div>
     <div class="kpi-valor" style="color: <%= resumen.margen.valor === null ? 'inherit' : (resumen.margen.valor >= 0 ? 'var(--navy)' : '#a33') %>;"><%= resumen.margen.valor === null ? '—' : resumen.margen.valor.toFixed(1) + '%' %></div>
     <div class="kpi-sub">
@@ -61,13 +61,59 @@
       <% } else if (resumen.margen.variacionPuntos !== null) { %>
         <span class="kpi-variacion <%= resumen.margen.variacionPuntos >= 0 ? 'positiva' : 'negativa' %>"><%= resumen.margen.variacionPuntos > 0 ? '+' : '' %><%= resumen.margen.variacionPuntos.toFixed(1) %> pts</span> vs. período anterior
       <% } %>
+      <br><span style="font-size:.76rem;">Click para ver el margen por producto ↓</span>
+    </div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-etiqueta">Margen real del período</div>
+    <div class="kpi-valor" style="color: <%= resumen.margenReal.valor === null ? 'inherit' : (resumen.margenReal.valor >= 0 ? 'var(--navy)' : '#a33') %>;"><%= resumen.margenReal.valor === null ? '—' : resumen.margenReal.valor.toFixed(1) + '%' %></div>
+    <div class="kpi-sub">
+      <% if (resumen.margenReal.valor === null) { %>
+        Sin ventas en el período.
+      <% } else if (resumen.margenReal.variacionPuntos !== null) { %>
+        <span class="kpi-variacion <%= resumen.margenReal.variacionPuntos >= 0 ? 'positiva' : 'negativa' %>"><%= resumen.margenReal.variacionPuntos > 0 ? '+' : '' %><%= resumen.margenReal.variacionPuntos.toFixed(1) %> pts</span> vs. período anterior
+      <% } %>
     </div>
   </div>
 </div>
 
 <p class="informe-nota" style="margin-top:-6px;">
-  El margen es una cuenta rápida — ventas contra lo comprado de mercadería (compra + flete) en el mismo período, no un costo exacto por producto vendido.
+  "Margen de mercadería" es ventas contra lo comprado de mercadería (compra + flete) en el mismo período. "Margen real del período" es ventas contra TODO lo cargado en Compras (mercadería, flete y también los gastos operativos: servicios, sueldos, alquileres, impuestos, etc.) — la rentabilidad de fondo del período, no solo del costo de lo que se revende. Ninguno de los dos es un costo exacto por producto vendido.
 </p>
+
+<div class="informe-seccion" id="detalle-margen-productos" hidden>
+  <h2>Margen por producto</h2>
+  <p class="informe-nota">
+    Ventas de cada artículo en el período contra su costo actual cargado (el mismo que se pisa desde Compras al confirmar mercadería) multiplicado por lo vendido — usa compras (de ahí viene el costo) y ventas (ingreso y cantidad), pero no es el costo exacto de lo que se compró puntualmente para esas unidades. Solo artículos con ventas en el período.
+  </p>
+  <div style="max-width:320px; margin-bottom:10px;">
+    <input type="text" id="buscar-margen-producto" placeholder="Buscar por código o nombre...">
+  </div>
+  <p id="sin-resultados-margen" class="empty" style="display:none;">No encontré ningún artículo con ese código o nombre.</p>
+  <% if (margenPorProducto.length === 0) { %>
+    <p class="empty">No hay ventas cargadas en este período.</p>
+  <% } else { %>
+  <div style="overflow-x:auto;">
+  <table class="tabla-informe" id="tabla-margen-productos">
+    <thead>
+      <tr><th>Código</th><th>Artículo</th><th class="num">Ventas</th><th class="num">Kg</th><th class="num">Costo actual</th><th class="num">Margen</th></tr>
+    </thead>
+    <tbody>
+      <% margenPorProducto.forEach(p => { %>
+      <tr data-buscar="<%= (p.codigo + ' ' + p.nombre).toLowerCase() %>">
+        <td class="mono"><%= p.codigo %></td>
+        <td><%= p.nombre %></td>
+        <td class="num mono">$<%= p.totalActual.toFixed(2) %></td>
+        <td class="num mono"><%= Number(p.cantidadActual.toFixed(2)) %></td>
+        <td class="num mono">$<%= p.costoActual.toFixed(2) %></td>
+        <td class="num mono" style="color: <%= p.margenPct >= 0 ? 'inherit' : '#a33' %>;"><%= p.margenPct.toFixed(1) %>%</td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  </div>
+  <% } %>
+</div>
 
 <div class="informe-seccion">
   <h2>Evolución mensual (últimos 12 meses)</h2>
@@ -151,6 +197,26 @@
         <span class="fila-ranking-valor mono"><%= Number(p.cantidadActual.toFixed(2)) %> kg</span>
       </div>
       <div class="fila-ranking-barra-fondo"><div class="fila-ranking-barra" style="width: <%= maxCantidad > 0 ? Math.round(p.cantidadActual / maxCantidad * 100) : 0 %>%; background: var(--orange);"></div></div>
+    </div>
+    <% }) %>
+  </div>
+  <% } %>
+</div>
+
+<div class="informe-seccion">
+  <h2>Ranking de productos — por margen</h2>
+  <p class="informe-nota">Los 10 artículos con mejor margen según el costo actual cargado, entre los que tuvieron ventas en el período elegido arriba.</p>
+  <% if (rankingPorMargen.length === 0) { %>
+    <p class="empty">No hay ventas cargadas en este período.</p>
+  <% } else { %>
+  <div>
+    <% rankingPorMargen.forEach(p => { %>
+    <div class="fila-ranking">
+      <div class="fila-ranking-encabezado">
+        <span class="fila-ranking-nombre"><%= p.codigo %> — <%= p.nombre %></span>
+        <span class="fila-ranking-valor mono" style="color: <%= p.margenPct >= 0 ? 'inherit' : '#a33' %>;"><%= p.margenPct.toFixed(1) %>%</span>
+      </div>
+      <div class="fila-ranking-barra-fondo"><div class="fila-ranking-barra" style="width: <%= Math.max(0, Math.min(100, p.margenPct)) %>%; background: <%= p.margenPct >= 0 ? '#1baf7a' : '#a33' %>;"></div></div>
     </div>
     <% }) %>
   </div>
@@ -249,6 +315,35 @@
           tooltip: { callbacks: { label: function (ctx) { return ctx.raw === null ? 'Sin ventas' : 'Margen: ' + Number(ctx.raw).toFixed(1) + '%'; } } },
         },
       },
+    });
+  }
+
+  var kpiMargen = document.getElementById('kpi-margen-mercaderia');
+  var detalleMargen = document.getElementById('detalle-margen-productos');
+  if (kpiMargen && detalleMargen) {
+    var alternarDetalleMargen = function () {
+      detalleMargen.hidden = !detalleMargen.hidden;
+      if (!detalleMargen.hidden) detalleMargen.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    kpiMargen.addEventListener('click', alternarDetalleMargen);
+    kpiMargen.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); alternarDetalleMargen(); }
+    });
+  }
+
+  var buscarMargen = document.getElementById('buscar-margen-producto');
+  if (buscarMargen) {
+    var filasMargen = document.querySelectorAll('#tabla-margen-productos tbody tr');
+    var sinResultadosMargen = document.getElementById('sin-resultados-margen');
+    buscarMargen.addEventListener('input', function () {
+      var texto = buscarMargen.value.trim().toLowerCase();
+      var visibles = 0;
+      filasMargen.forEach(function (tr) {
+        var coincide = !texto || tr.dataset.buscar.indexOf(texto) !== -1;
+        tr.hidden = !coincide;
+        if (coincide) visibles++;
+      });
+      sinResultadosMargen.style.display = visibles === 0 ? 'block' : 'none';
     });
   }
 })();
