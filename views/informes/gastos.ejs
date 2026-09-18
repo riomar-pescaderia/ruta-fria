@@ -31,7 +31,7 @@
     <label for="categoria">Categoría</label>
     <select id="categoria" name="categoria">
       <option value="">— todas —</option>
-      <% categorias.filter(c => c.clave !== 'mercaderia').forEach(c => { %>
+      <% categorias.filter(c => c.clave !== 'mercaderia' && c.clave !== 'flete_mercaderia').forEach(c => { %>
         <option value="<%= c.clave %>" <%= filtros.categoria === c.clave ? 'selected' : '' %>><%= c.etiqueta %></option>
       <% }) %>
     </select>
@@ -80,7 +80,7 @@
       <% if (resumen.resultado.variacion !== null) { %>
         <span class="kpi-variacion <%= resumen.resultado.variacion >= 0 ? 'positiva' : 'negativa' %>"><%= resumen.resultado.variacion > 0 ? '+' : '' %><%= resumen.resultado.variacion.toFixed(1) %>%</span> vs. período anterior
       <% } else { %>
-        No incluye el costo de mercadería — es sobre gastos generales.
+        No incluye el costo de mercadería ni su flete — es sobre gastos generales. Esos dos se ven en Ventas, junto con la rentabilidad.
       <% } %>
     </div>
   </div>

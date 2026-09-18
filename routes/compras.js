@@ -352,10 +352,22 @@ router.get('/:id/confirmar', async (req, res, next) => {
     );
     if (items.length === 0) return res.redirect(`/compras/${factura.id}`);
 
-    const itemsConCambio = items.map((it) => ({
-      ...it,
-      cambia: Number(it.costo_actual) !== Number(it.precio_unitario),
-    }));
+    // La sugerencia de precio nuevo se compara y se guarda siempre en
+    // costo SIN IVA (neto ÷ cantidad) — nunca contra "precio_unitario",
+    // que en la factura es el precio final YA con el IVA sumado si esa
+    // fila lo llevaba. El costo del artículo va sin IVA porque el
+    // artículo puede tener tildado "Aplica IVA" y ese IVA se le vuelve a
+    // sumar solo al calcular el precio de venta (ver lib/precios.js) —
+    // si acá se guardara el costo con IVA ya sumado, quedaría sumado dos
+    // veces.
+    const itemsConCambio = items.map((it) => {
+      const costoNuevo = redondear2(Number(it.neto) / Number(it.cantidad));
+      return {
+        ...it,
+        costoNuevo,
+        cambia: Number(it.costo_actual) !== costoNuevo,
+      };
+    });
 
     res.render('compras/confirmar', { factura, items: itemsConCambio });
   } catch (err) { next(err); }
@@ -400,13 +412,16 @@ router.post('/:id/confirmar', async (req, res, next) => {
           facturaId: factura.id,
         });
       }
-      const cambia = Number(it.costo_actual) !== Number(it.precio_unitario);
+      // Mismo criterio que en la pantalla de revisión: el costo nuevo del
+      // artículo es el neto sin IVA, no el precio final de la factura.
+      const costoNuevo = redondear2(Number(it.neto) / Number(it.cantidad));
+      const cambia = Number(it.costo_actual) !== costoNuevo;
       if (!cambia) {
         await client.query('update facturas_compra_items set estado_costo = $1 where id = $2', ['sin_cambio', it.id]);
         continue;
       }
       if (aplicar[it.id] === 'on') {
-        await client.query('update articulos set costo = $1 where id = $2', [it.precio_unitario, it.articulo_id]);
+        await client.query('update articulos set costo = $1 where id = $2', [costoNuevo, it.articulo_id]);
         await client.query('update facturas_compra_items set estado_costo = $1 where id = $2', ['aplicado', it.id]);
       } else {
         await client.query('update facturas_compra_items set estado_costo = $1 where id = $2', ['no_aplicado', it.id]);

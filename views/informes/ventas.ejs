@@ -43,10 +43,10 @@
     </div>
   </div>
   <div class="kpi">
-    <div class="kpi-etiqueta">Costo de mercadería comprada</div>
+    <div class="kpi-etiqueta">Costo de mercadería (compra + flete)</div>
     <div class="kpi-valor">$<%= resumen.mercaderia.total.toFixed(2) %></div>
     <div class="kpi-sub">
-      <%= resumen.mercaderia.cantidad %> factura<%= resumen.mercaderia.cantidad === 1 ? '' : 's' %>
+      <%= resumen.mercaderia.cantidad %> comprobante<%= resumen.mercaderia.cantidad === 1 ? '' : 's' %>
       <% if (resumen.mercaderia.variacion !== null) { %>
         · <span class="kpi-variacion <%= resumen.mercaderia.variacion <= 0 ? 'positiva' : 'negativa' %>"><%= resumen.mercaderia.variacion > 0 ? '+' : '' %><%= resumen.mercaderia.variacion.toFixed(1) %>%</span> vs. período anterior
       <% } %>
@@ -66,12 +66,12 @@
 </div>
 
 <p class="informe-nota" style="margin-top:-6px;">
-  El margen es una cuenta rápida — ventas contra lo comprado de mercadería en el mismo período, no un costo exacto por producto vendido.
+  El margen es una cuenta rápida — ventas contra lo comprado de mercadería (compra + flete) en el mismo período, no un costo exacto por producto vendido.
 </p>
 
 <div class="informe-seccion">
   <h2>Evolución mensual (últimos 12 meses)</h2>
-  <p class="informe-nota">Ventas contra costo de mercadería comprada, y el margen resultante, mes por mes.</p>
+  <p class="informe-nota">Ventas contra costo de mercadería (compra + flete), y el margen resultante, mes por mes.</p>
   <div class="grafico-caja"><canvas id="grafico-evolucion-ventas" height="90"></canvas></div>
   <div class="grafico-caja"><canvas id="grafico-margen" height="90"></canvas></div>
   <div style="overflow-x:auto;">
@@ -209,7 +209,7 @@
         labels: evolucion.map(function (m) { return m.mes; }),
         datasets: [
           { label: 'Ventas', data: evolucion.map(function (m) { return m.venta; }), backgroundColor: COLOR_VENTAS, borderRadius: 4 },
-          { label: 'Mercadería comprada', data: evolucion.map(function (m) { return m.mercaderia; }), backgroundColor: COLOR_MERCADERIA, borderRadius: 4 },
+          { label: 'Mercadería + flete', data: evolucion.map(function (m) { return m.mercaderia; }), backgroundColor: COLOR_MERCADERIA, borderRadius: 4 },
         ],
       },
       options: {

@@ -21,6 +21,16 @@ const { hoyAr } = require('../lib/fechas');
 
 const router = express.Router();
 
+// A los fines de estos informes, el costo de "mercadería" incluye
+// también el flete para traerla ("flete_mercaderia") — mismo criterio
+// que ya se usa para armar el precio de venta, donde el flete_pct de
+// cada artículo se suma al costo antes del margen (ver
+// lib/precios.js). Por eso "Gastos" (gasto operativo general, más
+// abajo) excluye las dos categorías, y el costo/rentabilidad de
+// mercadería de Ventas las suma a las dos.
+const CONDICION_NO_MERCADERIA = `categoria not in ('mercaderia','flete_mercaderia')`;
+const CONDICION_MERCADERIA = `categoria in ('mercaderia','flete_mercaderia')`;
+
 const NOMBRES_DIA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
 function aFechaISO(d) {
@@ -59,7 +69,7 @@ function leerFiltroCategoria(query) {
 }
 
 async function totalesGasto({ desde, hasta, categoria, subtipo }) {
-  const cond = [`categoria <> 'mercaderia'`, `fecha::date >= $1`, `fecha::date <= $2`];
+  const cond = [CONDICION_NO_MERCADERIA, `fecha::date >= $1`, `fecha::date <= $2`];
   const params = [desde, hasta];
   if (categoria) { params.push(categoria); cond.push(`categoria = $${params.length}`); }
   if (subtipo) { params.push(subtipo); cond.push(`subtipo = $${params.length}`); }
@@ -146,7 +156,7 @@ router.get('/gastos', async (req, res, next) => {
     // Gastos por categoría, con el detalle de subtipo anidado — respeta
     // los mismos filtros que el resumen (si ya se filtró por categoría,
     // esta tabla queda mostrando solo sus subtipos).
-    const condCat = [`categoria <> 'mercaderia'`, `fecha::date >= $1`, `fecha::date <= $2`];
+    const condCat = [CONDICION_NO_MERCADERIA, `fecha::date >= $1`, `fecha::date <= $2`];
     const paramsCat = [desde, hasta];
     if (categoria) { paramsCat.push(categoria); condCat.push(`categoria = $${paramsCat.length}`); }
     if (subtipo) { paramsCat.push(subtipo); condCat.push(`subtipo = $${paramsCat.length}`); }
@@ -183,7 +193,7 @@ router.get('/gastos', async (req, res, next) => {
     // del rango elegido arriba. Respeta el filtro de categoría/subtipo
     // del lado de gastos (ventas no tiene ese concepto).
     const desdeEvolucion = primerDiaMesesAtras(hoy, 11);
-    const condEvolGasto = [`categoria <> 'mercaderia'`, `fecha::date >= $1`];
+    const condEvolGasto = [CONDICION_NO_MERCADERIA, `fecha::date >= $1`];
     const paramsEvolGasto = [desdeEvolucion];
     if (categoria) { paramsEvolGasto.push(categoria); condEvolGasto.push(`categoria = $${paramsEvolGasto.length}`); }
     if (subtipo) { paramsEvolGasto.push(subtipo); condEvolGasto.push(`subtipo = $${paramsEvolGasto.length}`); }
@@ -316,7 +326,7 @@ router.get('/gastos', async (req, res, next) => {
 async function totalesCompraMercaderia({ desde, hasta }) {
   const { rows } = await pool.query(
     `select coalesce(sum(total),0)::numeric as total, count(*)::int as cantidad
-     from facturas_compra where categoria = 'mercaderia' and fecha::date >= $1 and fecha::date <= $2`,
+     from facturas_compra where ${CONDICION_MERCADERIA} and fecha::date >= $1 and fecha::date <= $2`,
     [desde, hasta]
   );
   return { total: Number(rows[0].total), cantidad: rows[0].cantidad };
@@ -380,7 +390,7 @@ router.get('/ventas', async (req, res, next) => {
         `select to_char(date_trunc('month', fecha), 'YYYY-MM') as mes,
                 coalesce(sum(total),0)::numeric as total
          from facturas_compra
-         where categoria = 'mercaderia' and fecha::date >= $1
+         where ${CONDICION_MERCADERIA} and fecha::date >= $1
          group by 1`,
         [desdeEvolucion]
       ),
@@ -416,7 +426,7 @@ router.get('/ventas', async (req, res, next) => {
       ),
       pool.query(
         `select extract(year from fecha)::int as anio, coalesce(sum(total),0)::numeric as total
-         from facturas_compra where categoria = 'mercaderia'
+         from facturas_compra where ${CONDICION_MERCADERIA}
          group by 1 order by 1`
       ),
     ]);

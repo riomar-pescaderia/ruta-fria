@@ -9,7 +9,7 @@
 </p>
 
 <p style="color:var(--ink-soft); font-size:.9rem;">
-  Los artículos resaltados cambian de precio respecto al costo que tienen cargado hoy. Elegí, uno por uno, si querés que este costo nuevo quede guardado en el artículo.
+  Los artículos resaltados cambian de precio respecto al costo que tienen cargado hoy. Elegí, uno por uno, si querés que este costo nuevo quede guardado en el artículo. Los dos precios están <strong>sin IVA</strong> (el mismo criterio que usa el costo del artículo), más allá de si la fila llevaba la casilla "IVA" tildada o no en la factura.
 </p>
 
 <form method="post" action="/compras/<%= factura.id %>/confirmar">
@@ -30,7 +30,7 @@
         <td data-label="Código" class="mono"><%= it.codigo %></td>
         <td data-label="Artículo"><%= it.nombre %></td>
         <td data-label="Precio anterior" class="mono">$<%= Number(it.costo_actual).toFixed(2) %></td>
-        <td data-label="Precio nuevo" class="mono"><strong>$<%= Number(it.precio_unitario).toFixed(2) %></strong></td>
+        <td data-label="Precio nuevo" class="mono"><strong>$<%= Number(it.costoNuevo).toFixed(2) %></strong></td>
         <td data-label="">
           <% if (it.cambia) { %>
             <label class="check-row" style="white-space:nowrap;">
