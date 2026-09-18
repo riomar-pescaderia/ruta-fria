@@ -16,7 +16,7 @@
 <p style="color:var(--ink-soft);">
   Cliente: <strong style="color:var(--ink);"><%= presupuesto.cliente_nombre %></strong>
   (<a href="/clientes/<%= presupuesto.cliente_id %>/editar">completar datos del cliente</a>)
-  · Fecha: <%= new Date(presupuesto.fecha).toLocaleDateString('es-AR') %>
+  · Fecha: <%= formatearFechaHora(presupuesto.fecha) %>
   · <%= ETIQUETAS_FORMA_PAGO[presupuesto.forma_pago] || presupuesto.forma_pago %>
 </p>
 <p style="color:var(--ink-soft); font-size:.85rem; margin-top:-10px;">

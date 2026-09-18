@@ -1,0 +1,234 @@
+<%- include('../partials/head') %>
+
+<div class="toolbar">
+  <h1>Gastos</h1>
+</div>
+
+<p style="color:var(--ink-soft); font-size:.9rem; margin-top:-10px;">
+  Panel de solo lectura sobre lo ya cargado en Compras. Para registrar un gasto nuevo, entrá a
+  <a href="/compras/nueva">+ Nueva factura</a> desde Compras, elegí la categoría que corresponda (distinta de "Mercadería") y quedará reflejado acá.
+</p>
+
+<div class="rangos-rapidos">
+  <% rangosRapidos.forEach(r => {
+       const activo = filtros.desde === r.desde && filtros.hasta === r.hasta; %>
+  <a class="<%= activo ? 'activo' : '' %>" href="?desde=<%= r.desde %>&hasta=<%= r.hasta %><%= filtros.categoria ? '&categoria=' + filtros.categoria : '' %><%= filtros.subtipo ? '&subtipo=' + encodeURIComponent(filtros.subtipo) : '' %>"><%= r.etiqueta %></a>
+  <% }) %>
+</div>
+
+<form class="filtros-informe" method="get" action="/gastos">
+  <div>
+    <label for="desde">Desde</label>
+    <input type="date" id="desde" name="desde" value="<%= filtros.desde %>">
+  </div>
+  <div>
+    <label for="hasta">Hasta</label>
+    <input type="date" id="hasta" name="hasta" value="<%= filtros.hasta %>">
+  </div>
+  <div>
+    <label for="categoria">Categoría</label>
+    <select id="categoria" name="categoria">
+      <option value="">— todas —</option>
+      <% categorias.filter(c => c.clave !== 'mercaderia').forEach(c => { %>
+        <option value="<%= c.clave %>" <%= filtros.categoria === c.clave ? 'selected' : '' %>><%= c.etiqueta %></option>
+      <% }) %>
+    </select>
+  </div>
+  <div id="grupo-subtipo">
+    <label for="subtipo">Subtipo</label>
+    <select id="subtipo" name="subtipo">
+      <option value="">— todos —</option>
+    </select>
+  </div>
+  <div>
+    <button class="btn" type="submit">Filtrar</button>
+  </div>
+  <% if (filtros.categoria || filtros.subtipo) { %>
+  <div>
+    <a class="btn secondary" href="?desde=<%= filtros.desde %>&hasta=<%= filtros.hasta %>">Quitar categoría</a>
+  </div>
+  <% } %>
+</form>
+
+<div class="kpis">
+  <div class="kpi">
+    <div class="kpi-etiqueta">Gastos del período <%= filtros.categoria ? '(' + (categorias.find(c => c.clave === filtros.categoria) || {}).etiqueta + (filtros.subtipo ? ' · ' + filtros.subtipo : '') + ')' : '' %></div>
+    <div class="kpi-valor">$<%= resumen.gasto.total.toFixed(2) %></div>
+    <div class="kpi-sub">
+      <%= resumen.gasto.cantidad %> factura<%= resumen.gasto.cantidad === 1 ? '' : 's' %>
+      <% if (resumen.gasto.variacion !== null) { %>
+        · <span class="kpi-variacion <%= resumen.gasto.variacion <= 0 ? 'positiva' : 'negativa' %>"><%= resumen.gasto.variacion > 0 ? '+' : '' %><%= resumen.gasto.variacion.toFixed(1) %>%</span> vs. período anterior
+      <% } %>
+    </div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-etiqueta">Ventas del período</div>
+    <div class="kpi-valor">$<%= resumen.venta.total.toFixed(2) %></div>
+    <div class="kpi-sub">
+      <%= resumen.venta.cantidad %> venta<%= resumen.venta.cantidad === 1 ? '' : 's' %> · <%= Number(resumen.venta.unidades.toFixed(2)) %> kg
+      <% if (resumen.venta.variacion !== null) { %>
+        · <span class="kpi-variacion <%= resumen.venta.variacion >= 0 ? 'positiva' : 'negativa' %>"><%= resumen.venta.variacion > 0 ? '+' : '' %><%= resumen.venta.variacion.toFixed(1) %>%</span> vs. período anterior
+      <% } %>
+    </div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-etiqueta">Resultado (ventas − gastos)</div>
+    <div class="kpi-valor" style="color: <%= resumen.resultado.total >= 0 ? 'var(--navy)' : '#a33' %>;">$<%= resumen.resultado.total.toFixed(2) %></div>
+    <div class="kpi-sub">
+      <% if (resumen.resultado.variacion !== null) { %>
+        <span class="kpi-variacion <%= resumen.resultado.variacion >= 0 ? 'positiva' : 'negativa' %>"><%= resumen.resultado.variacion > 0 ? '+' : '' %><%= resumen.resultado.variacion.toFixed(1) %>%</span> vs. período anterior
+      <% } else { %>
+        No incluye el costo de mercadería — es sobre gastos generales.
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<div class="aviso-franja">
+  Ventas y Compras ya registran la hora de cada operación, pero todo lo cargado antes de este cambio quedó con la hora en 00:00 (no se puede reconstruir la hora real de esos datos viejos). Filtrar por franja horaria o por turno todavía no está en este panel — a medida que se acumulen operaciones con la hora real cargada, se puede sumar ese desglose acá.
+</div>
+
+<div class="informe-seccion">
+  <h2>Gastos por categoría</h2>
+  <p class="informe-nota">Hacé click en una categoría para ver el detalle por subtipo.</p>
+  <% if (porCategoria.length === 0) { %>
+    <p class="empty">No hay gastos cargados en este período con estos filtros.</p>
+  <% } else { %>
+  <table class="tabla-informe">
+    <thead>
+      <tr><th>Categoría</th><th class="num">Facturas</th><th class="num">Total</th></tr>
+    </thead>
+    <tbody>
+      <% porCategoria.forEach((c, i) => { %>
+      <tr class="fila-categoria" data-toggle="subtipos-<%= i %>">
+        <td><%= c.etiqueta %></td>
+        <td class="num mono"><%= c.cantidad %></td>
+        <td class="num mono">$<%= c.total.toFixed(2) %></td>
+      </tr>
+      <% if (c.subtipos.length) { %>
+      <tr class="subtipos-detalle" id="subtipos-<%= i %>" hidden>
+        <td colspan="3">
+          <% c.subtipos.forEach(s => { %>
+            <div style="display:flex; justify-content:space-between; max-width:420px;">
+              <span><%= s.nombre %></span>
+              <span class="mono">$<%= s.total.toFixed(2) %> (<%= s.cantidad %>)</span>
+            </div>
+          <% }) %>
+        </td>
+      </tr>
+      <% } %>
+      <% }) %>
+    </tbody>
+  </table>
+  <% } %>
+</div>
+
+<div class="informe-seccion">
+  <h2>Evolución mensual (últimos 12 meses)</h2>
+  <p class="informe-nota">Para comparar entre meses — incluye el mes en curso. Respeta el filtro de categoría/subtipo del lado de gastos.</p>
+  <div style="overflow-x:auto;">
+  <table class="tabla-informe">
+    <thead>
+      <tr><th>Mes</th><th class="num">Gastos</th><th class="num">Ventas</th><th class="num">Resultado</th></tr>
+    </thead>
+    <tbody>
+      <% evolucionMensual.forEach(m => { %>
+      <tr>
+        <td><%= m.mes %></td>
+        <td class="num mono">$<%= m.gasto.toFixed(2) %></td>
+        <td class="num mono">$<%= m.venta.toFixed(2) %></td>
+        <td class="num mono" style="color: <%= m.resultado >= 0 ? 'inherit' : '#a33' %>;">$<%= m.resultado.toFixed(2) %></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="informe-seccion">
+  <h2>Por día de la semana</h2>
+  <p class="informe-nota">Suma de todo el período elegido arriba, agrupado por día de la semana en el que cae cada fecha.</p>
+  <div style="overflow-x:auto;">
+  <table class="tabla-informe">
+    <thead>
+      <tr><th>Día</th><th class="num">Gastos</th><th class="num">Ventas</th><th class="num">Kg vendidos</th></tr>
+    </thead>
+    <tbody>
+      <% porDiaSemana.forEach(d => { %>
+      <tr>
+        <td><%= d.nombre %></td>
+        <td class="num mono">$<%= d.gasto.toFixed(2) %> (<%= d.cantidadGasto %>)</td>
+        <td class="num mono">$<%= d.venta.toFixed(2) %> (<%= d.cantidadVenta %>)</td>
+        <td class="num mono"><%= Number(d.unidadesVenta.toFixed(2)) %></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="informe-seccion">
+  <h2>Por semana del mes</h2>
+  <p class="informe-nota">Semana 1 = días 1 al 7 del mes, semana 2 = 8 al 14, y así — suma de todo el período elegido arriba.</p>
+  <div style="overflow-x:auto;">
+  <table class="tabla-informe">
+    <thead>
+      <tr><th>Semana</th><th class="num">Gastos</th><th class="num">Ventas</th><th class="num">Kg vendidos</th></tr>
+    </thead>
+    <tbody>
+      <% porSemanaMes.forEach(s => { %>
+      <tr>
+        <td>Semana <%= s.semana %></td>
+        <td class="num mono">$<%= s.gasto.toFixed(2) %> (<%= s.cantidadGasto %>)</td>
+        <td class="num mono">$<%= s.venta.toFixed(2) %> (<%= s.cantidadVenta %>)</td>
+        <td class="num mono"><%= Number(s.unidadesVenta.toFixed(2)) %></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<script>
+(function () {
+  var SUBTIPOS_POR_CATEGORIA = <%- JSON.stringify(Object.fromEntries(categorias.map(c => [c.clave, c.subtipos]))) %>;
+  var SUBTIPO_INICIAL = <%- JSON.stringify(filtros.subtipo || '') %>;
+  var categoriaSelect = document.getElementById('categoria');
+  var subtipoSelect = document.getElementById('subtipo');
+
+  function reconstruirSubtipos(preservar) {
+    var lista = SUBTIPOS_POR_CATEGORIA[categoriaSelect.value] || [];
+    var valorPrevio = preservar ? subtipoSelect.value : '';
+    subtipoSelect.innerHTML = '';
+    var opcionVacia = document.createElement('option');
+    opcionVacia.value = '';
+    opcionVacia.textContent = '— todos —';
+    subtipoSelect.appendChild(opcionVacia);
+    lista.forEach(function (s) {
+      var opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = s;
+      subtipoSelect.appendChild(opt);
+    });
+    subtipoSelect.disabled = lista.length === 0;
+    if (valorPrevio && lista.indexOf(valorPrevio) !== -1) subtipoSelect.value = valorPrevio;
+  }
+
+  categoriaSelect.addEventListener('change', function () { reconstruirSubtipos(false); });
+  reconstruirSubtipos(true);
+  if (SUBTIPO_INICIAL && (SUBTIPOS_POR_CATEGORIA[categoriaSelect.value] || []).indexOf(SUBTIPO_INICIAL) !== -1) {
+    subtipoSelect.value = SUBTIPO_INICIAL;
+  }
+
+  // Click en una fila de categoría abre/cierra su detalle de subtipos.
+  document.querySelectorAll('.fila-categoria').forEach(function (fila) {
+    fila.addEventListener('click', function () {
+      var id = fila.getAttribute('data-toggle');
+      var detalle = document.getElementById(id);
+      if (detalle) detalle.hidden = !detalle.hidden;
+    });
+  });
+})();
+</script>
+
+<%- include('../partials/foot') %>

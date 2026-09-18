@@ -489,3 +489,70 @@ tr.fila-cambio td:nth-child(4) { color: #8a5a12; }
   }
   #tabla-clientes td[data-label="Razón social"]::before { display: none; }
 }
+
+/* ---------- Paneles de informes (Gastos) ---------- */
+
+.filtros-informe {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+.filtros-informe > div { display: flex; flex-direction: column; gap: 4px; }
+.filtros-informe label { margin-bottom: 0; }
+.filtros-informe select,
+.filtros-informe input[type="date"] { min-width: 150px; }
+.rangos-rapidos { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.rangos-rapidos a {
+  font-size: .8rem;
+  color: var(--navy);
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 12px;
+  background: var(--surface);
+}
+.rangos-rapidos a:hover { background: var(--bg); }
+.rangos-rapidos a.activo { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+.kpis { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 22px; }
+.kpi {
+  flex: 1;
+  min-width: 200px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 3px rgba(22,35,47,.04);
+}
+.kpi .kpi-etiqueta { font-size: .82rem; color: var(--ink-soft); margin-bottom: 6px; }
+.kpi .kpi-valor { font-size: 1.5rem; font-weight: 600; color: var(--navy); font-family: ui-monospace, "IBM Plex Mono", monospace; }
+.kpi .kpi-sub { font-size: .78rem; color: var(--ink-soft); margin-top: 4px; }
+.kpi .kpi-variacion { font-weight: 600; }
+.kpi .kpi-variacion.positiva { color: #1e6b34; }
+.kpi .kpi-variacion.negativa { color: #a33; }
+
+.informe-seccion { margin-bottom: 30px; }
+.informe-seccion h2 { font-size: 1.15rem; color: var(--navy); margin: 0 0 4px; }
+.informe-seccion .informe-nota { color: var(--ink-soft); font-size: .85rem; margin: 0 0 12px; }
+
+table.tabla-informe td.num, table.tabla-informe th.num { text-align: right; }
+.fila-categoria { cursor: pointer; }
+.fila-categoria td:first-child { font-weight: 600; }
+.subtipos-detalle { background: var(--bg); }
+.subtipos-detalle td { padding: 6px 12px 6px 30px; font-size: .88rem; color: var(--ink-soft); }
+
+.aviso-franja {
+  background: var(--orange-soft);
+  border: 1px solid #f0d9a6;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: .85rem;
+  color: #8a5a12;
+  margin-bottom: 22px;
+}

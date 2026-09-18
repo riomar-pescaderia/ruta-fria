@@ -8,6 +8,7 @@
 // corrección — sin venta ni recibo asociado.
 const express = require('express');
 const pool = require('../db/pool');
+const { fechaHoraInput, inputAFecha } = require('../lib/fechas');
 
 const router = express.Router();
 
@@ -16,19 +17,6 @@ const ETIQUETAS_MEDIO_PAGO = { efectivo: 'Efectivo', transferencia: 'Transferenc
 
 function redondear2(n) {
   return Math.round(n * 100) / 100;
-}
-
-// Hoy, en la zona horaria del negocio — para no depender de en qué huso
-// horario esté corriendo el servidor (Render corre en UTC).
-function hoyAr() {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
-}
-
-// Una columna "date" de Postgres vuelve como Date de JS (medianoche UTC) —
-// esto la deja en el formato que espera un <input type="date">.
-function fechaInput(d) {
-  if (!d) return '';
-  return new Date(d).toISOString().slice(0, 10);
 }
 
 router.get('/', async (req, res, next) => {
@@ -83,7 +71,7 @@ router.get('/:clienteId', async (req, res, next) => {
       saldo: saldoAcumulado,
       mediosPago: MEDIOS_PAGO,
       etiquetasMedioPago: ETIQUETAS_MEDIO_PAGO,
-      hoy: hoyAr(),
+      hoy: fechaHoraInput(),
       error: req.query.error || null,
     });
   } catch (err) { next(err); }
@@ -97,7 +85,7 @@ router.post('/:clienteId/recibos', async (req, res, next) => {
 
   const { fecha, notas } = req.body;
   const medio_pago = MEDIOS_PAGO.includes(req.body.medio_pago) ? req.body.medio_pago : 'efectivo';
-  const fechaRecibo = fecha || hoyAr();
+  const fechaRecibo = inputAFecha(fecha) || new Date();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -127,7 +115,7 @@ router.get('/recibos/:id/editar', async (req, res, next) => {
     const recibo = rows[0];
     if (!recibo) return res.redirect('/cuenta-corriente');
     res.render('cuenta-corriente/recibo-form', {
-      recibo: { ...recibo, fecha: fechaInput(recibo.fecha) },
+      recibo: { ...recibo, fecha: fechaHoraInput(recibo.fecha) },
       mediosPago: MEDIOS_PAGO,
       etiquetasMedioPago: ETIQUETAS_MEDIO_PAGO,
       error: null,
@@ -154,7 +142,7 @@ router.post('/recibos/:id', async (req, res, next) => {
       });
     }
 
-    const fechaRecibo = fecha || fechaInput(recibo.fecha);
+    const fechaRecibo = inputAFecha(fecha) || recibo.fecha;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -197,7 +185,7 @@ router.post('/:clienteId/ajuste', async (req, res, next) => {
     const monto = redondear2(Number(req.body.monto) || 0);
     const tipoAjuste = req.body.ajuste_tipo === 'haber' ? 'haber' : 'debe';
     const notas = (req.body.notas || '').trim();
-    const fecha = req.body.fecha || hoyAr();
+    const fecha = inputAFecha(req.body.fecha) || new Date();
 
     if (monto <= 0 || !notas) {
       const msg = monto <= 0 ? 'El monto del ajuste tiene que ser mayor a 0.' : 'Contá brevemente el motivo del ajuste.';

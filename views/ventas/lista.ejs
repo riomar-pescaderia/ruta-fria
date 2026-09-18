@@ -31,7 +31,7 @@
        const ETIQUETAS_ESTADO = { emitido: 'Emitido', entregado: 'Entregado', cobrado: 'Cobrado' }; %>
     <% ventas.forEach(v => { %>
     <tr data-buscar="<%= (v.cliente_nombre + ' ' + v.numero_remito).toLowerCase() %>" data-href="/ventas/<%= v.id %>">
-      <td data-label="Fecha"><%= new Date(v.fecha).toLocaleDateString('es-AR') %></td>
+      <td data-label="Fecha"><%= formatearFechaHora(v.fecha) %></td>
       <td data-label="Nº remito" class="mono">#<%= v.numero_remito %></td>
       <td data-label="Cliente"><%= v.cliente_nombre %></td>
       <td data-label="Forma de pago"><%= ETIQUETAS_FORMA_PAGO[v.forma_pago] || v.forma_pago %></td>

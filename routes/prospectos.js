@@ -8,6 +8,7 @@ const pool = require('../db/pool');
 const { geocodificarDireccion, buscarDirecciones } = require('../lib/geocode');
 const { listarConVisitas } = require('../lib/prospectosCompartido');
 const { buscarClienteCoincidente, buscarSugerenciasCliente } = require('../lib/vinculacion');
+const { inputAFecha, fechaHoraInput } = require('../lib/fechas');
 
 function redondearCoord(n) {
   return n === null || n === undefined || n === '' ? null : Number(n);
@@ -227,7 +228,7 @@ router.get('/:id', async (req, res, next) => {
       ]);
     }
 
-    res.render('prospectos/detalle', { prospecto, visitas, contactos, sugerencias, clientes });
+    res.render('prospectos/detalle', { prospecto, visitas, contactos, sugerencias, clientes, ahora: fechaHoraInput() });
   } catch (err) { next(err); }
 });
 
@@ -253,7 +254,7 @@ router.post('/:id/visitas', async (req, res, next) => {
     const { fecha, nota } = req.body;
     await pool.query(
       'insert into prospectos_visitas (prospecto_id, fecha, nota) values ($1, $2, $3)',
-      [req.params.id, fecha || new Date().toISOString().slice(0, 10), nota || null]
+      [req.params.id, inputAFecha(fecha) || new Date(), nota || null]
     );
     res.redirect(`/prospectos/${req.params.id}`);
   } catch (err) { next(err); }

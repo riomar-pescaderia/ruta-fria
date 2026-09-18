@@ -143,6 +143,23 @@ alter table facturas_compra add column if not exists categoria text not null def
 -- Inversión, Otros) quedan siempre en null.
 alter table facturas_compra add column if not exists subtipo text;
 
+-- "fecha" arrancó como solo día (date) porque el formulario de Compras
+-- solo pedía una fecha, sin hora. Se pasa a timestamptz para que de acá
+-- en adelante quede registrada también la hora en que se cargó cada
+-- factura (ver lib/fechas.js) — las facturas ya cargadas quedan a la
+-- medianoche de su mismo día, porque esa hora nunca se guardó y no hay
+-- forma de reconstruirla.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'facturas_compra' and column_name = 'fecha' and data_type = 'date'
+  ) then
+    alter table facturas_compra alter column fecha type timestamptz using fecha::timestamptz;
+    alter table facturas_compra alter column fecha set default now();
+  end if;
+end $$;
+
 -- Para una factura que no es de mercadería, el renglón no tiene un
 -- artículo real: "codigo_manual" y "descripcion" son lo que se tipeó a
 -- mano en esos casos, y quedan null cuando el renglón sí es de un
@@ -191,6 +208,19 @@ create table if not exists prospectos_visitas (
 );
 
 create index if not exists idx_prospectos_visitas_prospecto on prospectos_visitas(prospecto_id);
+
+-- Misma migración que la de facturas_compra más arriba: de acá en
+-- adelante una visita también registra la hora, no solo el día.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'prospectos_visitas' and column_name = 'fecha' and data_type = 'date'
+  ) then
+    alter table prospectos_visitas alter column fecha type timestamptz using fecha::timestamptz;
+    alter table prospectos_visitas alter column fecha set default now();
+  end if;
+end $$;
 
 -- Si el prospecto ya compró y está cargado en Clientes, se vincula acá —
 -- así el mapa puede distinguir de un vistazo quién ya es cliente de quién
@@ -368,6 +398,19 @@ begin
   end if;
 end $$;
 
+-- Misma migración que la de facturas_compra: de acá en adelante un
+-- recibo también registra la hora en que se cargó, no solo el día.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'recibos' and column_name = 'fecha' and data_type = 'date'
+  ) then
+    alter table recibos alter column fecha type timestamptz using fecha::timestamptz;
+    alter table recibos alter column fecha set default now();
+  end if;
+end $$;
+
 create table if not exists cuenta_corriente_movimientos (
   id serial primary key,
   cliente_id integer not null references clientes(id),
@@ -389,6 +432,19 @@ begin
     alter table cuenta_corriente_movimientos
       add constraint chk_movimiento_tipo
       check (tipo in ('venta', 'recibo', 'ajuste'));
+  end if;
+end $$;
+
+-- Misma migración: de acá en adelante un movimiento de cuenta corriente
+-- (venta, recibo o ajuste) también registra la hora en que se cargó.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'cuenta_corriente_movimientos' and column_name = 'fecha' and data_type = 'date'
+  ) then
+    alter table cuenta_corriente_movimientos alter column fecha type timestamptz using fecha::timestamptz;
+    alter table cuenta_corriente_movimientos alter column fecha set default now();
   end if;
 end $$;
 
@@ -568,6 +624,7 @@ create index if not exists idx_facturas_compra_items_factura on facturas_compra_
 create index if not exists idx_prospectos_activo on prospectos(activo);
 create index if not exists idx_ventas_items_venta on ventas_items(venta_id);
 create index if not exists idx_gastos_fecha on gastos(fecha);
+create index if not exists idx_facturas_compra_fecha on facturas_compra(fecha);
 create index if not exists idx_ventas_fecha on ventas(fecha);
 create index if not exists idx_ventas_cliente on ventas(cliente_id);
 create index if not exists idx_movimientos_cliente on cuenta_corriente_movimientos(cliente_id);

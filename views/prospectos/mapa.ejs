@@ -63,7 +63,7 @@
       <td data-label="Dirección"><%= p.direccion %></td>
       <td data-label="Teléfono"><%= p.telefono || '—' %></td>
       <td data-label="Visitas" class="mono"><%= p.cantidad_visitas %></td>
-      <td data-label="Última visita"><%= p.ultima_visita ? new Date(p.ultima_visita).toLocaleDateString('es-AR') : '—' %></td>
+      <td data-label="Última visita"><%= p.ultima_visita ? formatearFecha(p.ultima_visita) : '—' %></td>
       <td data-label="" style="display:flex; gap:8px; flex-wrap:wrap;">
         <a class="btn secondary" href="/prospectos/<%= p.id %>">Ver</a>
         <a class="btn secondary" href="/prospectos/<%= p.id %>/editar">Editar</a>
@@ -90,7 +90,7 @@
     lat: Number(p.lat),
     lng: Number(p.lng),
     visitas: p.cantidad_visitas,
-    ultima: p.ultima_visita ? new Date(p.ultima_visita).toLocaleDateString('es-AR') : null,
+    ultima: p.ultima_visita ? formatearFecha(p.ultima_visita) : null,
     esCliente: !!p.cliente_id,
     clienteNombre: p.cliente_nombre || null,
   }))) %>;

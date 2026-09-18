@@ -103,7 +103,7 @@
   <tbody>
     <% movimientos.forEach(m => { %>
     <tr>
-      <td data-label="Fecha" class="mono"><%= new Date(m.fecha).toLocaleString('es-AR') %></td>
+      <td data-label="Fecha" class="mono"><%= formatearFechaHora(m.fecha) %></td>
       <td data-label="Tipo"><%= ETIQUETAS_TIPO[m.tipo] || m.tipo %></td>
       <td data-label="Cantidad" class="mono" style="color: <%= Number(m.cantidad) < 0 ? '#a33' : '#1e6b34' %>;">
         <%= Number(m.cantidad) > 0 ? '+' : '' %><%= Number(m.cantidad) %>

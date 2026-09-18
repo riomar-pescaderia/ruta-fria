@@ -15,6 +15,7 @@ const { getConfig } = require('../lib/config');
 const { calcularPrecios } = require('../lib/precios');
 const { sincronizarMovimientoVenta } = require('../lib/cuentaCorriente');
 const { registrarMovimiento, obtenerConfigStock } = require('../lib/stock');
+const { fechaHoraInput, inputAFecha } = require('../lib/fechas');
 const presupuestosRouter = require('./presupuestos');
 
 const router = express.Router();
@@ -30,19 +31,6 @@ const ORIGENES = ['deposito', 'calle'];
 
 function redondear2(n) {
   return Math.round(n * 100) / 100;
-}
-
-// Hoy, en la zona horaria del negocio — para no depender de en qué huso
-// horario esté corriendo el servidor (Render corre en UTC).
-function hoyAr() {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
-}
-
-// Una columna "date"/"timestamptz" de Postgres vuelve como Date de JS —
-// esto la deja en el formato que espera un <input type="date">.
-function fechaInput(d) {
-  if (!d) return '';
-  return new Date(d).toISOString().slice(0, 10);
 }
 
 async function datosFormulario() {
@@ -119,7 +107,7 @@ router.get('/nueva', async (req, res, next) => {
   try {
     const { clientes, articulos } = await datosFormulario();
     res.render('ventas/form', {
-      venta: { fecha: hoyAr(), forma_pago: 'efectivo', origen: 'deposito' },
+      venta: { fecha: fechaHoraInput(), forma_pago: 'efectivo', origen: 'deposito' },
       items: [{}],
       clientes,
       articulos,
@@ -164,7 +152,7 @@ router.post('/', async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const cfgStock = await obtenerConfigStock(client);
-    const fechaVenta = fecha || hoyAr();
+    const fechaVenta = inputAFecha(fecha) || new Date();
     const { rows } = await client.query(
       `insert into ventas (cliente_id, fecha, forma_pago, origen, notas, total)
        values ($1,$2,$3,$4,$5,$6) returning id, numero_remito`,
@@ -216,7 +204,7 @@ router.get('/:id/editar', async (req, res, next) => {
     const { rows: items } = await pool.query('select * from ventas_items where venta_id = $1 order by id', [venta.id]);
     const { clientes, articulos } = await datosFormulario();
     res.render('ventas/form', {
-      venta: { ...venta, fecha: fechaInput(venta.fecha) },
+      venta: { ...venta, fecha: fechaHoraInput(venta.fecha) },
       items,
       clientes,
       articulos,
@@ -258,7 +246,7 @@ router.post('/:id', async (req, res, next) => {
     cliente_id = await resolverClienteId(cliente_id, clienteTexto);
 
     const total = redondear2(items.reduce((acc, it) => acc + it.subtotal, 0));
-    const fechaVenta = fecha || fechaInput(venta.fecha);
+    const fechaVenta = inputAFecha(fecha) || venta.fecha;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');

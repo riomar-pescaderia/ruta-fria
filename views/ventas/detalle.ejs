@@ -19,7 +19,7 @@
   <span class="badge <%= venta.estado %>"><%= ETIQUETAS_ESTADO[venta.estado] || venta.estado %></span>
   · Cliente: <strong style="color:var(--ink);"><%= venta.cliente_nombre %></strong>
   (<a href="/clientes/<%= venta.cliente_id %>/editar">completar datos del cliente</a>)
-  · Fecha: <%= new Date(venta.fecha).toLocaleDateString('es-AR') %>
+  · Fecha: <%= formatearFechaHora(venta.fecha) %>
   · <%= ETIQUETAS_FORMA_PAGO[venta.forma_pago] || venta.forma_pago %>
   · <%= ETIQUETAS_ORIGEN[venta.origen] || venta.origen %>
 </p>

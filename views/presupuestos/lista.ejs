@@ -33,7 +33,7 @@
     <% const ETIQUETAS_FORMA_PAGO = { efectivo: 'Efectivo', transferencia: 'Transferencia', cuenta_corriente: 'Cuenta corriente' }; %>
     <% presupuestos.forEach(p => { %>
     <tr data-buscar="<%= (p.cliente_nombre + ' ' + p.numero_presupuesto).toLowerCase() %>" data-href="/ventas/presupuestos/<%= p.id %>">
-      <td data-label="Fecha"><%= new Date(p.fecha).toLocaleDateString('es-AR') %></td>
+      <td data-label="Fecha"><%= formatearFechaHora(p.fecha) %></td>
       <td data-label="Nº presupuesto" class="mono">#<%= p.numero_presupuesto %></td>
       <td data-label="Cliente"><%= p.cliente_nombre %></td>
       <td data-label="Forma de pago"><%= ETIQUETAS_FORMA_PAGO[p.forma_pago] || p.forma_pago %></td>

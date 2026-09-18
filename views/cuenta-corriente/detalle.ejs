@@ -34,7 +34,7 @@
   <tbody>
     <% movimientos.forEach(m => { %>
     <tr>
-      <td data-label="Fecha"><%= new Date(m.fecha).toLocaleDateString('es-AR') %></td>
+      <td data-label="Fecha"><%= formatearFechaHora(m.fecha) %></td>
       <td data-label="Comprobante">
         <% if (m.tipo === 'venta') { %>
           <a href="/ventas/<%= m.venta_id %>">Venta remito Nº <%= m.numero_remito %></a>
@@ -68,8 +68,8 @@
   <form class="card" method="post" action="/cuenta-corriente/<%= cliente.id %>/recibos" style="flex:1; min-width:280px; max-width:400px;">
     <h2 style="font-size:1.05rem; margin:0;">Registrar recibo (cobro)</h2>
     <div>
-      <label for="fecha_recibo">Fecha</label>
-      <input type="date" id="fecha_recibo" name="fecha" value="<%= hoy %>">
+      <label for="fecha_recibo">Fecha y hora</label>
+      <input type="datetime-local" id="fecha_recibo" name="fecha" value="<%= hoy %>">
     </div>
     <div>
       <label for="monto_recibo">Monto</label>
@@ -96,8 +96,8 @@
     <h2 style="font-size:1.05rem; margin:0;">Registrar ajuste</h2>
     <p style="color:var(--ink-soft); font-size:.8rem; margin:0;">Para el saldo inicial de un cliente que ya tenía cuenta corriente antes de este sistema, o para corregir un error. No genera ni modifica ninguna venta ni recibo.</p>
     <div>
-      <label for="fecha_ajuste">Fecha</label>
-      <input type="date" id="fecha_ajuste" name="fecha" value="<%= hoy %>">
+      <label for="fecha_ajuste">Fecha y hora</label>
+      <input type="datetime-local" id="fecha_ajuste" name="fecha" value="<%= hoy %>">
     </div>
     <div>
       <label for="ajuste_tipo">Tipo</label>

@@ -18,8 +18,8 @@
       <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Si el cliente todavía no está agendado, escribí el nombre igual y guardá la venta — se crea solo con ese nombre, y después podés completar el resto de sus datos desde el detalle de la venta.</p>
     </div>
     <div style="flex:1; min-width:150px;">
-      <label for="fecha">Fecha</label>
-      <input type="date" id="fecha" name="fecha" value="<%= venta.fecha || '' %>">
+      <label for="fecha">Fecha y hora</label>
+      <input type="datetime-local" id="fecha" name="fecha" value="<%= venta.fecha || '' %>">
     </div>
   </div>
 

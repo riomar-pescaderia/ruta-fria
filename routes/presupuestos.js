@@ -10,6 +10,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const { getConfig } = require('../lib/config');
 const { calcularPrecios } = require('../lib/precios');
+const { fechaHoraInput, inputAFecha } = require('../lib/fechas');
 
 const router = express.Router();
 
@@ -17,15 +18,6 @@ const FORMAS_PAGO = ['efectivo', 'transferencia', 'cuenta_corriente'];
 
 function redondear2(n) {
   return Math.round(n * 100) / 100;
-}
-
-function hoyAr() {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
-}
-
-function fechaInput(d) {
-  if (!d) return '';
-  return new Date(d).toISOString().slice(0, 10);
 }
 
 async function datosFormulario() {
@@ -94,7 +86,7 @@ router.get('/nuevo', async (req, res, next) => {
   try {
     const { clientes, articulos } = await datosFormulario();
     res.render('presupuestos/form', {
-      presupuesto: { fecha: hoyAr(), forma_pago: 'efectivo' },
+      presupuesto: { fecha: fechaHoraInput(), forma_pago: 'efectivo' },
       items: [{}],
       clientes,
       articulos,
@@ -137,7 +129,7 @@ router.post('/', async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const fechaPresupuesto = fecha || hoyAr();
+    const fechaPresupuesto = inputAFecha(fecha) || new Date();
     const { rows } = await client.query(
       `insert into presupuestos (cliente_id, fecha, forma_pago, notas, total)
        values ($1,$2,$3,$4,$5) returning id`,
@@ -169,7 +161,7 @@ router.get('/:id/editar', async (req, res, next) => {
     const { rows: items } = await pool.query('select * from presupuestos_items where presupuesto_id = $1 order by id', [presupuesto.id]);
     const { clientes, articulos } = await datosFormulario();
     res.render('presupuestos/form', {
-      presupuesto: { ...presupuesto, fecha: fechaInput(presupuesto.fecha) },
+      presupuesto: { ...presupuesto, fecha: fechaHoraInput(presupuesto.fecha) },
       items,
       clientes,
       articulos,
@@ -209,7 +201,7 @@ router.post('/:id', async (req, res, next) => {
 
     cliente_id = await resolverClienteId(cliente_id, clienteTexto);
     const total = redondear2(items.reduce((acc, it) => acc + it.subtotal, 0));
-    const fechaPresupuesto = fecha || fechaInput(presupuesto.fecha);
+    const fechaPresupuesto = inputAFecha(fecha) || presupuesto.fecha;
 
     const client = await pool.connect();
     try {

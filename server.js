@@ -17,7 +17,7 @@ const mapaRouter = require('./routes/mapa');
 const ventasRouter = require('./routes/ventas');
 const cuentaCorrienteRouter = require('./routes/cuentaCorriente');
 const stockRouter = require('./routes/stock');
-const proximamente = require('./routes/proximamente');
+const gastosRouter = require('./routes/gastos');
 
 const app = express();
 
@@ -45,9 +45,14 @@ app.use(session({
 
 // se pasa a todas las vistas, para resaltar el link activo en la navegación
 // y mostrar quién está logueado
+const { formatearFecha, formatearFechaHora } = require('./lib/fechas');
 app.use((req, res, next) => {
   res.locals.path = req.path;
   res.locals.usuario = req.session.usuario || null;
+  // Disponibles en cualquier vista para mostrar una fecha guardada con
+  // su hora, siempre en hora de Argentina (ver lib/fechas.js).
+  res.locals.formatearFecha = formatearFecha;
+  res.locals.formatearFechaHora = formatearFechaHora;
   next();
 });
 
@@ -69,7 +74,7 @@ app.use('/usuarios', requireAdmin, usuariosRouter);
 app.use('/compras', requireAcceso('compras'), comprasRouter);
 app.use('/prospectos', requireAcceso('prospectos'), prospectosRouter);
 app.use('/mapa', requireAcceso('mapa'), mapaRouter);
-app.use('/gastos', requireAcceso('gastos'), proximamente('Gastos generales', 'Sueldos, alquiler, insumos y demás gastos de la operación, con un panel de total por tipo.'));
+app.use('/gastos', requireAcceso('gastos'), gastosRouter);
 app.use('/ventas', requireAcceso('ventas'), ventasRouter);
 app.use('/cuenta-corriente', requireAcceso('cuenta_corriente'), cuentaCorrienteRouter);
 app.use('/stock', requireAcceso('stock'), stockRouter);

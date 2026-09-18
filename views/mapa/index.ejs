@@ -51,7 +51,7 @@
     lat: Number(p.lat),
     lng: Number(p.lng),
     visitas: p.cantidad_visitas,
-    ultima: p.ultima_visita ? new Date(p.ultima_visita).toLocaleDateString('es-AR') : null,
+    ultima: p.ultima_visita ? formatearFecha(p.ultima_visita) : null,
     esCliente: !!p.cliente_id,
     clienteNombre: p.cliente_nombre || null,
   }))) %>;

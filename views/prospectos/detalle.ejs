@@ -114,8 +114,8 @@
   <h2 style="font-size:1.05rem; margin:0 0 4px;">Registrar visita</h2>
   <form method="post" action="/prospectos/<%= prospecto.id %>/visitas" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
     <div style="flex:1; min-width:140px;">
-      <label for="fecha">Fecha</label>
-      <input type="date" id="fecha" name="fecha" value="<%= new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }) %>">
+      <label for="fecha">Fecha y hora</label>
+      <input type="datetime-local" id="fecha" name="fecha" value="<%= ahora %>">
     </div>
     <div style="flex:2; min-width:180px;">
       <label for="nota">Nota (opcional)</label>
@@ -142,7 +142,7 @@
   <tbody>
     <% visitas.forEach(v => { %>
     <tr>
-      <td data-label="Fecha" class="mono"><%= new Date(v.fecha).toLocaleDateString('es-AR') %></td>
+      <td data-label="Fecha" class="mono"><%= formatearFechaHora(v.fecha) %></td>
       <td data-label="Nota"><%= v.nota || '—' %></td>
       <td data-label="">
         <form method="post" action="/prospectos/<%= prospecto.id %>/visitas/<%= v.id %>/eliminar" style="margin:0;" onsubmit="return confirm('¿Eliminar esta visita del historial?');">

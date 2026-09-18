@@ -10,8 +10,8 @@
 
 <form class="card" method="post" action="/cuenta-corriente/recibos/<%= recibo.id %>">
   <div>
-    <label for="fecha">Fecha</label>
-    <input type="date" id="fecha" name="fecha" value="<%= recibo.fecha %>">
+    <label for="fecha">Fecha y hora</label>
+    <input type="datetime-local" id="fecha" name="fecha" value="<%= recibo.fecha %>">
   </div>
   <div>
     <label for="monto">Monto</label>

@@ -8,11 +8,11 @@
   <% if (sync && sync.error) { %>
   <p style="color:#a33; font-size:.9rem;">
     No se pudo sincronizar con "<%= config.planilla_nombre || 'la planilla' %>": <%= sync.error %>
-    <% if (config.ultima_sincronizacion) { %>Mostrando los últimos valores conocidos, del <%= new Date(config.ultima_sincronizacion).toLocaleString('es-AR') %>.<% } %>
+    <% if (config.ultima_sincronizacion) { %>Mostrando los últimos valores conocidos, del <%= formatearFechaHora(config.ultima_sincronizacion) %>.<% } %>
   </p>
   <% } else { %>
   <p style="color:var(--ink-soft); font-size:.9rem;">
-    Stock sincronizado con "<%= config.planilla_nombre || 'la planilla' %>"<% if (config.ultima_sincronizacion) { %> — última actualización: <%= new Date(config.ultima_sincronizacion).toLocaleString('es-AR') %><% } %>.
+    Stock sincronizado con "<%= config.planilla_nombre || 'la planilla' %>"<% if (config.ultima_sincronizacion) { %> — última actualización: <%= formatearFechaHora(config.ultima_sincronizacion) %><% } %>.
   </p>
   <% } %>
   <form method="post" action="/stock/sincronizar" style="margin-bottom:10px;">

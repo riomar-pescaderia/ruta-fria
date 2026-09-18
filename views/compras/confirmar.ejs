@@ -4,7 +4,7 @@
 
 <p style="color:var(--ink-soft);">
   Proveedor: <strong style="color:var(--ink);"><%= factura.proveedor_nombre %></strong>
-  · Fecha: <%= new Date(factura.fecha).toLocaleDateString('es-AR') %>
+  · Fecha: <%= formatearFechaHora(factura.fecha) %>
   <% if (factura.numero) { %>· Factura #<%= factura.numero %><% } %>
 </p>
 

@@ -13,6 +13,7 @@ const { getConfig } = require('../lib/config');
 const { puedeEditarConfirmadas } = require('../lib/auth');
 const { CATEGORIAS_GASTO, esClaveValida, categoriaPorClave } = require('../lib/categoriasGasto');
 const { registrarMovimiento, obtenerConfigStock } = require('../lib/stock');
+const { fechaHoraInput, inputAFecha } = require('../lib/fechas');
 
 const router = express.Router();
 
@@ -20,19 +21,6 @@ router.use('/proveedores', proveedoresRouter);
 
 function redondear2(n) {
   return Math.round(n * 100) / 100;
-}
-
-// Hoy, en la zona horaria del negocio — para no depender de en qué huso
-// horario esté corriendo el servidor (Render corre en UTC).
-function hoyAr() {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' });
-}
-
-// Una columna "date" de Postgres vuelve como Date de JS (medianoche UTC) —
-// esto la deja en el formato que espera un <input type="date">.
-function fechaInput(d) {
-  if (!d) return '';
-  return new Date(d).toISOString().slice(0, 10);
 }
 
 async function datosFormulario() {
@@ -142,7 +130,7 @@ router.get('/nueva', async (req, res, next) => {
   try {
     const [{ proveedores, articulos }, config] = await Promise.all([datosFormulario(), getConfig()]);
     res.render('compras/form', {
-      factura: { fecha: hoyAr(), categoria: 'mercaderia', subtipo: null },
+      factura: { fecha: fechaHoraInput(), categoria: 'mercaderia', subtipo: null },
       items: [{}],
       proveedores,
       articulos,
@@ -189,7 +177,7 @@ router.post('/', async (req, res, next) => {
     const { rows } = await client.query(
       `insert into facturas_compra (proveedor_id, numero, fecha, total, categoria, subtipo)
        values ($1,$2,$3,$4,$5,$6) returning id`,
-      [proveedor_id, numero || null, fecha || hoyAr(), total, categoria, subtipo]
+      [proveedor_id, numero || null, inputAFecha(fecha) || new Date(), total, categoria, subtipo]
     );
     const facturaId = rows[0].id;
     for (const it of items) {
@@ -239,7 +227,7 @@ router.get('/:id/editar', async (req, res, next) => {
     }));
 
     res.render('compras/form', {
-      factura: { ...factura, fecha: fechaInput(factura.fecha) },
+      factura: { ...factura, fecha: fechaHoraInput(factura.fecha) },
       items,
       proveedores,
       articulos,
@@ -295,7 +283,7 @@ router.post('/:id', async (req, res, next) => {
     await client.query('BEGIN');
     await client.query(
       'update facturas_compra set proveedor_id=$1, numero=$2, fecha=$3, total=$4, categoria=$5, subtipo=$6 where id=$7',
-      [proveedor_id, numero || null, fecha || fechaInput(factura.fecha), total, categoria, subtipo, factura.id]
+      [proveedor_id, numero || null, inputAFecha(fecha) || factura.fecha, total, categoria, subtipo, factura.id]
     );
     await client.query('delete from facturas_compra_items where factura_id = $1', [factura.id]);
     for (const it of items) {
