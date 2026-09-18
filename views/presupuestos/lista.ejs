@@ -1,0 +1,66 @@
+<%- include('../partials/head') %>
+
+<div class="toolbar">
+  <h1>Presupuestos</h1>
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <a class="btn secondary" href="/ventas">← Volver a Ventas</a>
+    <a class="btn" href="/ventas/presupuestos/nuevo">+ Nuevo presupuesto</a>
+  </div>
+</div>
+
+<p style="color:var(--ink-soft); font-size:.9rem; margin-top:-10px;">
+  Es solo una cotización para el cliente — tiene su propia numeración y no mueve stock ni cuenta corriente. Cuando el cliente confirma, la venta se carga aparte, desde Ventas.
+</p>
+
+<% if (presupuestos.length === 0) { %>
+  <p class="empty">Todavía no armaste ningún presupuesto.</p>
+<% } else { %>
+<div style="max-width:340px; margin-bottom:14px;">
+  <input type="text" id="buscar-presupuesto" placeholder="Buscar por cliente o Nº de presupuesto...">
+</div>
+<p id="sin-resultados-presupuestos" class="empty" style="display:none;">No encontré ningún presupuesto con esa búsqueda.</p>
+<table id="tabla-presupuestos">
+  <thead>
+    <tr>
+      <th>Fecha</th>
+      <th>Nº presupuesto</th>
+      <th>Cliente</th>
+      <th>Forma de pago</th>
+      <th>Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% const ETIQUETAS_FORMA_PAGO = { efectivo: 'Efectivo', transferencia: 'Transferencia', cuenta_corriente: 'Cuenta corriente' }; %>
+    <% presupuestos.forEach(p => { %>
+    <tr data-buscar="<%= (p.cliente_nombre + ' ' + p.numero_presupuesto).toLowerCase() %>" data-href="/ventas/presupuestos/<%= p.id %>">
+      <td data-label="Fecha"><%= new Date(p.fecha).toLocaleDateString('es-AR') %></td>
+      <td data-label="Nº presupuesto" class="mono">#<%= p.numero_presupuesto %></td>
+      <td data-label="Cliente"><%= p.cliente_nombre %></td>
+      <td data-label="Forma de pago"><%= ETIQUETAS_FORMA_PAGO[p.forma_pago] || p.forma_pago %></td>
+      <td data-label="Total" class="mono">$<%= Number(p.total).toFixed(2) %></td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+<% } %>
+
+<script>
+(function () {
+  var input = document.getElementById('buscar-presupuesto');
+  if (!input) return;
+  var filas = document.querySelectorAll('#tabla-presupuestos tbody tr');
+  var sinResultados = document.getElementById('sin-resultados-presupuestos');
+  input.addEventListener('input', function () {
+    var texto = input.value.trim().toLowerCase();
+    var visibles = 0;
+    filas.forEach(function (tr) {
+      var coincide = !texto || tr.dataset.buscar.indexOf(texto) !== -1;
+      tr.hidden = !coincide;
+      if (coincide) visibles++;
+    });
+    sinResultados.style.display = visibles === 0 ? 'block' : 'none';
+  });
+})();
+</script>
+
+<%- include('../partials/foot') %>

@@ -302,6 +302,44 @@ begin
   end if;
 end $$;
 
+-- Presupuestos: misma idea que una venta (cliente + renglones de
+-- artículos + forma de pago), pero es solo una cotización para mostrarle
+-- un precio al cliente — no genera ningún movimiento de stock ni de
+-- cuenta corriente, y tiene su propia numeración (numero_presupuesto),
+-- separada de la de ventas (numero_remito). Ver routes/presupuestos.js.
+create table if not exists presupuestos (
+  id serial primary key,
+  numero_presupuesto serial,
+  cliente_id integer not null references clientes(id),
+  fecha timestamptz not null default now(),
+  forma_pago text not null,
+  notas text,
+  total numeric not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists presupuestos_items (
+  id serial primary key,
+  presupuesto_id integer not null references presupuestos(id) on delete cascade,
+  articulo_id integer not null references articulos(id),
+  cantidad numeric not null,
+  precio_unitario numeric not null,
+  subtotal numeric not null
+);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'chk_presupuesto_forma_pago'
+  ) then
+    alter table presupuestos
+      add constraint chk_presupuesto_forma_pago
+      check (forma_pago in ('efectivo', 'transferencia', 'cuenta_corriente'));
+  end if;
+end $$;
+
+create index if not exists idx_presupuestos_items_presupuesto on presupuestos_items(presupuesto_id);
+
 -- Cuenta corriente de clientes. "recibos" son los cobros que se cargan a
 -- mano (ver routes/cuentaCorriente.js); "cuenta_corriente_movimientos" es
 -- el libro con un renglón por cada venta a cuenta corriente (debe, la

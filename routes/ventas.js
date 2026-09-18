@@ -15,8 +15,14 @@ const { getConfig } = require('../lib/config');
 const { calcularPrecios } = require('../lib/precios');
 const { sincronizarMovimientoVenta } = require('../lib/cuentaCorriente');
 const { registrarMovimiento, obtenerConfigStock } = require('../lib/stock');
+const presupuestosRouter = require('./presupuestos');
 
 const router = express.Router();
+
+// Va antes que cualquier ruta "/:id" de acá abajo — si no, Express
+// interpretaría "/presupuestos" como un intento de abrir la venta con
+// id "presupuestos" en vez de entrar al router de presupuestos.
+router.use('/presupuestos', presupuestosRouter);
 
 const FORMAS_PAGO = ['efectivo', 'transferencia', 'cuenta_corriente'];
 const ESTADOS = ['emitido', 'entregado', 'cobrado'];

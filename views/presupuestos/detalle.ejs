@@ -1,0 +1,215 @@
+<%- include('../partials/head') %>
+
+<div class="toolbar">
+  <h1>Presupuesto Nº <%= presupuesto.numero_presupuesto %></h1>
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <button type="button" id="generar-presupuesto-pdf" class="btn secondary">Generar PDF</button>
+    <a class="btn secondary" href="/ventas/presupuestos/<%= presupuesto.id %>/editar">Editar</a>
+    <form method="post" action="/ventas/presupuestos/<%= presupuesto.id %>/eliminar" style="display:inline;" onsubmit="return confirm('¿Eliminar este presupuesto? No se puede deshacer.');">
+      <button type="submit" class="btn secondary" style="color:#a33;">Eliminar</button>
+    </form>
+    <a class="btn secondary" href="/ventas/presupuestos">← Volver</a>
+  </div>
+</div>
+
+<% const ETIQUETAS_FORMA_PAGO = { efectivo: 'Efectivo', transferencia: 'Transferencia', cuenta_corriente: 'Cuenta corriente' }; %>
+<p style="color:var(--ink-soft);">
+  Cliente: <strong style="color:var(--ink);"><%= presupuesto.cliente_nombre %></strong>
+  (<a href="/clientes/<%= presupuesto.cliente_id %>/editar">completar datos del cliente</a>)
+  · Fecha: <%= new Date(presupuesto.fecha).toLocaleDateString('es-AR') %>
+  · <%= ETIQUETAS_FORMA_PAGO[presupuesto.forma_pago] || presupuesto.forma_pago %>
+</p>
+<p style="color:var(--ink-soft); font-size:.85rem; margin-top:-10px;">
+  Es solo una cotización — no movió stock ni cuenta corriente. Cuando el cliente confirma, la venta se carga aparte, desde Ventas.
+</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Código</th>
+      <th>Artículo</th>
+      <th>Cantidad</th>
+      <th>Precio unit.</th>
+      <th>Subtotal</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% items.forEach(it => { %>
+    <tr>
+      <td data-label="Código" class="mono"><%= it.codigo %></td>
+      <td data-label="Artículo"><%= it.nombre %></td>
+      <td data-label="Cantidad" class="mono"><%= Number(it.cantidad) %></td>
+      <td data-label="Precio unit." class="mono">$<%= Number(it.precio_unitario).toFixed(2) %></td>
+      <td data-label="Subtotal" class="mono">$<%= Number(it.subtotal).toFixed(2) %></td>
+    </tr>
+    <% }) %>
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="4" style="text-align:right; font-weight:600;">Total</td>
+      <td class="mono" style="font-weight:600;">$<%= Number(presupuesto.total).toFixed(2) %></td>
+    </tr>
+  </tfoot>
+</table>
+
+<% if (presupuesto.notas) { %>
+  <p style="color:var(--ink-soft); font-size:.9rem; margin-top:16px;"><strong>Notas:</strong> <%= presupuesto.notas %></p>
+<% } %>
+
+<script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script>
+(function () {
+  var PRESUPUESTO = <%- JSON.stringify({
+    numero: presupuesto.numero_presupuesto,
+    fecha: presupuesto.fecha,
+    formaPago: ETIQUETAS_FORMA_PAGO[presupuesto.forma_pago] || presupuesto.forma_pago,
+    cliente: {
+      nombre: presupuesto.cliente_nombre,
+      direccion: presupuesto.cliente_direccion || '',
+      telefono: presupuesto.cliente_telefono || '',
+      cuitDni: presupuesto.cliente_cuit_dni || '',
+      condicionIva: presupuesto.cliente_condicion_iva || '',
+    },
+    items: items.map(function (it) {
+      return {
+        codigo: it.codigo,
+        nombre: it.nombre,
+        cantidad: Number(it.cantidad),
+        precioUnitario: Number(it.precio_unitario),
+        subtotal: Number(it.subtotal),
+      };
+    }),
+    total: Number(presupuesto.total),
+  }) %>;
+
+  // Misma estructura de PDF que el remito de Ventas, con el título y el
+  // pie de página cambiados para dejar en claro que es una cotización,
+  // no un documento de entrega ni una factura.
+  function generarPDF() {
+    if (typeof window.jspdf === 'undefined') {
+      alert('No se pudo cargar la librería para generar el PDF. Revisá la conexión a internet e intentá de nuevo.');
+      return;
+    }
+
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    var margenIzq = 14;
+    var margenDer = 14;
+    var anchoPagina = doc.internal.pageSize.getWidth();
+    var altoPagina = doc.internal.pageSize.getHeight();
+    var xCodigo = margenIzq;
+    var xProducto = margenIzq + 22;
+    var xCantidad = anchoPagina - margenDer - 62;
+    var xPrecio = anchoPagina - margenDer - 34;
+    var xSubtotal = anchoPagina - margenDer;
+    var y = 20;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.text('Riomar Pescadería', margenIzq, y);
+    doc.setFontSize(13);
+    doc.text('Presupuesto Nº ' + PRESUPUESTO.numero, anchoPagina - margenDer, y, { align: 'right' });
+    y += 7;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(110);
+    doc.text('Fecha: ' + new Date(PRESUPUESTO.fecha).toLocaleDateString('es-AR'), margenIzq, y);
+    doc.text('Forma de pago: ' + PRESUPUESTO.formaPago, anchoPagina - margenDer, y, { align: 'right' });
+    doc.setTextColor(0);
+    y += 9;
+
+    doc.setDrawColor(180);
+    doc.setLineWidth(0.2);
+    doc.line(margenIzq, y, anchoPagina - margenDer, y);
+    y += 6;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('Cliente', margenIzq, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    doc.text(PRESUPUESTO.cliente.nombre, margenIzq, y);
+    y += 5;
+    if (PRESUPUESTO.cliente.direccion) { doc.text(PRESUPUESTO.cliente.direccion, margenIzq, y); y += 5; }
+    var lineaContacto = [];
+    if (PRESUPUESTO.cliente.telefono) lineaContacto.push('Tel: ' + PRESUPUESTO.cliente.telefono);
+    if (PRESUPUESTO.cliente.cuitDni) lineaContacto.push('CUIT/DNI: ' + PRESUPUESTO.cliente.cuitDni);
+    if (PRESUPUESTO.cliente.condicionIva) lineaContacto.push(PRESUPUESTO.cliente.condicionIva);
+    if (lineaContacto.length) { doc.text(lineaContacto.join(' · '), margenIzq, y); y += 5; }
+    y += 4;
+
+    function dibujarEncabezadoTabla() {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.text('Código', xCodigo, y);
+      doc.text('Producto', xProducto, y);
+      doc.text('Cant.', xCantidad, y, { align: 'right' });
+      doc.text('Precio', xPrecio, y, { align: 'right' });
+      doc.text('Subtotal', xSubtotal, y, { align: 'right' });
+      y += 2;
+      doc.setDrawColor(180);
+      doc.setLineWidth(0.2);
+      doc.line(margenIzq, y, anchoPagina - margenDer, y);
+      y += 5;
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(0);
+    }
+
+    dibujarEncabezadoTabla();
+
+    PRESUPUESTO.items.forEach(function (it) {
+      if (y > altoPagina - 30) {
+        doc.addPage();
+        y = 20;
+        dibujarEncabezadoTabla();
+      }
+      doc.setFontSize(9.5);
+      doc.text(String(it.codigo), xCodigo, y);
+      var nombreTexto = it.nombre.length > 34 ? it.nombre.slice(0, 33) + '…' : it.nombre;
+      doc.text(nombreTexto, xProducto, y);
+      doc.text(String(it.cantidad), xCantidad, y, { align: 'right' });
+      doc.text('$' + it.precioUnitario.toFixed(2), xPrecio, y, { align: 'right' });
+      doc.text('$' + it.subtotal.toFixed(2), xSubtotal, y, { align: 'right' });
+      y += 6;
+    });
+
+    y += 2;
+    doc.setDrawColor(180);
+    doc.line(margenIzq, y, anchoPagina - margenDer, y);
+    y += 7;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('Total: $' + PRESUPUESTO.total.toFixed(2), xSubtotal, y, { align: 'right' });
+
+    y += 12;
+    if (y > altoPagina - 15) { doc.addPage(); y = 20; }
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(120);
+    doc.text('Presupuesto sin validez como remito ni factura. Precios sujetos a modificación sin previo aviso.', margenIzq, y);
+
+    doc.save('presupuesto-' + PRESUPUESTO.numero + '.pdf');
+  }
+
+  var boton = document.getElementById('generar-presupuesto-pdf');
+  if (boton) boton.addEventListener('click', generarPDF);
+
+  // Recién guardado (se llega acá desde "Guardar presupuesto") — se
+  // pregunta con un cartel si se quiere generar el PDF ya mismo, para
+  // imprimirlo o guardarlo en el momento (en el celular o la compu).
+  <% if (guardado) { %>
+  if (window.confirm('Presupuesto guardado. ¿Querés generar el PDF ahora para imprimir o guardar?')) {
+    generarPDF();
+  }
+  // Se limpia el "?guardado=1" de la URL para que recargar esta misma
+  // página (o volver con el botón atrás del navegador) no vuelva a
+  // preguntar cada vez.
+  if (window.history && window.history.replaceState) {
+    window.history.replaceState(null, '', window.location.pathname);
+  }
+  <% } %>
+})();
+</script>
+
+<%- include('../partials/foot') %>

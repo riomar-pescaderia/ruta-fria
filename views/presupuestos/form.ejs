@@ -1,6 +1,6 @@
 <%- include('../partials/head') %>
 
-<h1><%= venta.id ? 'Editar venta' : 'Nueva venta' %></h1>
+<h1><%= presupuesto.id ? 'Editar presupuesto' : 'Nuevo presupuesto' %></h1>
 
 <% if (error) { %>
   <div class="pendiente" style="border-color:#e3b8b8; color:#7a2b2b; margin-bottom:16px; padding:14px 20px;">
@@ -8,18 +8,18 @@
   </div>
 <% } %>
 
-<form id="form-venta" class="card" method="post" action="<%= accion %>" style="max-width:900px;">
-  <% const clienteSel = venta.cliente_id ? clientes.find(c => String(c.id) === String(venta.cliente_id)) : null; %>
+<form class="card" method="post" action="<%= accion %>" style="max-width:900px;">
+  <% const clienteSel = presupuesto.cliente_id ? clientes.find(c => String(c.id) === String(presupuesto.cliente_id)) : null; %>
   <div style="display:flex; gap:12px; flex-wrap:wrap;">
     <div style="flex:2; min-width:240px;">
       <label for="cliente_buscar">Cliente</label>
-      <input type="text" id="cliente_buscar" name="cliente_texto" placeholder="Buscar por razón social, CUIT/DNI... o escribir uno nuevo" autocomplete="off" value="<%= clienteSel ? clienteSel.razon_social : (venta.cliente_texto || '') %>" required>
-      <input type="hidden" id="cliente_id" name="cliente_id" value="<%= venta.cliente_id || '' %>">
-      <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Si el cliente todavía no está agendado, escribí el nombre igual y guardá la venta — se crea solo con ese nombre, y después podés completar el resto de sus datos desde el detalle de la venta.</p>
+      <input type="text" id="cliente_buscar" name="cliente_texto" placeholder="Buscar por razón social, CUIT/DNI... o escribir uno nuevo" autocomplete="off" value="<%= clienteSel ? clienteSel.razon_social : (presupuesto.cliente_texto || '') %>" required>
+      <input type="hidden" id="cliente_id" name="cliente_id" value="<%= presupuesto.cliente_id || '' %>">
+      <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Si el cliente todavía no está agendado, escribí el nombre igual y guardá el presupuesto — se crea solo con ese nombre.</p>
     </div>
     <div style="flex:1; min-width:150px;">
       <label for="fecha">Fecha</label>
-      <input type="date" id="fecha" name="fecha" value="<%= venta.fecha || '' %>">
+      <input type="date" id="fecha" name="fecha" value="<%= presupuesto.fecha || '' %>">
     </div>
   </div>
 
@@ -28,18 +28,11 @@
       <label for="forma_pago">Forma de pago</label>
       <select id="forma_pago" name="forma_pago" required>
         <option value="">— elegir —</option>
-        <option value="efectivo" <%= venta.forma_pago === 'efectivo' ? 'selected' : '' %>>Efectivo</option>
-        <option value="transferencia" <%= venta.forma_pago === 'transferencia' ? 'selected' : '' %>>Transferencia</option>
-        <option value="cuenta_corriente" <%= venta.forma_pago === 'cuenta_corriente' ? 'selected' : '' %>>Cuenta corriente</option>
+        <option value="efectivo" <%= presupuesto.forma_pago === 'efectivo' ? 'selected' : '' %>>Efectivo</option>
+        <option value="transferencia" <%= presupuesto.forma_pago === 'transferencia' ? 'selected' : '' %>>Transferencia</option>
+        <option value="cuenta_corriente" <%= presupuesto.forma_pago === 'cuenta_corriente' ? 'selected' : '' %>>Cuenta corriente</option>
       </select>
       <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Define qué precio se sugiere al elegir cada artículo: efectivo sugiere el precio en efectivo, transferencia y cuenta corriente sugieren el precio de lista.</p>
-    </div>
-    <div style="flex:1; min-width:200px;">
-      <label for="origen">Origen</label>
-      <select id="origen" name="origen">
-        <option value="deposito" <%= (venta.origen || 'deposito') === 'deposito' ? 'selected' : '' %>>Depósito</option>
-        <option value="calle" <%= venta.origen === 'calle' ? 'selected' : '' %>>Calle (preventista)</option>
-      </select>
     </div>
   </div>
 
@@ -83,14 +76,14 @@
     <tfoot>
       <tr>
         <td colspan="4" style="text-align:right; font-weight:600; border-bottom:none;">Total</td>
-        <td class="mono" id="total-venta" style="border-bottom:none; font-weight:600;">$0.00</td>
+        <td class="mono" id="total-presupuesto" style="border-bottom:none; font-weight:600;">$0.00</td>
         <td style="border-bottom:none;"></td>
       </tr>
     </tfoot>
   </table>
   </div>
   <p style="color:var(--ink-soft); font-size:.85rem; margin-top:-8px;">
-    Al elegir un artículo (o cambiarlo por otro) se completa su precio según la forma de pago elegida arriba, y cambiar la forma de pago actualiza el precio de todos los renglones ya cargados. Se puede pisar el precio a mano en cualquier renglón después de elegir el artículo — ese cambio se mantiene hasta que se vuelva a elegir un artículo en esa fila o se cambie la forma de pago.
+    Al elegir un artículo (o cambiarlo por otro) se completa su precio según la forma de pago elegida arriba, y cambiar la forma de pago actualiza el precio de todos los renglones ya cargados. Se puede pisar el precio a mano en cualquier renglón después de elegir el artículo.
   </p>
 
   <div>
@@ -99,12 +92,12 @@
 
   <div>
     <label for="notas">Notas</label>
-    <textarea id="notas" name="notas" rows="2"><%= venta.notas || '' %></textarea>
+    <textarea id="notas" name="notas" rows="2"><%= presupuesto.notas || '' %></textarea>
   </div>
 
   <div>
-    <button class="btn" type="submit">Guardar venta</button>
-    <a class="btn secondary" href="/ventas">Cancelar</a>
+    <button class="btn" type="submit">Guardar presupuesto</button>
+    <a class="btn secondary" href="/ventas/presupuestos">Cancelar</a>
   </div>
 </form>
 
@@ -115,7 +108,7 @@
 
   // Datos de artículos para el buscador de la columna "Artículo" y para
   // sugerir el precio según la forma de pago vigente en el momento en que
-  // se elige cada uno.
+  // se elige cada uno — mismo patrón que en Ventas.
   var ARTICULOS = <%- JSON.stringify(articulos.map(a => ({ id: String(a.id), codigo: a.codigo, nombre: a.nombre, precioEfectivo: a.precioEfectivo, precioLista: a.precioLista, stock: (a.stock === null || a.stock === undefined) ? null : Number(a.stock) }))) %>;
   var articulosPorId = {};
   ARTICULOS.forEach(function (a) { articulosPorId[a.id] = a; });
@@ -130,8 +123,6 @@
     });
   }
 
-  // Un único panel flotante, reutilizado para la fila que esté activa en
-  // cada momento — mismo patrón que en Compras.
   var buscador = document.createElement('div');
   buscador.className = 'buscador-flotante';
   buscador.style.display = 'none';
@@ -153,14 +144,6 @@
     tr.querySelector('.f-articulo-buscar').value = articulo ? etiquetaArticulo(articulo) : '';
     if (articulo) tr.querySelector('.f-codigo').value = articulo.codigo;
     var precioInput = tr.querySelector('.f-precio');
-    // Siempre se completa con el precio sugerido del artículo actual y la
-    // forma de pago vigente — tanto la primera vez que se elige un
-    // artículo en la fila como cuando se lo cambia por otro (antes, si la
-    // fila ya tenía un precio cargado, se dejaba el precio del artículo
-    // viejo sin actualizar). Si se quiere un precio distinto, se pisa a
-    // mano DESPUÉS de elegir el artículo — ese cambio se mantiene hasta
-    // que se vuelva a elegir un artículo en esa fila o cambie la forma de
-    // pago (ver el listener de "forma_pago" más abajo).
     if (articulo) {
       precioInput.value = precioSugerido(articulo);
     }
@@ -180,8 +163,6 @@
         var boton = document.createElement('button');
         boton.type = 'button';
         boton.textContent = etiquetaArticulo(a);
-        // "mousedown" (no "click") para que se ejecute antes de que el
-        // input pierda el foco y el buscador se cierre solo.
         boton.addEventListener('mousedown', function (e) {
           e.preventDefault();
           fijarArticuloEnFila(tr, a);
@@ -198,11 +179,9 @@
     buscador.style.display = 'block';
   }
 
-  // Si el artículo elegido en la fila tiene stock cargado (no null, o
-  // sea que ya se sincronizó/tocó en el apartado Stock) y la cantidad
-  // tipeada lo supera, se avisa cuánto queda — en Ventas esto además
-  // bloquea guardar (ver el listener de "submit" más abajo); en
-  // Presupuestos (mismo patrón, en su form.ejs) solo avisa.
+  // Igual que en Ventas: si hay stock cargado para el artículo y la
+  // cantidad tipeada lo supera, se avisa cuánto queda — pero acá NO se
+  // bloquea guardar ni generar el presupuesto, es solo informativo.
   function actualizarAvisoStock(tr) {
     var aviso = tr.querySelector('.f-aviso-stock');
     var articulo = articulosPorId[tr.querySelector('.f-articulo-id').value];
@@ -215,7 +194,6 @@
       aviso.textContent = '';
       aviso.style.display = 'none';
     }
-    tr.dataset.excedeStock = excede ? '1' : '';
   }
 
   function actualizarTotales() {
@@ -228,7 +206,7 @@
       total += subtotal;
       actualizarAvisoStock(tr);
     });
-    document.getElementById('total-venta').textContent = '$' + total.toFixed(2);
+    document.getElementById('total-presupuesto').textContent = '$' + total.toFixed(2);
   }
 
   function reindexar() {
@@ -250,7 +228,6 @@
     var avisoNueva = nueva.querySelector('.f-aviso-stock');
     avisoNueva.textContent = '';
     avisoNueva.style.display = 'none';
-    delete nueva.dataset.excedeStock;
     tbody.appendChild(nueva);
     reindexar();
   });
@@ -269,33 +246,24 @@
     actualizarTotales();
     if (e.target.classList.contains('f-articulo-buscar')) {
       var tr = e.target.closest('tr');
-      // si lo que quedó tipeado ya no coincide con el artículo elegido, se
-      // desvincula hasta que se elija uno de la lista de nuevo
       var actual = articulosPorId[tr.querySelector('.f-articulo-id').value];
       if (!actual || etiquetaArticulo(actual) !== e.target.value) {
         tr.querySelector('.f-articulo-id').value = '';
       }
       mostrarBuscador(tr, buscarArticulos(e.target.value));
     } else if (e.target.classList.contains('f-codigo')) {
-      // igual que en Compras: tipear un código que coincide con un
-      // artículo lo completa solo (y sugiere su precio, más abajo).
       var tr2 = e.target.closest('tr');
       var codigoTexto = e.target.value.trim().toLowerCase();
       var encontrado = codigoTexto && ARTICULOS.find(function (a) { return a.codigo.toLowerCase() === codigoTexto; });
       if (encontrado) {
         fijarArticuloEnFila(tr2, encontrado);
       } else if (tr2.querySelector('.f-articulo-id').value) {
-        // el código se borró o ya no coincide con ningún artículo: se
-        // desvincula el artículo que estaba elegido, en vez de dejarlo
-        // pegado a un código que ya no está
         tr2.querySelector('.f-articulo-id').value = '';
         tr2.querySelector('.f-articulo-buscar').value = '';
       }
     }
   });
 
-  // "focus" y "blur" no burbujean — hay que escucharlos en fase de
-  // "capture" para poder delegarlos igual que los demás eventos de fila.
   tbody.addEventListener('focus', function (e) {
     if (e.target.classList.contains('f-articulo-buscar')) {
       mostrarBuscador(e.target.closest('tr'), buscarArticulos(e.target.value));
@@ -312,10 +280,6 @@
   window.addEventListener('scroll', function () { if (filaActiva) ocultarBuscador(); }, true);
   window.addEventListener('resize', ocultarBuscador);
 
-  // Al cambiar la forma de pago, se recalcula el precio de todos los
-  // renglones que ya tienen un artículo elegido — antes este cambio no
-  // tocaba los renglones ya cargados y quedaban con el precio de la forma
-  // de pago anterior.
   formaPagoSelect.addEventListener('change', function () {
     tbody.querySelectorAll('tr').forEach(function (tr) {
       var articulo = articulosPorId[tr.querySelector('.f-articulo-id').value];
@@ -324,8 +288,7 @@
     actualizarTotales();
   });
 
-  // Buscador del cliente — mismo patrón que el de artículo, pero para un
-  // único campo obligatorio en vez de una tabla de renglones.
+  // Buscador del cliente — mismo patrón que el de artículo.
   var CLIENTES = <%- JSON.stringify(clientes.map(c => ({ id: String(c.id), razon_social: c.razon_social, cuit_dni: c.cuit_dni || '' }))) %>;
   var clienteBuscarInput = document.getElementById('cliente_buscar');
   var clienteIdInput = document.getElementById('cliente_id');
@@ -401,22 +364,6 @@
   });
   window.addEventListener('scroll', function () { if (clienteBuscadorActivo) ocultarClienteBuscador(); }, true);
   window.addEventListener('resize', ocultarClienteBuscador);
-
-  // A diferencia de Presupuestos, en Ventas superar el stock disponible
-  // no deja guardar — se corta el envío y se lleva el foco al primer
-  // renglón con problema, junto con el aviso que ya está mostrando cuánto
-  // queda.
-  document.getElementById('form-venta').addEventListener('submit', function (e) {
-    var primeraFilaConProblema = null;
-    tbody.querySelectorAll('tr').forEach(function (tr) {
-      if (!primeraFilaConProblema && tr.dataset.excedeStock === '1') primeraFilaConProblema = tr;
-    });
-    if (primeraFilaConProblema) {
-      e.preventDefault();
-      alert('No se puede guardar la venta: alguna cantidad supera el stock disponible. Revisá el renglón marcado en rojo.');
-      primeraFilaConProblema.querySelector('.f-cantidad').focus();
-    }
-  });
 
   actualizarTotales();
 })();
