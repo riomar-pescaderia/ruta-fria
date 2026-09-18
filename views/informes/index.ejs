@@ -1,0 +1,26 @@
+<%- include('../partials/head') %>
+
+<div class="toolbar">
+  <h1>Panel de Informes</h1>
+</div>
+
+<p style="color:var(--ink-soft); font-size:.9rem; margin-top:-10px;">
+  Informes y resúmenes de solo lectura sobre el negocio, separados por tema. Elegí una sección para entrar.
+</p>
+
+<div class="secciones-informes">
+  <a class="tarjeta-seccion" href="/informes/gastos">
+    <span class="tarjeta-seccion-icono"><svg width="26" height="26" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="6.2"/><path d="M9 5.7v6.6"/><path d="M6.8 7.2c0-1.1 1-1.7 2.2-1.7s2.2.6 2.2 1.5c0 1.9-4.4 1.1-4.4 3 0 .9 1 1.5 2.2 1.5s2.2-.6 2.2-1.7"/></svg></span>
+    <span class="tarjeta-seccion-titulo">Gastos</span>
+    <span class="tarjeta-seccion-desc">Total por categoría y subtipo, evolución mensual contra las ventas, y cómo se reparten los gastos por día de la semana y semana del mes.</span>
+  </a>
+  <a class="tarjeta-seccion" href="/informes/ventas">
+    <span class="tarjeta-seccion-icono"><svg width="26" height="26" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15V9"/><path d="M9 15V4"/><path d="M15 15V8"/><path d="M2 15h14"/></svg></span>
+    <span class="tarjeta-seccion-titulo">Ventas</span>
+    <span class="tarjeta-seccion-desc">Kg vendidos, margen de mercadería, evolución mensual y anual, ranking de productos más vendidos y recomendaciones de productos estrella u oportunidad.</span>
+  </a>
+</div>
+
+<p style="color:var(--ink-soft); font-size:.82rem; margin-top:22px;">¿Falta algún informe que necesites? Avisá y lo sumamos como una sección más, acá mismo.</p>
+
+<%- include('../partials/foot') %>

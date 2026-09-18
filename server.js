@@ -17,7 +17,7 @@ const mapaRouter = require('./routes/mapa');
 const ventasRouter = require('./routes/ventas');
 const cuentaCorrienteRouter = require('./routes/cuentaCorriente');
 const stockRouter = require('./routes/stock');
-const gastosRouter = require('./routes/gastos');
+const informesRouter = require('./routes/informes');
 
 const app = express();
 
@@ -74,7 +74,7 @@ app.use('/usuarios', requireAdmin, usuariosRouter);
 app.use('/compras', requireAcceso('compras'), comprasRouter);
 app.use('/prospectos', requireAcceso('prospectos'), prospectosRouter);
 app.use('/mapa', requireAcceso('mapa'), mapaRouter);
-app.use('/gastos', requireAcceso('gastos'), gastosRouter);
+app.use('/informes', requireAcceso('informes'), informesRouter);
 app.use('/ventas', requireAcceso('ventas'), ventasRouter);
 app.use('/cuenta-corriente', requireAcceso('cuenta_corriente'), cuentaCorrienteRouter);
 app.use('/stock', requireAcceso('stock'), stockRouter);

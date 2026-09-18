@@ -69,7 +69,7 @@ router.post('/setup', async (req, res) => {
       password,
       nombre,
       esAdmin: true,
-      accesos: { clientes: true, articulos: true, compras: true, gastos: true, ventas: true },
+      accesos: { clientes: true, articulos: true, compras: true, informes: true, ventas: true },
     });
     req.session.usuario = datosSesion(usuario);
     res.redirect('/');

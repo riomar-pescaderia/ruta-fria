@@ -469,7 +469,7 @@ create table if not exists usuarios (
   acceso_clientes boolean not null default false,
   acceso_articulos boolean not null default false,
   acceso_compras boolean not null default false,
-  acceso_gastos boolean not null default false,
+  acceso_informes boolean not null default false,
   acceso_ventas boolean not null default false,
   created_at timestamptz not null default now()
 );
@@ -477,7 +477,22 @@ alter table usuarios add column if not exists es_admin boolean not null default 
 alter table usuarios add column if not exists acceso_clientes boolean not null default false;
 alter table usuarios add column if not exists acceso_articulos boolean not null default false;
 alter table usuarios add column if not exists acceso_compras boolean not null default false;
-alter table usuarios add column if not exists acceso_gastos boolean not null default false;
+-- "Gastos" pasó a llamarse "Informes" (la sección terminó mostrando
+-- mucho más que solo gastos) — el permiso se renombra junto con la
+-- sección, sin perder lo que ya tenía habilitado cada usuario.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'usuarios' and column_name = 'acceso_gastos'
+  ) and not exists (
+    select 1 from information_schema.columns
+    where table_name = 'usuarios' and column_name = 'acceso_informes'
+  ) then
+    alter table usuarios rename column acceso_gastos to acceso_informes;
+  end if;
+end $$;
+alter table usuarios add column if not exists acceso_informes boolean not null default false;
 alter table usuarios add column if not exists acceso_ventas boolean not null default false;
 alter table usuarios add column if not exists acceso_prospectos boolean not null default false;
 alter table usuarios add column if not exists acceso_stock boolean not null default false;
@@ -534,7 +549,7 @@ begin
       acceso_clientes = true,
       acceso_articulos = true,
       acceso_compras = true,
-      acceso_gastos = true,
+      acceso_informes = true,
       acceso_ventas = true,
       acceso_prospectos = true,
       acceso_stock = true,

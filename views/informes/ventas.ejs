@@ -1,0 +1,257 @@
+<%- include('../partials/head') %>
+
+<div class="migas-informes"><a href="/informes">Panel de Informes</a> / Ventas</div>
+
+<div class="toolbar">
+  <h1>Ventas</h1>
+</div>
+
+<p style="color:var(--ink-soft); font-size:.9rem; margin-top:-10px;">
+  Informes de solo lectura sobre lo vendido: kg, margen de mercadería, evolución, ranking de productos y recomendaciones.
+</p>
+
+<div class="rangos-rapidos">
+  <% rangosRapidos.forEach(r => {
+       const activo = filtros.desde === r.desde && filtros.hasta === r.hasta; %>
+  <a class="<%= activo ? 'activo' : '' %>" href="?desde=<%= r.desde %>&hasta=<%= r.hasta %>"><%= r.etiqueta %></a>
+  <% }) %>
+</div>
+
+<form class="filtros-informe" method="get" action="/informes/ventas">
+  <div>
+    <label for="desde">Desde</label>
+    <input type="date" id="desde" name="desde" value="<%= filtros.desde %>">
+  </div>
+  <div>
+    <label for="hasta">Hasta</label>
+    <input type="date" id="hasta" name="hasta" value="<%= filtros.hasta %>">
+  </div>
+  <div>
+    <button class="btn" type="submit">Filtrar</button>
+  </div>
+</form>
+
+<div class="kpis">
+  <div class="kpi">
+    <div class="kpi-etiqueta">Ventas del período</div>
+    <div class="kpi-valor">$<%= resumen.venta.total.toFixed(2) %></div>
+    <div class="kpi-sub">
+      <%= resumen.venta.cantidad %> venta<%= resumen.venta.cantidad === 1 ? '' : 's' %> · <%= Number(resumen.venta.unidades.toFixed(2)) %> kg
+      <% if (resumen.venta.variacion !== null) { %>
+        · <span class="kpi-variacion <%= resumen.venta.variacion >= 0 ? 'positiva' : 'negativa' %>"><%= resumen.venta.variacion > 0 ? '+' : '' %><%= resumen.venta.variacion.toFixed(1) %>%</span> vs. período anterior
+      <% } %>
+    </div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-etiqueta">Costo de mercadería comprada</div>
+    <div class="kpi-valor">$<%= resumen.mercaderia.total.toFixed(2) %></div>
+    <div class="kpi-sub">
+      <%= resumen.mercaderia.cantidad %> factura<%= resumen.mercaderia.cantidad === 1 ? '' : 's' %>
+      <% if (resumen.mercaderia.variacion !== null) { %>
+        · <span class="kpi-variacion <%= resumen.mercaderia.variacion <= 0 ? 'positiva' : 'negativa' %>"><%= resumen.mercaderia.variacion > 0 ? '+' : '' %><%= resumen.mercaderia.variacion.toFixed(1) %>%</span> vs. período anterior
+      <% } %>
+    </div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-etiqueta">Margen de mercadería</div>
+    <div class="kpi-valor" style="color: <%= resumen.margen.valor === null ? 'inherit' : (resumen.margen.valor >= 0 ? 'var(--navy)' : '#a33') %>;"><%= resumen.margen.valor === null ? '—' : resumen.margen.valor.toFixed(1) + '%' %></div>
+    <div class="kpi-sub">
+      <% if (resumen.margen.valor === null) { %>
+        Sin ventas en el período.
+      <% } else if (resumen.margen.variacionPuntos !== null) { %>
+        <span class="kpi-variacion <%= resumen.margen.variacionPuntos >= 0 ? 'positiva' : 'negativa' %>"><%= resumen.margen.variacionPuntos > 0 ? '+' : '' %><%= resumen.margen.variacionPuntos.toFixed(1) %> pts</span> vs. período anterior
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<p class="informe-nota" style="margin-top:-6px;">
+  El margen es una cuenta rápida — ventas contra lo comprado de mercadería en el mismo período, no un costo exacto por producto vendido.
+</p>
+
+<div class="informe-seccion">
+  <h2>Evolución mensual (últimos 12 meses)</h2>
+  <p class="informe-nota">Ventas contra costo de mercadería comprada, y el margen resultante, mes por mes.</p>
+  <div class="grafico-caja"><canvas id="grafico-evolucion-ventas" height="90"></canvas></div>
+  <div class="grafico-caja"><canvas id="grafico-margen" height="90"></canvas></div>
+  <div style="overflow-x:auto;">
+  <table class="tabla-informe">
+    <thead>
+      <tr><th>Mes</th><th class="num">Ventas</th><th class="num">Kg</th><th class="num">Mercadería</th><th class="num">Margen</th></tr>
+    </thead>
+    <tbody>
+      <% evolucionMensual.forEach(m => { %>
+      <tr>
+        <td><%= m.mes %></td>
+        <td class="num mono">$<%= m.venta.toFixed(2) %></td>
+        <td class="num mono"><%= Number(m.unidades.toFixed(2)) %></td>
+        <td class="num mono">$<%= m.mercaderia.toFixed(2) %></td>
+        <td class="num mono"><%= m.margen === null ? '—' : m.margen.toFixed(1) + '%' %></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="informe-seccion">
+  <h2>Evolución anual</h2>
+  <p class="informe-nota">Todos los años con datos cargados, para comparar entre años.</p>
+  <div style="overflow-x:auto;">
+  <table class="tabla-informe">
+    <thead>
+      <tr><th>Año</th><th class="num">Ventas</th><th class="num">Kg</th><th class="num">Mercadería</th><th class="num">Margen</th></tr>
+    </thead>
+    <tbody>
+      <% evolucionAnual.forEach(a => { %>
+      <tr>
+        <td><%= a.anio %></td>
+        <td class="num mono">$<%= a.venta.toFixed(2) %></td>
+        <td class="num mono"><%= Number(a.unidades.toFixed(2)) %></td>
+        <td class="num mono">$<%= a.mercaderia.toFixed(2) %></td>
+        <td class="num mono"><%= a.margen === null ? '—' : a.margen.toFixed(1) + '%' %></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="informe-seccion">
+  <h2>Ranking de productos — por dinero vendido</h2>
+  <p class="informe-nota">Los 10 artículos que más facturaron en el período elegido arriba.</p>
+  <% if (rankingPorMonto.length === 0) { %>
+    <p class="empty">No hay ventas cargadas en este período.</p>
+  <% } else { %>
+  <div>
+    <% rankingPorMonto.forEach(p => { %>
+    <div class="fila-ranking">
+      <div class="fila-ranking-encabezado">
+        <span class="fila-ranking-nombre"><%= p.codigo %> — <%= p.nombre %></span>
+        <span class="fila-ranking-valor mono">$<%= p.totalActual.toFixed(2) %></span>
+      </div>
+      <div class="fila-ranking-barra-fondo"><div class="fila-ranking-barra" style="width: <%= maxMonto > 0 ? Math.round(p.totalActual / maxMonto * 100) : 0 %>%; background: var(--blue);"></div></div>
+    </div>
+    <% }) %>
+  </div>
+  <% } %>
+</div>
+
+<div class="informe-seccion">
+  <h2>Ranking de productos — por kg vendidos</h2>
+  <p class="informe-nota">Los 10 artículos con más cantidad vendida (en kg) en el período elegido arriba.</p>
+  <% if (rankingPorCantidad.length === 0) { %>
+    <p class="empty">No hay ventas cargadas en este período.</p>
+  <% } else { %>
+  <div>
+    <% rankingPorCantidad.forEach(p => { %>
+    <div class="fila-ranking">
+      <div class="fila-ranking-encabezado">
+        <span class="fila-ranking-nombre"><%= p.codigo %> — <%= p.nombre %></span>
+        <span class="fila-ranking-valor mono"><%= Number(p.cantidadActual.toFixed(2)) %> kg</span>
+      </div>
+      <div class="fila-ranking-barra-fondo"><div class="fila-ranking-barra" style="width: <%= maxCantidad > 0 ? Math.round(p.cantidadActual / maxCantidad * 100) : 0 %>%; background: var(--orange);"></div></div>
+    </div>
+    <% }) %>
+  </div>
+  <% } %>
+</div>
+
+<div class="informe-seccion">
+  <h2>Recomendaciones</h2>
+  <p class="informe-nota">Reglas simples sobre lo vendido en el período — no reemplazan tu criterio, son una ayuda para saber dónde mirar primero.</p>
+  <div class="tarjetas-recomendacion">
+    <div class="tarjeta-recomendacion">
+      <h3><span class="badge estrella">Estrella</span></h3>
+      <p class="explicacion">Entre lo más vendido del período, y sostiene o mejora contra el período anterior.</p>
+      <% if (estrella.length === 0) { %>
+        <p class="empty" style="padding:10px 0;">No hay productos que cumplan este criterio en el período elegido.</p>
+      <% } else { %>
+        <% estrella.forEach(p => { %>
+        <div class="item-recomendacion">
+          <span><%= p.codigo %> — <%= p.nombre %></span>
+          <span class="mono">$<%= p.totalActual.toFixed(2) %><% if (p.variacion !== null) { %> (<%= p.variacion > 0 ? '+' : '' %><%= p.variacion.toFixed(0) %>%)<% } %></span>
+        </div>
+        <% }) %>
+      <% } %>
+    </div>
+    <div class="tarjeta-recomendacion">
+      <h3><span class="badge oportunidad">Oportunidad</span></h3>
+      <p class="explicacion">Vendían por encima del promedio y cayeron 30% o más contra el período anterior — vale la pena revisar precio, stock o armar una promo.</p>
+      <% if (oportunidad.length === 0) { %>
+        <p class="empty" style="padding:10px 0;">No hay productos que cumplan este criterio en el período elegido.</p>
+      <% } else { %>
+        <% oportunidad.forEach(p => { %>
+        <div class="item-recomendacion">
+          <span><%= p.codigo %> — <%= p.nombre %></span>
+          <span class="mono">-<%= p.caida.toFixed(0) %>% ($<%= p.totalAnterior.toFixed(2) %> → $<%= p.totalActual.toFixed(2) %>)</span>
+        </div>
+        <% }) %>
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  var COLOR_VENTAS = '#2a78d6';
+  var COLOR_MERCADERIA = '#eb6834';
+  var COLOR_MARGEN = '#1baf7a';
+
+  var evolucion = <%- JSON.stringify(evolucionMensual) %>;
+
+  var canvasVentas = document.getElementById('grafico-evolucion-ventas');
+  if (canvasVentas && window.Chart) {
+    new Chart(canvasVentas, {
+      type: 'bar',
+      data: {
+        labels: evolucion.map(function (m) { return m.mes; }),
+        datasets: [
+          { label: 'Ventas', data: evolucion.map(function (m) { return m.venta; }), backgroundColor: COLOR_VENTAS, borderRadius: 4 },
+          { label: 'Mercadería comprada', data: evolucion.map(function (m) { return m.mercaderia; }), backgroundColor: COLOR_MERCADERIA, borderRadius: 4 },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, ticks: { callback: function (v) { return '$' + v; } } } },
+        plugins: {
+          legend: { position: 'top', labels: { boxWidth: 12 } },
+          tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ': $' + Number(ctx.raw).toFixed(2); } } },
+        },
+      },
+    });
+  }
+
+  var canvasMargen = document.getElementById('grafico-margen');
+  if (canvasMargen && window.Chart) {
+    new Chart(canvasMargen, {
+      type: 'line',
+      data: {
+        labels: evolucion.map(function (m) { return m.mes; }),
+        datasets: [{
+          label: 'Margen de mercadería',
+          data: evolucion.map(function (m) { return m.margen; }),
+          borderColor: COLOR_MARGEN,
+          backgroundColor: COLOR_MARGEN,
+          pointRadius: 4,
+          tension: 0.15,
+          spanGaps: true,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { ticks: { callback: function (v) { return v + '%'; } } } },
+        plugins: {
+          legend: { position: 'top', labels: { boxWidth: 12 } },
+          tooltip: { callbacks: { label: function (ctx) { return ctx.raw === null ? 'Sin ventas' : 'Margen: ' + Number(ctx.raw).toFixed(1) + '%'; } } },
+        },
+      },
+    });
+  }
+})();
+</script>
+
+<%- include('../partials/foot') %>

@@ -556,3 +556,55 @@ table.tabla-informe td.num, table.tabla-informe th.num { text-align: right; }
   color: #8a5a12;
   margin-bottom: 22px;
 }
+
+/* ---------- Panel de Informes: landing con sub-secciones ---------- */
+
+.migas-informes { font-size: .82rem; color: var(--ink-soft); margin-bottom: 10px; }
+.migas-informes a { color: var(--ink-soft); }
+
+.secciones-informes { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 6px; }
+.tarjeta-seccion {
+  flex: 1;
+  min-width: 240px;
+  max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 22px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(22,35,47,.04);
+  transition: box-shadow .15s, transform .15s;
+}
+.tarjeta-seccion:hover { box-shadow: 0 4px 14px rgba(22,35,47,.1); transform: translateY(-1px); }
+.tarjeta-seccion-icono { color: var(--orange); }
+.tarjeta-seccion-titulo { font-family: "Bebas Neue", "Inter", sans-serif; font-size: 1.3rem; letter-spacing: .02em; color: var(--navy); }
+.tarjeta-seccion-desc { font-size: .85rem; color: var(--ink-soft); line-height: 1.45; }
+
+/* ---------- Gráficos (Chart.js) ---------- */
+
+.grafico-caja { position: relative; height: 220px; margin-bottom: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+
+/* ---------- Ranking de productos: barra en línea dentro de la celda ---------- */
+
+.fila-ranking { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.fila-ranking:last-child { border-bottom: none; }
+.fila-ranking-encabezado { display: flex; justify-content: space-between; gap: 10px; font-size: .88rem; }
+.fila-ranking-nombre { color: var(--ink); }
+.fila-ranking-valor { color: var(--ink-soft); white-space: nowrap; }
+.fila-ranking-barra-fondo { height: 8px; border-radius: 999px; background: var(--bg); overflow: hidden; }
+.fila-ranking-barra { height: 100%; border-radius: 999px; background: var(--blue); }
+
+/* ---------- Recomendaciones: productos estrella / oportunidad ---------- */
+
+.tarjetas-recomendacion { display: flex; flex-wrap: wrap; gap: 14px; }
+.tarjeta-recomendacion { flex: 1; min-width: 260px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+.tarjeta-recomendacion h3 { font-size: 1rem; margin: 0 0 4px; color: var(--navy); }
+.tarjeta-recomendacion p.explicacion { font-size: .82rem; color: var(--ink-soft); margin: 0 0 10px; }
+.item-recomendacion { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: .88rem; }
+.item-recomendacion:last-child { border-bottom: none; }
+.badge.estrella { background: var(--orange-soft); color: #8a5a12; }
+.badge.oportunidad { background: var(--blue-soft); color: #1e4f8a; }
