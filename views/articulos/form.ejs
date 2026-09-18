@@ -18,10 +18,18 @@
   </div>
 
   <% if (articulo.id) { %>
-  <div>
-    <label>Costo<%= articulo.unidad && Number(articulo.unidad) !== 1 ? ' (por kg, antes de dividir por unidad)' : '' %></label>
-    <input type="text" value="$<%= Number(articulo.costo).toFixed(2) %> — se actualiza desde Compras" disabled>
-  </div>
+    <% if (usuario && usuario.esAdmin) { %>
+    <div>
+      <label for="costo">Costo<%= articulo.unidad && Number(articulo.unidad) !== 1 ? ' (por kg, antes de dividir por unidad)' : '' %></label>
+      <input type="number" step="0.01" min="0" id="costo" name="costo" value="<%= Number(articulo.costo).toFixed(2) %>">
+      <p style="color:var(--ink-soft); font-size:.85rem; margin:6px 0 0;">Se actualiza solo con la última factura de compra confirmada — como administrador podés pisarlo a mano acá (por ejemplo para corregir un precio ya mismo, sin cargar una factura). Admite $0.</p>
+    </div>
+    <% } else { %>
+    <div>
+      <label>Costo<%= articulo.unidad && Number(articulo.unidad) !== 1 ? ' (por kg, antes de dividir por unidad)' : '' %></label>
+      <input type="text" value="$<%= Number(articulo.costo).toFixed(2) %> — se actualiza desde Compras" disabled>
+    </div>
+    <% } %>
   <% } else { %>
   <p style="color:var(--ink-soft); font-size:.85rem; margin:0;">El costo arranca en $0 y se completa solo apenas carguen la primera factura de este artículo en Compras.</p>
   <% } %>
@@ -41,11 +49,6 @@
   <div>
     <label for="margen_pct">Margen de beneficio (%)</label>
     <input type="number" step="0.01" id="margen_pct" name="margen_pct" value="<%= articulo.margen_pct || 0 %>">
-  </div>
-  <div>
-    <label for="precio_manual">Precio en efectivo a mano (opcional)</label>
-    <input type="number" step="0.01" min="0" id="precio_manual" name="precio_manual" value="<%= (articulo.precio_manual !== null && articulo.precio_manual !== undefined) ? articulo.precio_manual : '' %>" placeholder="Vacío = se calcula solo con costo + margen">
-    <p style="color:var(--ink-soft); font-size:.85rem; margin:6px 0 0;">Si lo completás, se usa este precio en vez de calcularlo con costo + margen (el precio de lista se sigue calculando a partir de este). Se puede poner $0 a propósito: el artículo aparece como "Sin stock" en el listado de precios en PDF. Dejalo vacío para volver a que se calcule solo.</p>
   </div>
   <div>
     <label for="stock">Stock aproximado (opcional)</label>
