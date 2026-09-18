@@ -455,6 +455,44 @@ end $$;
 alter table clientes add column if not exists lat numeric;
 alter table clientes add column if not exists lng numeric;
 
+-- Umbral opcional de stock bajo, por artículo (ver /stock) — null = sin
+-- alerta configurada, solo se avisa cuando el stock llega a 0 o menos.
+alter table articulos add column if not exists stock_minimo numeric;
+
+-- Historial de movimientos de stock (ver lib/stock.js y routes/stock.js):
+-- cada venta resta, cada compra de mercadería confirmada suma, y un
+-- administrador puede ajustarlo a mano — cada uno de esos tres casos deja
+-- un renglón acá, además de actualizar articulos.stock (el saldo
+-- vigente). "cantidad" va con signo (positivo = entrada, negativo =
+-- salida) y "stock_resultante" guarda cómo quedó el saldo justo después
+-- de ese movimiento, para no tener que recalcularlo sumando todo el
+-- historial cada vez que se muestra. Va después de "usuarios" en este
+-- archivo porque referencia esa tabla, y las referencias necesitan que la
+-- tabla ya exista en el momento de crear esta.
+create table if not exists stock_movimientos (
+  id serial primary key,
+  articulo_id integer not null references articulos(id),
+  tipo text not null,   -- venta / venta_eliminada / compra / compra_eliminada / ajuste
+  cantidad numeric not null,
+  stock_resultante numeric not null,
+  motivo text,                                                    -- libre, sobre todo para "ajuste"
+  referencia_venta_id integer references ventas(id) on delete set null,
+  referencia_factura_id integer references facturas_compra(id) on delete set null,
+  usuario_id integer references usuarios(id),
+  fecha timestamptz not null default now()
+);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'chk_stock_movimiento_tipo'
+  ) then
+    alter table stock_movimientos
+      add constraint chk_stock_movimiento_tipo
+      check (tipo in ('venta', 'venta_eliminada', 'compra', 'compra_eliminada', 'ajuste'));
+  end if;
+end $$;
+
 create index if not exists idx_facturas_compra_items_factura on facturas_compra_items(factura_id);
 create index if not exists idx_prospectos_activo on prospectos(activo);
 create index if not exists idx_ventas_items_venta on ventas_items(venta_id);
@@ -465,3 +503,4 @@ create index if not exists idx_movimientos_cliente on cuenta_corriente_movimient
 create index if not exists idx_movimientos_venta on cuenta_corriente_movimientos(venta_id);
 create index if not exists idx_movimientos_recibo on cuenta_corriente_movimientos(recibo_id);
 create index if not exists idx_recibos_cliente on recibos(cliente_id);
+create index if not exists idx_stock_movimientos_articulo on stock_movimientos (articulo_id, fecha desc);

@@ -1,0 +1,65 @@
+<%- include('../partials/head') %>
+
+<div class="toolbar">
+  <h1>Stock</h1>
+</div>
+
+<% if (articulos.length === 0) { %>
+  <p class="empty">Todavía no hay artículos cargados.</p>
+<% } else { %>
+<div style="max-width:340px; margin-bottom:14px;">
+  <input type="text" id="buscar-stock" placeholder="Buscar por nombre o código...">
+</div>
+<p id="sin-resultados-stock" class="empty" style="display:none;">No encontré ningún artículo con ese nombre o código.</p>
+<table id="tabla-stock">
+  <thead>
+    <tr>
+      <th>Código</th>
+      <th>Nombre</th>
+      <th>Stock</th>
+      <th>Estado</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% articulos.forEach(a => {
+      const stock = a.stock === null || a.stock === undefined ? null : Number(a.stock);
+      const stockMinimo = a.stock_minimo === null || a.stock_minimo === undefined ? null : Number(a.stock_minimo);
+      const sinStock = stock !== null && stock <= 0;
+      const stockBajo = !sinStock && stock !== null && stockMinimo !== null && stock <= stockMinimo;
+    %>
+    <tr data-buscar="<%= (a.codigo + ' ' + a.nombre).toLowerCase() %>" data-href="/stock/<%= a.id %>">
+      <td data-label="Código" class="mono"><%= a.codigo %></td>
+      <td data-label="Nombre"><%= a.nombre %></td>
+      <td data-label="Stock" data-corto="Stock" class="mono"><%= stock === null ? '—' : stock %></td>
+      <td data-label="Estado">
+        <% if (sinStock) { %><span class="badge sin-stock">Sin stock</span>
+        <% } else if (stockBajo) { %><span class="badge stock-bajo">Stock bajo</span>
+        <% } else { %><span class="badge stock-ok">OK</span>
+        <% } %>
+      </td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+<% } %>
+
+<script>
+(function () {
+  var input = document.getElementById('buscar-stock');
+  if (!input) return;
+  var filas = document.querySelectorAll('#tabla-stock tbody tr');
+  var sinResultados = document.getElementById('sin-resultados-stock');
+  input.addEventListener('input', function () {
+    var texto = input.value.trim().toLowerCase();
+    var visibles = 0;
+    filas.forEach(function (tr) {
+      var coincide = !texto || tr.dataset.buscar.indexOf(texto) !== -1;
+      tr.hidden = !coincide;
+      if (coincide) visibles++;
+    });
+    sinResultados.style.display = visibles === 0 ? 'block' : 'none';
+  });
+})();
+</script>
+
+<%- include('../partials/foot') %>

@@ -339,6 +339,9 @@ tr[hidden] { display: none !important; }
 .badge.emitido { background: var(--orange-soft); color: #8a5a12; }
 .badge.entregado { background: var(--blue-soft); color: #1e4f8a; }
 .badge.cobrado { background: #e2f3e6; color: #1e6b34; }
+.badge.stock-ok { background: #e2f3e6; color: #1e6b34; }
+.badge.stock-bajo { background: var(--orange-soft); color: #8a5a12; }
+.badge.sin-stock { background: #fbe4e2; color: #a33; }
 
 tr.fila-cambio td { background: var(--orange-soft); }
 tr.fila-cambio td:nth-child(4) { color: #8a5a12; }
@@ -414,6 +417,42 @@ tr.fila-cambio td:nth-child(4) { color: #8a5a12; }
     text-transform: none;
     color: var(--ink-soft);
   }
+
+  /* Stock: mismo renglón compacto que artículos — código, nombre, stock
+     y el badge de estado, en pocas líneas en vez de una tarjeta larga. */
+  #tabla-stock tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 14px;
+    padding: 10px 2px;
+  }
+  #tabla-stock td { padding: 0; }
+  #tabla-stock td[data-label="Código"] {
+    order: 1; flex: 0 0 auto;
+    font-size: .72rem; color: var(--ink-soft);
+  }
+  #tabla-stock td[data-label="Código"]::before { display: none; }
+  #tabla-stock td[data-label="Nombre"] {
+    order: 2; flex: 1 1 100%;
+    font-weight: 600; font-size: .92rem;
+  }
+  #tabla-stock td[data-label="Nombre"]::before { display: none; }
+  #tabla-stock td[data-label="Stock"] {
+    order: 3;
+    font-size: .82rem;
+  }
+  #tabla-stock td[data-label="Stock"]::before {
+    content: attr(data-corto) ": ";
+    display: inline;
+    font-size: .72rem;
+    text-transform: none;
+    color: var(--ink-soft);
+  }
+  #tabla-stock td[data-label="Estado"] {
+    order: 4;
+  }
+  #tabla-stock td[data-label="Estado"]::before { display: none; }
 
   /* Clientes: recuadros solo con el nombre — tocar uno abre el perfil
      completo (editable) del cliente. Una franja angosta por cliente, a lo

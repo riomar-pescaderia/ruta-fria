@@ -2,16 +2,19 @@
 // cantidad y precio, con una forma de pago que define qué precio
 // corresponde: efectivo va al precio en efectivo (mayorista), transferencia
 // y cuenta corriente van al precio de lista (que ya incluye el recargo por
-// medio de pago). No descuenta stock todavía — eso queda para cuando se
-// arme el módulo de Stock — y no tiene un paso de confirmación como
-// Compras: una venta queda siempre editable y se puede borrar en cualquier
-// momento. El estado (emitido / entregado / cobrado) se cambia a mano desde
-// el detalle, para hacer seguimiento del reparto y del cobro.
+// medio de pago). Cada renglón descuenta stock del artículo vendido (ver
+// lib/stock.js) — y no tiene un paso de confirmación como Compras: una
+// venta queda siempre editable y se puede borrar en cualquier momento, así
+// que al editarla se devuelve el stock de los renglones viejos antes de
+// descontar el de los nuevos, y al borrarla se devuelve el de todos sus
+// renglones. El estado (emitido / entregado / cobrado) se cambia a mano
+// desde el detalle, para hacer seguimiento del reparto y del cobro.
 const express = require('express');
 const pool = require('../db/pool');
 const { getConfig } = require('../lib/config');
 const { calcularPrecios } = require('../lib/precios');
 const { sincronizarMovimientoVenta } = require('../lib/cuentaCorriente');
+const { registrarMovimiento } = require('../lib/stock');
 
 const router = express.Router();
 
@@ -167,6 +170,13 @@ router.post('/', async (req, res, next) => {
          values ($1,$2,$3,$4,$5)`,
         [ventaId, it.articulo_id, it.cantidad, it.precio_unitario, it.subtotal]
       );
+      await registrarMovimiento(client, {
+        articuloId: it.articulo_id,
+        tipo: 'venta',
+        cantidad: -it.cantidad,
+        usuarioId: req.session.usuario.id,
+        ventaId,
+      });
     }
     await sincronizarMovimientoVenta(client, {
       id: ventaId,
@@ -244,6 +254,19 @@ router.post('/:id', async (req, res, next) => {
         'update ventas set cliente_id=$1, fecha=$2, forma_pago=$3, origen=$4, notas=$5, total=$6 where id=$7',
         [cliente_id, fechaVenta, forma_pago, origen, notas || null, total, venta.id]
       );
+      const { rows: itemsViejos } = await client.query(
+        'select articulo_id, cantidad from ventas_items where venta_id = $1',
+        [venta.id]
+      );
+      for (const it of itemsViejos) {
+        await registrarMovimiento(client, {
+          articuloId: it.articulo_id,
+          tipo: 'venta_eliminada',
+          cantidad: it.cantidad,
+          usuarioId: req.session.usuario.id,
+          ventaId: venta.id,
+        });
+      }
       await client.query('delete from ventas_items where venta_id = $1', [venta.id]);
       for (const it of items) {
         await client.query(
@@ -251,6 +274,13 @@ router.post('/:id', async (req, res, next) => {
            values ($1,$2,$3,$4,$5)`,
           [venta.id, it.articulo_id, it.cantidad, it.precio_unitario, it.subtotal]
         );
+        await registrarMovimiento(client, {
+          articuloId: it.articulo_id,
+          tipo: 'venta',
+          cantidad: -it.cantidad,
+          usuarioId: req.session.usuario.id,
+          ventaId: venta.id,
+        });
       }
       await sincronizarMovimientoVenta(client, {
         id: venta.id,
@@ -305,12 +335,33 @@ router.post('/:id/estado', async (req, res, next) => {
 });
 
 router.post('/:id/eliminar', async (req, res, next) => {
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+    const { rows: itemsViejos } = await client.query(
+      'select articulo_id, cantidad from ventas_items where venta_id = $1',
+      [req.params.id]
+    );
+    for (const it of itemsViejos) {
+      await registrarMovimiento(client, {
+        articuloId: it.articulo_id,
+        tipo: 'venta_eliminada',
+        cantidad: it.cantidad,
+        usuarioId: req.session.usuario.id,
+        ventaId: req.params.id,
+      });
+    }
     // ventas_items tiene "on delete cascade" sobre venta_id, así que se
     // borran solos los renglones de esta venta.
-    await pool.query('delete from ventas where id = $1', [req.params.id]);
+    await client.query('delete from ventas where id = $1', [req.params.id]);
+    await client.query('COMMIT');
     res.redirect('/ventas');
-  } catch (err) { next(err); }
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(err);
+  } finally {
+    client.release();
+  }
 });
 
 module.exports = router;

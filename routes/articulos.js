@@ -134,10 +134,13 @@ router.post('/importar', async (req, res, next) => {
 router.post('/', async (req, res, next) => {
   try {
     const a = req.body;
+    // El stock arranca vacío — lo va a ir completando el apartado Stock a
+    // medida que entren compras, salgan ventas, o un administrador lo
+    // ajuste a mano (ver routes/stock.js); este formulario ya no lo toca.
     await pool.query(
-      `insert into articulos (codigo, nombre, unidad, costo, aplica_iva, aplica_iibb, flete_pct, margen_pct, stock)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [a.codigo, a.nombre, a.unidad || 1, a.costo || 0, !!a.aplica_iva, !!a.aplica_iibb, a.flete_pct || 0, a.margen_pct || 0, a.stock || null]
+      `insert into articulos (codigo, nombre, unidad, costo, aplica_iva, aplica_iibb, flete_pct, margen_pct)
+       values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [a.codigo, a.nombre, a.unidad || 1, a.costo || 0, !!a.aplica_iva, !!a.aplica_iibb, a.flete_pct || 0, a.margen_pct || 0]
     );
     res.redirect('/articulos');
   } catch (err) { next(err); }
@@ -160,18 +163,21 @@ router.post('/:id', async (req, res, next) => {
     // (views/articulos/form.ejs) solo manda el campo "costo" cuando quien
     // edita es administrador, y esto lo vuelve a chequear del lado del
     // servidor para que no se pueda mandar igual con un POST armado a mano.
+    // El stock ya no se toca desde este formulario — lo maneja el
+    // apartado Stock (routes/stock.js), así cualquier cambio (venta,
+    // compra o ajuste a mano) queda siempre con su historial.
     const esAdmin = !!(req.session.usuario && req.session.usuario.esAdmin);
     if (esAdmin && a.costo !== undefined && a.costo !== '') {
       await pool.query(
         `update articulos set codigo=$1, nombre=$2, unidad=$3, aplica_iva=$4, aplica_iibb=$5,
-          flete_pct=$6, margen_pct=$7, stock=$8, costo=$9 where id=$10`,
-        [a.codigo, a.nombre, a.unidad || 1, !!a.aplica_iva, !!a.aplica_iibb, a.flete_pct || 0, a.margen_pct || 0, a.stock || null, Number(a.costo) || 0, req.params.id]
+          flete_pct=$6, margen_pct=$7, costo=$8 where id=$9`,
+        [a.codigo, a.nombre, a.unidad || 1, !!a.aplica_iva, !!a.aplica_iibb, a.flete_pct || 0, a.margen_pct || 0, Number(a.costo) || 0, req.params.id]
       );
     } else {
       await pool.query(
         `update articulos set codigo=$1, nombre=$2, unidad=$3, aplica_iva=$4, aplica_iibb=$5,
-          flete_pct=$6, margen_pct=$7, stock=$8 where id=$9`,
-        [a.codigo, a.nombre, a.unidad || 1, !!a.aplica_iva, !!a.aplica_iibb, a.flete_pct || 0, a.margen_pct || 0, a.stock || null, req.params.id]
+          flete_pct=$6, margen_pct=$7 where id=$8`,
+        [a.codigo, a.nombre, a.unidad || 1, !!a.aplica_iva, !!a.aplica_iibb, a.flete_pct || 0, a.margen_pct || 0, req.params.id]
       );
     }
     res.redirect('/articulos');

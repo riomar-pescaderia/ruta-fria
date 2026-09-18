@@ -12,6 +12,7 @@ const proveedoresRouter = require('./proveedores');
 const { getConfig } = require('../lib/config');
 const { puedeEditarConfirmadas } = require('../lib/auth');
 const { CATEGORIAS_GASTO, esClaveValida, categoriaPorClave } = require('../lib/categoriasGasto');
+const { registrarMovimiento } = require('../lib/stock');
 
 const router = express.Router();
 
@@ -396,6 +397,16 @@ router.post('/:id/confirmar', async (req, res, next) => {
 
     await client.query('BEGIN');
     for (const it of items) {
+      // El stock entra siempre con la mercadería confirmada, más allá de
+      // si ese renglón en particular termina pisando el costo o no — son
+      // dos decisiones independientes.
+      await registrarMovimiento(client, {
+        articuloId: it.articulo_id,
+        tipo: 'compra',
+        cantidad: it.cantidad,
+        usuarioId: req.session.usuario.id,
+        facturaId: factura.id,
+      });
       const cambia = Number(it.costo_actual) !== Number(it.precio_unitario);
       if (!cambia) {
         await client.query('update facturas_compra_items set estado_costo = $1 where id = $2', ['sin_cambio', it.id]);
@@ -420,15 +431,42 @@ router.post('/:id/confirmar', async (req, res, next) => {
 });
 
 router.post('/:id/eliminar', async (req, res, next) => {
+  const client = await pool.connect();
   try {
-    const { rows } = await pool.query('select actualizo_costos from facturas_compra where id = $1', [req.params.id]);
+    const { rows } = await client.query('select actualizo_costos from facturas_compra where id = $1', [req.params.id]);
     if (!rows[0]) return res.redirect('/compras');
     if (rows[0].actualizo_costos && !puedeEditarConfirmadas(req.session.usuario)) {
       return res.redirect(`/compras/${req.params.id}`);
     }
-    await pool.query('delete from facturas_compra where id = $1', [req.params.id]);
+
+    await client.query('BEGIN');
+    // Si la factura ya había confirmado mercadería, revertir el stock que
+    // entró en ese momento antes de borrarla (mismo espíritu que en
+    // ventas: el movimiento se deshace, no se recalcula nada más).
+    if (rows[0].actualizo_costos) {
+      const { rows: items } = await client.query(
+        'select articulo_id, cantidad from facturas_compra_items where factura_id = $1 and articulo_id is not null',
+        [req.params.id]
+      );
+      for (const it of items) {
+        await registrarMovimiento(client, {
+          articuloId: it.articulo_id,
+          tipo: 'compra_eliminada',
+          cantidad: -it.cantidad,
+          usuarioId: req.session.usuario.id,
+          facturaId: req.params.id,
+        });
+      }
+    }
+    await client.query('delete from facturas_compra where id = $1', [req.params.id]);
+    await client.query('COMMIT');
     res.redirect('/compras');
-  } catch (err) { next(err); }
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(err);
+  } finally {
+    client.release();
+  }
 });
 
 module.exports = router;

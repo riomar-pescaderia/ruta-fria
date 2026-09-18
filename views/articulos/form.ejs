@@ -51,14 +51,16 @@
     <input type="number" step="0.01" id="margen_pct" name="margen_pct" value="<%= articulo.margen_pct || 0 %>">
   </div>
   <div>
-    <label for="stock">Stock aproximado (opcional)</label>
-    <input type="number" step="0.01" id="stock" name="stock" value="<%= articulo.stock || '' %>">
-  </div>
-  <div>
     <button class="btn" type="submit">Guardar</button>
     <a class="btn secondary" href="/articulos">Cancelar</a>
   </div>
 </form>
+
+<% if (articulo.id) { %>
+<p style="color:var(--ink-soft); font-size:.85rem; max-width:520px; margin-top:10px;">
+  El stock ya no se edita desde acá: lo maneja <a href="/stock/<%= articulo.id %>">el apartado Stock</a>, que lo actualiza solo con cada venta y compra y deja historial de cualquier ajuste a mano.
+</p>
+<% } %>
 
 <% if (articulo.id) { %>
 <div style="max-width:520px; margin-top:16px;">

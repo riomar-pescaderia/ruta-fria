@@ -16,6 +16,7 @@ const prospectosRouter = require('./routes/prospectos');
 const mapaRouter = require('./routes/mapa');
 const ventasRouter = require('./routes/ventas');
 const cuentaCorrienteRouter = require('./routes/cuentaCorriente');
+const stockRouter = require('./routes/stock');
 const proximamente = require('./routes/proximamente');
 
 const app = express();
@@ -71,7 +72,7 @@ app.use('/mapa', requireAcceso('mapa'), mapaRouter);
 app.use('/gastos', requireAcceso('gastos'), proximamente('Gastos generales', 'Sueldos, alquiler, insumos y demás gastos de la operación, con un panel de total por tipo.'));
 app.use('/ventas', requireAcceso('ventas'), ventasRouter);
 app.use('/cuenta-corriente', requireAcceso('cuenta_corriente'), cuentaCorrienteRouter);
-app.use('/stock', requireAcceso('stock'), proximamente('Stock', 'Control de stock de mercadería: cantidades actuales, movimientos y alertas de faltantes.'));
+app.use('/stock', requireAcceso('stock'), stockRouter);
 
 app.use((req, res) => res.status(404).render('404'));
 

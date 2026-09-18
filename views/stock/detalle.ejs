@@ -1,0 +1,101 @@
+<%- include('../partials/head') %>
+
+<% const stock = articulo.stock === null || articulo.stock === undefined ? null : Number(articulo.stock);
+   const stockMinimo = articulo.stock_minimo === null || articulo.stock_minimo === undefined ? null : Number(articulo.stock_minimo);
+   const sinStock = stock !== null && stock <= 0;
+   const stockBajo = !sinStock && stock !== null && stockMinimo !== null && stock <= stockMinimo;
+   const ETIQUETAS_TIPO = {
+     venta: 'Venta',
+     venta_eliminada: 'Venta eliminada/editada (devolución)',
+     compra: 'Compra confirmada',
+     compra_eliminada: 'Compra eliminada (reversión)',
+     ajuste: 'Ajuste manual',
+   };
+%>
+
+<div class="toolbar">
+  <h1><%= articulo.nombre %></h1>
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <a class="btn secondary" href="/articulos/<%= articulo.id %>/editar">Ver artículo</a>
+    <a class="btn secondary" href="/stock">← Volver</a>
+  </div>
+</div>
+
+<p style="color:var(--ink-soft);">
+  Código: <strong style="color:var(--ink);" class="mono"><%= articulo.codigo %></strong>
+  · Stock actual: <strong style="color:var(--ink);" class="mono"><%= stock === null ? '—' : stock %></strong>
+  <% if (sinStock) { %> · <span class="badge sin-stock">Sin stock</span>
+  <% } else if (stockBajo) { %> · <span class="badge stock-bajo">Stock bajo</span>
+  <% } else { %> · <span class="badge stock-ok">OK</span>
+  <% } %>
+  <% if (stockMinimo !== null) { %> · Umbral de alerta: <span class="mono"><%= stockMinimo %></span><% } %>
+</p>
+
+<% if (error) { %>
+  <p style="color:#b3261e;"><%= error %></p>
+<% } %>
+
+<% if (usuario && usuario.esAdmin) { %>
+<div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:20px;">
+  <form class="card" method="post" action="/stock/<%= articulo.id %>/ajustar" style="max-width:320px;">
+    <h3 style="margin:0 0 4px;">Ajustar stock a mano</h3>
+    <div>
+      <label for="nueva_cantidad">Nueva cantidad</label>
+      <input type="number" step="0.01" id="nueva_cantidad" name="nueva_cantidad" required>
+    </div>
+    <div>
+      <label for="motivo">Motivo (opcional)</label>
+      <input type="text" id="motivo" name="motivo" placeholder="Ej: recuento físico, rotura, merma...">
+    </div>
+    <div>
+      <button class="btn" type="submit">Guardar ajuste</button>
+    </div>
+  </form>
+
+  <form class="card" method="post" action="/stock/<%= articulo.id %>/umbral" style="max-width:260px;">
+    <h3 style="margin:0 0 4px;">Umbral de alerta</h3>
+    <div>
+      <label for="stock_minimo">Avisar cuando el stock baje de</label>
+      <input type="number" step="0.01" min="0" id="stock_minimo" name="stock_minimo" value="<%= stockMinimo === null ? '' : stockMinimo %>" placeholder="Sin umbral">
+    </div>
+    <p style="color:var(--ink-soft); font-size:.85rem; margin:0;">Dejalo vacío para no marcar este artículo por stock bajo (solo se va a marcar como "Sin stock" en 0 o menos).</p>
+    <div>
+      <button class="btn" type="submit">Guardar umbral</button>
+    </div>
+  </form>
+</div>
+<% } %>
+
+<h2 style="margin-top:24px;">Historial de movimientos</h2>
+<% if (movimientos.length === 0) { %>
+  <p class="empty">Todavía no hay movimientos registrados para este artículo.</p>
+<% } else { %>
+<table>
+  <thead>
+    <tr>
+      <th>Fecha</th>
+      <th>Tipo</th>
+      <th>Cantidad</th>
+      <th>Stock resultante</th>
+      <th>Motivo</th>
+      <th>Usuario</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% movimientos.forEach(m => { %>
+    <tr>
+      <td data-label="Fecha" class="mono"><%= new Date(m.fecha).toLocaleString('es-AR') %></td>
+      <td data-label="Tipo"><%= ETIQUETAS_TIPO[m.tipo] || m.tipo %></td>
+      <td data-label="Cantidad" class="mono" style="color: <%= Number(m.cantidad) < 0 ? '#a33' : '#1e6b34' %>;">
+        <%= Number(m.cantidad) > 0 ? '+' : '' %><%= Number(m.cantidad) %>
+      </td>
+      <td data-label="Stock resultante" class="mono"><%= Number(m.stock_resultante) %></td>
+      <td data-label="Motivo"><%= m.motivo || '—' %></td>
+      <td data-label="Usuario"><%= m.usuario_nombre || m.usuario_username || '—' %></td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+<% } %>
+
+<%- include('../partials/foot') %>
