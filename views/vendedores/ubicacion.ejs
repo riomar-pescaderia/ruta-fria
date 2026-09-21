@@ -139,6 +139,13 @@
         .then(function (res) {
           if (!res.ok) {
             alert(res.data.error || 'No se pudo pedir la ubicación.');
+          } else if (res.data.enviados === 0 && res.data.fallidos && res.data.fallidos.length > 0) {
+            // El pedido se procesó, pero Firebase rechazó la notificación
+            // (por ejemplo, un token de celular viejo o inválido) — sin
+            // esto, la pantalla se quedaba diciendo "esperando respuesta"
+            // para siempre sin explicar por qué.
+            alert('No se pudo avisarle al celular:\n' + res.data.fallidos.join('\n'));
+            refrescar();
           } else {
             refrescar();
           }
