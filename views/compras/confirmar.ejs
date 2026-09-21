@@ -12,6 +12,13 @@
   Los artículos resaltados cambian de precio respecto al costo que tienen cargado hoy. Elegí, uno por uno, si querés que este costo nuevo quede guardado en el artículo. Los dos precios están <strong>sin IVA</strong> (el mismo criterio que usa el costo del artículo), más allá de si la fila llevaba la casilla "IVA" tildada o no en la factura.
 </p>
 
+<% if (fleteFactura) { %>
+  <p style="color:var(--ink-soft); font-size:.9rem;">
+    Esta factura tiene imputado el flete de <a href="/compras/<%= fleteFactura.id %>"><%= fleteFactura.numero ? 'Nº ' + fleteFactura.numero : 'Factura #' + fleteFactura.id %></a> ($<%= Number(fleteFactura.total).toFixed(2) %>).
+    <% if (fletePct !== null) { %>% de flete calculado (flete ÷ total de esta factura): <strong style="color:var(--ink);"><%= fletePct.toFixed(2) %>%</strong> — se aplica igual a todos los artículos de la factura.<% } %>
+  </p>
+<% } %>
+
 <form method="post" action="/compras/<%= factura.id %>/confirmar">
 <div style="overflow-x:auto;">
 <table>
@@ -22,6 +29,11 @@
       <th>Precio anterior</th>
       <th>Precio nuevo</th>
       <th></th>
+      <% if (fleteFactura) { %>
+        <th>Flete % anterior</th>
+        <th>Flete % nuevo</th>
+        <th></th>
+      <% } %>
     </tr>
   </thead>
   <tbody>
@@ -41,6 +53,20 @@
             <span style="color:var(--ink-soft); font-size:.85rem;">Sin cambios</span>
           <% } %>
         </td>
+        <% if (fleteFactura) { %>
+          <td data-label="Flete % anterior" class="mono"><%= Number(it.flete_actual).toFixed(2) %>%</td>
+          <td data-label="Flete % nuevo" class="mono"><strong><%= it.fletePctNuevo !== null ? Number(it.fletePctNuevo).toFixed(2) + '%' : '—' %></strong></td>
+          <td data-label="">
+            <% if (it.cambiaFlete) { %>
+              <label class="check-row" style="white-space:nowrap;">
+                <input type="checkbox" name="aplicarFlete[<%= it.id %>]" checked>
+                <span>Cambiar flete %</span>
+              </label>
+            <% } else { %>
+              <span style="color:var(--ink-soft); font-size:.85rem;">Sin cambios</span>
+            <% } %>
+          </td>
+        <% } %>
       </tr>
     <% }) %>
   </tbody>

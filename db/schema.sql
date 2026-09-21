@@ -638,6 +638,33 @@ insert into stock_config (id, modo, planilla_url, planilla_nombre) values (
 )
 on conflict (id) do nothing;
 
+-- Impuestos y percepciones cargados a mano en una factura de compra (por
+-- ejemplo, percepciones de IIBB que vienen sumadas al pie de la factura).
+-- Se guardan aparte de los renglones de artículos porque no tienen que
+-- impactar ni en el costo ni en el precio de ningún producto — solo suman
+-- al total de la factura.
+create table if not exists facturas_compra_impuestos (
+  id serial primary key,
+  factura_id integer not null references facturas_compra(id) on delete cascade,
+  nombre text not null,
+  monto numeric not null default 0
+);
+create index if not exists idx_facturas_compra_impuestos_factura on facturas_compra_impuestos(factura_id);
+
+-- Flete de mercadería imputado a esta factura de compra: apunta a otra
+-- factura ya cargada con categoría "flete_mercaderia". A partir de esto se
+-- calcula el % de flete a prorratear entre los artículos de la factura
+-- (ver routes/compras.js). Una misma factura de flete solo se puede
+-- imputar a una factura de mercadería a la vez (se controla en el código,
+-- no acá, para poder despejarla si hace falta recargar/corregir algo).
+alter table facturas_compra add column if not exists flete_factura_id integer references facturas_compra(id) on delete set null;
+
+-- Igual que estado_costo pero para el % de flete sugerido/aplicado a cada
+-- artículo al confirmar una factura con flete imputado: 'aplicado',
+-- 'no_aplicado' o 'sin_cambio'. Null si la factura no tiene flete imputado
+-- o todavía no se confirmó.
+alter table facturas_compra_items add column if not exists estado_flete text;
+
 create index if not exists idx_facturas_compra_items_factura on facturas_compra_items(factura_id);
 create index if not exists idx_prospectos_activo on prospectos(activo);
 create index if not exists idx_ventas_items_venta on ventas_items(venta_id);

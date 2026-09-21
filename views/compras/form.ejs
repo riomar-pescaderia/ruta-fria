@@ -61,6 +61,17 @@
     </div>
   </div>
 
+  <div id="grupo-flete-factura" style="display:none;">
+    <label for="flete_factura_id">Flete de mercadería imputado a esta factura</label>
+    <select id="flete_factura_id" name="flete_factura_id">
+      <option value="">— sin flete imputado —</option>
+      <% fletesDisponibles.forEach(f => { %>
+        <option value="<%= f.id %>" <%= factura.flete_factura_id && String(factura.flete_factura_id) === String(f.id) ? 'selected' : '' %>><%= f.numero ? 'Nº ' + f.numero + ' — ' : '' %><%= new Date(f.fecha).toLocaleDateString('es-AR') %> — $<%= Number(f.total).toFixed(2) %></option>
+      <% }) %>
+    </select>
+    <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Al confirmar la factura, el sistema calcula el % de flete a prorratear entre los artículos (total de la factura de flete ÷ total de esta factura) y lo va a sugerir aplicar en cada artículo, igual que con el costo. Por ahora no se pisa ningún flete % existente salvo el de los artículos que se confirmen con esta modalidad.</p>
+  </div>
+
   <% const mapaArticulos = {}; articulos.forEach(a => { mapaArticulos[a.id] = a; }); %>
   <div style="overflow-x:auto;">
   <table id="tabla-items">
@@ -122,7 +133,15 @@
         <td style="border-bottom:none;"></td>
       </tr>
       <tr>
-        <td colspan="5" style="text-align:right; font-weight:600; border-bottom:none;">Total</td>
+        <td colspan="5" style="text-align:right; border-bottom:none;">Impuestos y percepciones</td>
+        <td class="mono" id="total-impuestos" style="border-bottom:none;">$0.00</td>
+        <td style="border-bottom:none;"></td>
+      </tr>
+      <tr>
+        <td style="border-bottom:none;"></td>
+        <td style="border-bottom:none;"></td>
+        <td class="mono" id="total-kg" style="border-bottom:none; font-weight:600;"></td>
+        <td colspan="2" style="text-align:right; font-weight:600; border-bottom:none;">Total</td>
         <td class="mono" id="total-factura" style="border-bottom:none; font-weight:600;">$0.00</td>
         <td style="border-bottom:none;"></td>
       </tr>
@@ -137,7 +156,38 @@
     <button type="button" id="agregar-fila" class="btn secondary">+ Agregar artículo</button>
   </div>
 
-  <div>
+  <div id="bloque-impuestos" style="<%= impuestos.length === 0 ? 'display:none;' : '' %> overflow-x:auto; margin-top:18px;">
+    <table id="tabla-impuestos" style="max-width:520px;">
+      <thead>
+        <tr>
+          <th>Nombre del impuesto</th>
+          <th style="width:140px;">Monto</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="filas-impuestos">
+        <% impuestos.forEach((imp, i) => { %>
+        <tr>
+          <td data-label="Nombre del impuesto">
+            <input class="f-imp-nombre" data-campo="nombre" type="text" name="impuestos[<%= i %>][nombre]" placeholder="Ej: Percepción IIBB" autocomplete="off" value="<%= imp.nombre || '' %>">
+          </td>
+          <td data-label="Monto">
+            <input class="f-imp-monto" data-campo="monto" type="number" step="0.01" min="0" name="impuestos[<%= i %>][monto]" value="<%= imp.monto || '' %>">
+          </td>
+          <td><button type="button" class="btn secondary quitar-fila-impuesto">Quitar</button></td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <p style="color:var(--ink-soft); font-size:.85rem; margin:8px 0 0;">
+      Estos montos se suman al total de la factura, pero no afectan el costo ni el precio de ningún artículo.
+    </p>
+  </div>
+  <div style="margin-top:10px;">
+    <button type="button" id="agregar-impuesto" class="btn secondary">+ Agregar impuesto</button>
+  </div>
+
+  <div style="margin-top:16px;">
     <button class="btn" type="submit">Guardar factura</button>
     <a class="btn secondary" href="/compras">Cancelar</a>
   </div>
@@ -156,6 +206,13 @@
   var categoriaSelect = document.getElementById('categoria');
   var categoriaAnterior = categoriaSelect.value;
   function esMercaderia() { return categoriaSelect.value === 'mercaderia'; }
+
+  // El flete imputado solo tiene sentido para "mercadería" — mismo criterio
+  // que el buscador de artículos.
+  var grupoFlete = document.getElementById('grupo-flete-factura');
+  function actualizarVisibilidadFlete() {
+    grupoFlete.style.display = esMercaderia() ? '' : 'none';
+  }
 
   // Subtipo dentro de la categoría (por ejemplo "Electricidad" dentro de
   // "Servicios") — el listado de opciones depende de qué categoría esté
@@ -290,7 +347,7 @@
   }
 
   function actualizarTotales() {
-    var total = 0, totalNeto = 0, totalIva = 0;
+    var total = 0, totalNeto = 0, totalIva = 0, totalKg = 0;
     tbody.querySelectorAll('tr').forEach(function (tr) {
       var cantidad = parseFloat(tr.querySelector('.f-cantidad').value) || 0;
       var precio = parseFloat(tr.querySelector('.f-precio').value) || 0;
@@ -303,11 +360,55 @@
       total += r.total;
       totalNeto += r.neto;
       totalIva += r.iva;
+      totalKg += cantidad;
     });
-    document.getElementById('total-factura').textContent = '$' + total.toFixed(2);
+    var totalImpuestos = 0;
+    tbodyImp.querySelectorAll('.f-imp-monto').forEach(function (el) {
+      totalImpuestos += parseFloat(el.value) || 0;
+    });
     document.getElementById('total-neto').textContent = '$' + totalNeto.toFixed(2);
     document.getElementById('total-iva').textContent = '$' + totalIva.toFixed(2);
+    document.getElementById('total-impuestos').textContent = '$' + totalImpuestos.toFixed(2);
+    document.getElementById('total-factura').textContent = '$' + (total + totalImpuestos).toFixed(2);
+    document.getElementById('total-kg').textContent = esMercaderia() && totalKg > 0 ? (totalKg.toFixed(2) + ' kg') : '';
   }
+
+  // ---------- Impuestos y percepciones ----------
+  var tbodyImp = document.getElementById('filas-impuestos');
+  var bloqueImpuestos = document.getElementById('bloque-impuestos');
+
+  function reindexarImpuestos() {
+    tbodyImp.querySelectorAll('tr').forEach(function (tr, i) {
+      tr.querySelectorAll('[data-campo]').forEach(function (el) {
+        el.name = 'impuestos[' + i + '][' + el.dataset.campo + ']';
+      });
+    });
+    bloqueImpuestos.style.display = tbodyImp.querySelectorAll('tr').length > 0 ? '' : 'none';
+  }
+
+  function crearFilaImpuesto() {
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td data-label="Nombre del impuesto"><input class="f-imp-nombre" data-campo="nombre" type="text" placeholder="Ej: Percepción IIBB" autocomplete="off"></td>' +
+      '<td data-label="Monto"><input class="f-imp-monto" data-campo="monto" type="number" step="0.01" min="0"></td>' +
+      '<td><button type="button" class="btn secondary quitar-fila-impuesto">Quitar</button></td>';
+    return tr;
+  }
+
+  document.getElementById('agregar-impuesto').addEventListener('click', function () {
+    tbodyImp.appendChild(crearFilaImpuesto());
+    reindexarImpuestos();
+  });
+
+  tbodyImp.addEventListener('click', function (e) {
+    if (e.target.classList.contains('quitar-fila-impuesto')) {
+      e.target.closest('tr').remove();
+      reindexarImpuestos();
+      actualizarTotales();
+    }
+  });
+
+  tbodyImp.addEventListener('input', function () { actualizarTotales(); });
 
   function actualizarCheckTodos() {
     var casillas = tbody.querySelectorAll('.f-iva');
@@ -431,12 +532,15 @@
     categoriaAnterior = categoriaSelect.value;
     actualizarPlaceholders();
     actualizarSubtipos(false);
+    actualizarVisibilidadFlete();
     actualizarTotales();
   });
 
   actualizarCheckTodos();
   actualizarPlaceholders();
   actualizarSubtipos(false);
+  actualizarVisibilidadFlete();
+  reindexarImpuestos();
   if (SUBTIPO_INICIAL && (SUBTIPOS_POR_CATEGORIA[categoriaSelect.value] || []).indexOf(SUBTIPO_INICIAL) !== -1) {
     subtipoSelect.value = SUBTIPO_INICIAL;
   }

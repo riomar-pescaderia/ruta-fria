@@ -47,7 +47,7 @@
       <td data-label="Precio de lista" data-corto="Lista" class="mono">$<%= a.precioLista.toFixed(0) %></td>
       <td data-label="Orden en listado PDF" class="col-mobile-oculta">
         <form method="post" action="/articulos/<%= a.id %>/prioridad" style="margin:0;">
-          <select name="prioridad_listado" onchange="this.form.submit()" style="max-width:150px;">
+          <select name="prioridad_listado" onchange="this.form.submit()" class="select-prioridad<%= a.prioridad_listado ? ' prioridad-' + a.prioridad_listado : '' %>" style="max-width:150px;">
             <option value="" <%= !a.prioridad_listado ? 'selected' : '' %>>Sin prioridad</option>
             <option value="1" <%= a.prioridad_listado === 1 ? 'selected' : '' %>>Primer orden</option>
             <option value="2" <%= a.prioridad_listado === 2 ? 'selected' : '' %>>Segundo orden</option>

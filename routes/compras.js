@@ -23,15 +23,30 @@ function redondear2(n) {
   return Math.round(n * 100) / 100;
 }
 
-async function datosFormulario() {
-  const [{ rows: proveedores }, { rows: articulos }] = await Promise.all([
+// "facturaIdActual" es el id de la factura que se está cargando/editando
+// (0 si es una nueva, todavía sin id) — sirve para que la factura de
+// flete que YA tiene imputada esta misma factura siga apareciendo en su
+// propio desplegable, sin dejar elegir una que ya esté imputada a otra.
+async function datosFormulario(facturaIdActual) {
+  const idActual = facturaIdActual || 0;
+  const [{ rows: proveedores }, { rows: articulos }, { rows: fletesDisponibles }] = await Promise.all([
     pool.query('select * from proveedores order by nombre'),
     pool.query(`select * from articulos where activo = true order by
       case when codigo ~ '^[0-9]+$' then 0 else 1 end,
       case when codigo ~ '^[0-9]+$' then codigo::numeric end,
       codigo`),
+    pool.query(
+      `select id, numero, fecha, total from facturas_compra
+       where categoria = 'flete_mercaderia'
+         and id not in (
+           select flete_factura_id from facturas_compra
+           where flete_factura_id is not null and id <> $1
+         )
+       order by fecha desc`,
+      [idActual]
+    ),
   ]);
-  return { proveedores, articulos };
+  return { proveedores, articulos, fletesDisponibles };
 }
 
 // La casilla "IVA" de un renglón define qué es el precio unitario que se
@@ -115,6 +130,31 @@ function leerItems(body, ivaPct, categoria) {
     .filter((it) => it.cantidad > 0 && it.precio_unitario > 0);
 }
 
+// Impuestos y percepciones cargados a mano (impuestos[0][...], etc.) —
+// aparte de los renglones de artículos, sin vínculo con el catálogo ni
+// impacto en costos. Se descartan las filas vacías (sin nombre o con
+// monto en 0) que queden de sobra en el formulario.
+function leerImpuestos(body) {
+  const raw = body.impuestos;
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : Object.values(raw);
+  return arr
+    .filter((it) => it && (it.nombre || '').trim())
+    .map((it) => ({
+      nombre: it.nombre.trim(),
+      monto: redondear2(Number(it.monto) || 0),
+    }))
+    .filter((it) => it.monto > 0);
+}
+
+// El flete imputado solo tiene sentido en una factura de mercadería —
+// para cualquier otra categoría se ignora, aunque venga en el body.
+function leerFleteFacturaId(body, categoria) {
+  if (categoria !== 'mercaderia') return null;
+  const id = Number(body.flete_factura_id);
+  return id > 0 ? id : null;
+}
+
 router.get('/', async (req, res, next) => {
   try {
     const { rows: facturas } = await pool.query(
@@ -128,12 +168,14 @@ router.get('/', async (req, res, next) => {
 
 router.get('/nueva', async (req, res, next) => {
   try {
-    const [{ proveedores, articulos }, config] = await Promise.all([datosFormulario(), getConfig()]);
+    const [{ proveedores, articulos, fletesDisponibles }, config] = await Promise.all([datosFormulario(0), getConfig()]);
     res.render('compras/form', {
-      factura: { fecha: fechaHoraInput(), categoria: 'mercaderia', subtipo: null },
+      factura: { fecha: fechaHoraInput(), categoria: 'mercaderia', subtipo: null, flete_factura_id: null },
       items: [{}],
+      impuestos: [],
       proveedores,
       articulos,
+      fletesDisponibles,
       categorias: CATEGORIAS_GASTO,
       ivaPct: config.iva_pct,
       error: null,
@@ -146,20 +188,24 @@ router.post('/', async (req, res, next) => {
   const { proveedor_id, numero, fecha } = req.body;
   const categoria = leerCategoria(req.body);
   const subtipo = leerSubtipo(req.body, categoria);
-  let config, items;
+  const fleteFacturaId = leerFleteFacturaId(req.body, categoria);
+  let config, items, impuestos;
   try {
     config = await getConfig();
     items = leerItems(req.body, config.iva_pct, categoria);
+    impuestos = leerImpuestos(req.body);
   } catch (err) { return next(err); }
 
   if (!proveedor_id || items.length === 0) {
     try {
-      const { proveedores, articulos } = await datosFormulario();
+      const { proveedores, articulos, fletesDisponibles } = await datosFormulario(0);
       return res.render('compras/form', {
-        factura: { proveedor_id, numero, fecha, categoria, subtipo },
+        factura: { proveedor_id, numero, fecha, categoria, subtipo, flete_factura_id: fleteFacturaId },
         items: items.length ? items : [{}],
+        impuestos: impuestos.length ? impuestos : [],
         proveedores,
         articulos,
+        fletesDisponibles,
         categorias: CATEGORIAS_GASTO,
         ivaPct: config.iva_pct,
         error: !proveedor_id
@@ -170,14 +216,16 @@ router.post('/', async (req, res, next) => {
     } catch (err) { return next(err); }
   }
 
-  const total = redondear2(items.reduce((acc, it) => acc + it.total, 0));
+  const itemsTotal = redondear2(items.reduce((acc, it) => acc + it.total, 0));
+  const impuestosTotal = redondear2(impuestos.reduce((acc, it) => acc + it.monto, 0));
+  const total = redondear2(itemsTotal + impuestosTotal);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
-      `insert into facturas_compra (proveedor_id, numero, fecha, total, categoria, subtipo)
-       values ($1,$2,$3,$4,$5,$6) returning id`,
-      [proveedor_id, numero || null, inputAFecha(fecha) || new Date(), total, categoria, subtipo]
+      `insert into facturas_compra (proveedor_id, numero, fecha, total, categoria, subtipo, flete_factura_id)
+       values ($1,$2,$3,$4,$5,$6,$7) returning id`,
+      [proveedor_id, numero || null, inputAFecha(fecha) || new Date(), total, categoria, subtipo, fleteFacturaId]
     );
     const facturaId = rows[0].id;
     for (const it of items) {
@@ -187,9 +235,16 @@ router.post('/', async (req, res, next) => {
         [facturaId, it.articulo_id, it.codigo_manual, it.descripcion, it.cantidad, it.precio_final, it.aplica_iva, it.total, it.neto, it.iva]
       );
     }
+    for (const imp of impuestos) {
+      await client.query(
+        `insert into facturas_compra_impuestos (factura_id, nombre, monto) values ($1,$2,$3)`,
+        [facturaId, imp.nombre, imp.monto]
+      );
+    }
     await client.query('COMMIT');
     // Solo "mercadería" pasa por la revisión de precios — es el único
-    // caso donde cargar la factura puede pisar el costo de un artículo.
+    // caso donde cargar la factura puede pisar el costo (y ahora también
+    // el flete %) de un artículo.
     res.redirect(categoria === 'mercaderia' ? `/compras/${facturaId}/confirmar` : `/compras/${facturaId}`);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -208,11 +263,11 @@ router.get('/:id/editar', async (req, res, next) => {
       return res.redirect(`/compras/${factura.id}`);
     }
 
-    const { rows: itemsGuardados } = await pool.query(
-      'select * from facturas_compra_items where factura_id = $1 order by id',
-      [factura.id]
-    );
-    const [{ proveedores, articulos }, config] = await Promise.all([datosFormulario(), getConfig()]);
+    const [{ rows: itemsGuardados }, { rows: impuestos }] = await Promise.all([
+      pool.query('select * from facturas_compra_items where factura_id = $1 order by id', [factura.id]),
+      pool.query('select * from facturas_compra_impuestos where factura_id = $1 order by id', [factura.id]),
+    ]);
+    const [{ proveedores, articulos, fletesDisponibles }, config] = await Promise.all([datosFormulario(factura.id), getConfig()]);
 
     // El precio guardado siempre es el final (con IVA ya sumado si
     // correspondía) — para reabrir el formulario hay que reconstruir lo
@@ -229,8 +284,10 @@ router.get('/:id/editar', async (req, res, next) => {
     res.render('compras/form', {
       factura: { ...factura, fecha: fechaHoraInput(factura.fecha) },
       items,
+      impuestos,
       proveedores,
       articulos,
+      fletesDisponibles,
       categorias: CATEGORIAS_GASTO,
       ivaPct: config.iva_pct,
       error: null,
@@ -243,10 +300,12 @@ router.post('/:id', async (req, res, next) => {
   const { proveedor_id, numero, fecha } = req.body;
   const categoria = leerCategoria(req.body);
   const subtipo = leerSubtipo(req.body, categoria);
-  let config, items;
+  const fleteFacturaId = leerFleteFacturaId(req.body, categoria);
+  let config, items, impuestos;
   try {
     config = await getConfig();
     items = leerItems(req.body, config.iva_pct, categoria);
+    impuestos = leerImpuestos(req.body);
   } catch (err) { return next(err); }
   const client = await pool.connect();
   try {
@@ -258,12 +317,14 @@ router.post('/:id', async (req, res, next) => {
     }
 
     if (!proveedor_id || items.length === 0) {
-      const { proveedores, articulos } = await datosFormulario();
+      const { proveedores, articulos, fletesDisponibles } = await datosFormulario(factura.id);
       return res.render('compras/form', {
-        factura: { id: factura.id, proveedor_id, numero, fecha, categoria, subtipo, actualizo_costos: factura.actualizo_costos },
+        factura: { id: factura.id, proveedor_id, numero, fecha, categoria, subtipo, flete_factura_id: fleteFacturaId, actualizo_costos: factura.actualizo_costos },
         items: items.length ? items : [{}],
+        impuestos: impuestos.length ? impuestos : [],
         proveedores,
         articulos,
+        fletesDisponibles,
         categorias: CATEGORIAS_GASTO,
         ivaPct: config.iva_pct,
         error: !proveedor_id
@@ -273,7 +334,9 @@ router.post('/:id', async (req, res, next) => {
       });
     }
 
-    const total = redondear2(items.reduce((acc, it) => acc + it.total, 0));
+    const itemsTotal = redondear2(items.reduce((acc, it) => acc + it.total, 0));
+    const impuestosTotal = redondear2(impuestos.reduce((acc, it) => acc + it.monto, 0));
+    const total = redondear2(itemsTotal + impuestosTotal);
 
     // Si es una corrección sobre una factura ya confirmada, no se vuelve a
     // pisar el costo de los artículos ni se repite el paso de revisión —
@@ -282,8 +345,8 @@ router.post('/:id', async (req, res, next) => {
     // renglones habían aplicado costo, que quedaba en estado_costo).
     await client.query('BEGIN');
     await client.query(
-      'update facturas_compra set proveedor_id=$1, numero=$2, fecha=$3, total=$4, categoria=$5, subtipo=$6 where id=$7',
-      [proveedor_id, numero || null, inputAFecha(fecha) || factura.fecha, total, categoria, subtipo, factura.id]
+      'update facturas_compra set proveedor_id=$1, numero=$2, fecha=$3, total=$4, categoria=$5, subtipo=$6, flete_factura_id=$7 where id=$8',
+      [proveedor_id, numero || null, inputAFecha(fecha) || factura.fecha, total, categoria, subtipo, fleteFacturaId, factura.id]
     );
     await client.query('delete from facturas_compra_items where factura_id = $1', [factura.id]);
     for (const it of items) {
@@ -291,6 +354,13 @@ router.post('/:id', async (req, res, next) => {
         `insert into facturas_compra_items (factura_id, articulo_id, codigo_manual, descripcion, cantidad, precio_unitario, aplica_iva, total, neto, iva)
          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [factura.id, it.articulo_id, it.codigo_manual, it.descripcion, it.cantidad, it.precio_final, it.aplica_iva, it.total, it.neto, it.iva]
+      );
+    }
+    await client.query('delete from facturas_compra_impuestos where factura_id = $1', [factura.id]);
+    for (const imp of impuestos) {
+      await client.query(
+        `insert into facturas_compra_impuestos (factura_id, nombre, monto) values ($1,$2,$3)`,
+        [factura.id, imp.nombre, imp.monto]
       );
     }
     await client.query('COMMIT');
@@ -314,14 +384,37 @@ router.get('/:id', async (req, res, next) => {
     const factura = rows[0];
     if (!factura) return res.redirect('/compras');
 
-    const { rows: items } = await pool.query(
-      `select i.*, coalesce(a.codigo, i.codigo_manual) as codigo, coalesce(a.nombre, i.descripcion) as nombre
-       from facturas_compra_items i left join articulos a on a.id = i.articulo_id
-       where i.factura_id = $1
-       order by i.id`,
-      [factura.id]
-    );
-    res.render('compras/detalle', { factura, items, categorias: CATEGORIAS_GASTO });
+    const [{ rows: items }, { rows: impuestos }] = await Promise.all([
+      pool.query(
+        `select i.*, coalesce(a.codigo, i.codigo_manual) as codigo, coalesce(a.nombre, i.descripcion) as nombre
+         from facturas_compra_items i left join articulos a on a.id = i.articulo_id
+         where i.factura_id = $1
+         order by i.id`,
+        [factura.id]
+      ),
+      pool.query('select * from facturas_compra_impuestos where factura_id = $1 order by id', [factura.id]),
+    ]);
+
+    // Suma de kg (cantidad) de todos los renglones, solo tiene sentido
+    // mostrarla para facturas de mercadería.
+    const totalKg = factura.categoria === 'mercaderia'
+      ? redondear2(items.reduce((acc, it) => acc + Number(it.cantidad), 0))
+      : null;
+
+    // Info de la factura de flete imputada (si tiene) y el % que resultó
+    // de prorratearla — mismo cálculo que se usa al confirmar.
+    let fleteFactura = null;
+    let fletePct = null;
+    if (factura.flete_factura_id) {
+      const { rows: fleteRows } = await pool.query('select id, numero, fecha, total from facturas_compra where id = $1', [factura.flete_factura_id]);
+      fleteFactura = fleteRows[0] || null;
+      if (fleteFactura) {
+        const itemsTotal = redondear2(items.reduce((acc, it) => acc + Number(it.total), 0));
+        fletePct = itemsTotal > 0 ? redondear2((Number(fleteFactura.total) / itemsTotal) * 100) : null;
+      }
+    }
+
+    res.render('compras/detalle', { factura, items, impuestos, totalKg, fleteFactura, fletePct, categorias: CATEGORIAS_GASTO });
   } catch (err) { next(err); }
 });
 
@@ -344,7 +437,7 @@ router.get('/:id/confirmar', async (req, res, next) => {
     if (factura.actualizo_costos) return res.redirect(`/compras/${factura.id}`);
 
     const { rows: items } = await pool.query(
-      `select i.*, a.codigo, a.nombre, a.costo as costo_actual
+      `select i.*, a.codigo, a.nombre, a.costo as costo_actual, a.flete_pct as flete_actual
        from facturas_compra_items i join articulos a on a.id = i.articulo_id
        where i.factura_id = $1
        order by i.id`,
@@ -360,16 +453,37 @@ router.get('/:id/confirmar', async (req, res, next) => {
     // sumar solo al calcular el precio de venta (ver lib/precios.js) —
     // si acá se guardara el costo con IVA ya sumado, quedaría sumado dos
     // veces.
+    //
+    // El % de flete nuevo (si esta factura tiene una factura de flete
+    // imputada) sale de prorratear: total de la factura de flete ÷ total
+    // de los renglones de ESTA factura (sin contar impuestos/percepciones,
+    // que no tienen que ver con el valor de la mercadería) — mismo % para
+    // todos los renglones, porque así se prorratea en la planilla de Excel
+    // que usa el negocio.
+    let fleteFactura = null;
+    let fletePct = null;
+    if (factura.flete_factura_id) {
+      const { rows: fleteRows } = await pool.query('select id, numero, fecha, total from facturas_compra where id = $1', [factura.flete_factura_id]);
+      fleteFactura = fleteRows[0] || null;
+      if (fleteFactura) {
+        const itemsTotal = redondear2(items.reduce((acc, it) => acc + Number(it.total), 0));
+        fletePct = itemsTotal > 0 ? redondear2((Number(fleteFactura.total) / itemsTotal) * 100) : null;
+      }
+    }
+
     const itemsConCambio = items.map((it) => {
       const costoNuevo = redondear2(Number(it.neto) / Number(it.cantidad));
+      const cambiaFlete = fletePct !== null && Number(it.flete_actual) !== fletePct;
       return {
         ...it,
         costoNuevo,
         cambia: Number(it.costo_actual) !== costoNuevo,
+        fletePctNuevo: fletePct,
+        cambiaFlete,
       };
     });
 
-    res.render('compras/confirmar', { factura, items: itemsConCambio });
+    res.render('compras/confirmar', { factura, items: itemsConCambio, fleteFactura, fletePct });
   } catch (err) { next(err); }
 });
 
@@ -383,7 +497,7 @@ router.post('/:id/confirmar', async (req, res, next) => {
     if (factura.actualizo_costos) return res.redirect(`/compras/${factura.id}`);
 
     const { rows: items } = await client.query(
-      `select i.*, a.costo as costo_actual
+      `select i.*, a.costo as costo_actual, a.flete_pct as flete_actual
        from facturas_compra_items i join articulos a on a.id = i.articulo_id
        where i.factura_id = $1`,
       [factura.id]
@@ -394,6 +508,20 @@ router.post('/:id/confirmar', async (req, res, next) => {
     // revisión — llega como { "<item_id>": "on", ... }, solo con las
     // claves de los checkboxes tildados.
     const aplicar = req.body.aplicar || {};
+    const aplicarFlete = req.body.aplicarFlete || {};
+
+    // Mismo % de flete que se mostró en la pantalla de revisión — se
+    // vuelve a calcular acá (no se confía en nada que venga del body) por
+    // si el total de la factura de flete cambió entre que se abrió la
+    // pantalla y se confirmó.
+    let fletePct = null;
+    if (factura.flete_factura_id) {
+      const { rows: fleteRows } = await client.query('select total from facturas_compra where id = $1', [factura.flete_factura_id]);
+      if (fleteRows[0]) {
+        const itemsTotal = redondear2(items.reduce((acc, it) => acc + Number(it.total), 0));
+        fletePct = itemsTotal > 0 ? redondear2((Number(fleteRows[0].total) / itemsTotal) * 100) : null;
+      }
+    }
 
     await client.query('BEGIN');
     const cfgStock = await obtenerConfigStock(client);
@@ -425,6 +553,22 @@ router.post('/:id/confirmar', async (req, res, next) => {
         await client.query('update facturas_compra_items set estado_costo = $1 where id = $2', ['aplicado', it.id]);
       } else {
         await client.query('update facturas_compra_items set estado_costo = $1 where id = $2', ['no_aplicado', it.id]);
+      }
+
+      // El % de flete se pisa artículo por artículo, igual que el costo —
+      // por ahora no se toca ningún artículo que no pase por acá (ver
+      // pedido del usuario: los flete_pct existentes quedan como están
+      // hasta que se vaya cargando cada factura con esta modalidad).
+      if (fletePct !== null) {
+        const cambiaFlete = Number(it.flete_actual) !== fletePct;
+        if (!cambiaFlete) {
+          await client.query('update facturas_compra_items set estado_flete = $1 where id = $2', ['sin_cambio', it.id]);
+        } else if (aplicarFlete[it.id] === 'on') {
+          await client.query('update articulos set flete_pct = $1 where id = $2', [fletePct, it.articulo_id]);
+          await client.query('update facturas_compra_items set estado_flete = $1 where id = $2', ['aplicado', it.id]);
+        } else {
+          await client.query('update facturas_compra_items set estado_flete = $1 where id = $2', ['no_aplicado', it.id]);
+        }
       }
     }
     await client.query('update facturas_compra set actualizo_costos = true where id = $1', [factura.id]);

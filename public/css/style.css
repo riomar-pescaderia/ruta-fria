@@ -14,6 +14,15 @@
   --ink-soft: #5d6b78;
   --line: #e2e7ec;
 
+  /* Prioridad de listado (Artículos): colores suaves para identificar
+     el orden de un vistazo, sin tapar el texto (que se mantiene negro). */
+  --prioridad-1: #cdedd6;
+  --prioridad-1-borde: #8fcda3;
+  --prioridad-2: #fbe9a8;
+  --prioridad-2-borde: #dcc151;
+  --prioridad-3: #fbd7ac;
+  --prioridad-3-borde: #e2a465;
+
   /* alias para compatibilidad con estilos existentes */
   --accent: var(--orange);
   --accent-deep: var(--orange-deep);
@@ -345,6 +354,12 @@ tr[hidden] { display: none !important; }
 
 tr.fila-cambio td { background: var(--orange-soft); }
 tr.fila-cambio td:nth-child(4) { color: #8a5a12; }
+
+/* ---------- Select de prioridad de listado (Artículos) ---------- */
+.select-prioridad { color: var(--ink); }
+.select-prioridad.prioridad-1 { background: var(--prioridad-1); border-color: var(--prioridad-1-borde); }
+.select-prioridad.prioridad-2 { background: var(--prioridad-2); border-color: var(--prioridad-2-borde); }
+.select-prioridad.prioridad-3 { background: var(--prioridad-3); border-color: var(--prioridad-3-borde); }
 
 /* ---------- Responsive ---------- */
 
