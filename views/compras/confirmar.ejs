@@ -12,9 +12,11 @@
   Los artículos resaltados cambian de precio respecto al costo que tienen cargado hoy. Elegí, uno por uno, si querés que este costo nuevo quede guardado en el artículo. Los dos precios están <strong>sin IVA</strong> (el mismo criterio que usa el costo del artículo), más allá de si la fila llevaba la casilla "IVA" tildada o no en la factura.
 </p>
 
-<% if (fleteFactura) { %>
+<% if (fletesImputados.length > 0) { %>
   <p style="color:var(--ink-soft); font-size:.9rem;">
-    Esta factura tiene imputado el flete de <a href="/compras/<%= fleteFactura.id %>"><%= fleteFactura.numero ? 'Nº ' + fleteFactura.numero : 'Factura #' + fleteFactura.id %></a> ($<%= Number(fleteFactura.total).toFixed(2) %>).
+    Esta factura tiene imputado<%= fletesImputados.length > 1 ? 's' : '' %> el<%= fletesImputados.length > 1 ? ' total de los fletes de' : ' flete de' %>
+    <% fletesImputados.forEach((f, i) => { %><% if (i > 0) { %>, <% } %><a href="/compras/<%= f.id %>"><%= f.numero ? 'Nº ' + f.numero : 'Factura #' + f.id %></a><% }) %>
+    (<%= fletesImputados.length > 1 ? 'suman $' + fletesTotal.toFixed(2) : '$' + fletesTotal.toFixed(2) %>).
     <% if (fletePct !== null) { %>% de flete calculado (flete ÷ total de esta factura): <strong style="color:var(--ink);"><%= fletePct.toFixed(2) %>%</strong> — se aplica automáticamente a todos los artículos de la factura al confirmar, sin tener que elegirlos uno por uno.<% } %>
   </p>
 <% } %>
@@ -28,8 +30,12 @@
       <th>Artículo</th>
       <th>Precio anterior</th>
       <th>Precio nuevo</th>
-      <th></th>
-      <% if (fleteFactura) { %>
+      <th>
+        <label style="font-weight:400; text-transform:none; font-size:.7rem; display:flex; align-items:center; gap:3px; letter-spacing:0; white-space:nowrap;">
+          <input type="checkbox" id="check-todos-precio" checked style="width:auto;"> todos
+        </label>
+      </th>
+      <% if (fletesImputados.length > 0) { %>
         <th>Flete % anterior</th>
         <th>Flete % nuevo</th>
         <th></th>
@@ -46,14 +52,14 @@
         <td data-label="">
           <% if (it.cambia) { %>
             <label class="check-row" style="white-space:nowrap;">
-              <input type="checkbox" name="aplicar[<%= it.id %>]" checked>
+              <input type="checkbox" class="check-precio" name="aplicar[<%= it.id %>]" checked>
               <span>Cambiar precio</span>
             </label>
           <% } else { %>
             <span style="color:var(--ink-soft); font-size:.85rem;">Sin cambios</span>
           <% } %>
         </td>
-        <% if (fleteFactura) { %>
+        <% if (fletesImputados.length > 0) { %>
           <td data-label="Flete % anterior" class="mono"><%= Number(it.flete_actual).toFixed(2) %>%</td>
           <td data-label="Flete % nuevo" class="mono"><strong><%= it.fletePctNuevo !== null ? Number(it.fletePctNuevo).toFixed(2) + '%' : '—' %></strong></td>
           <td data-label="">
@@ -75,5 +81,25 @@
   <a class="btn secondary" href="/compras/<%= factura.id %>">Cancelar, decidir más tarde</a>
 </div>
 </form>
+
+<script>
+(function () {
+  var checkTodos = document.getElementById('check-todos-precio');
+  if (!checkTodos) return;
+  var casillas = document.querySelectorAll('.check-precio');
+
+  function actualizarCheckTodos() {
+    var todasTildadas = true;
+    casillas.forEach(function (c) { if (!c.checked) todasTildadas = false; });
+    checkTodos.checked = todasTildadas;
+  }
+
+  checkTodos.addEventListener('change', function () {
+    casillas.forEach(function (c) { c.checked = checkTodos.checked; });
+  });
+  casillas.forEach(function (c) { c.addEventListener('change', actualizarCheckTodos); });
+  actualizarCheckTodos();
+})();
+</script>
 
 <%- include('../partials/foot') %>

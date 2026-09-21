@@ -29,6 +29,11 @@ create table if not exists proveedores (
 -- romper facturas ya cargadas con proveedores todavía sin categorizar.
 alter table proveedores add column if not exists categoria text;
 
+-- Razón social y CUIT del proveedor — datos administrativos aparte del
+-- "nombre" (el que se usa para mostrarlo en los desplegables y listados).
+alter table proveedores add column if not exists razon_social text;
+alter table proveedores add column if not exists cuit text;
+
 create table if not exists clientes (
   id serial primary key,
   razon_social text not null,
@@ -671,6 +676,36 @@ alter table facturas_compra add column if not exists flete_factura_id integer re
 -- 'no_aplicado' o 'sin_cambio'. Null si la factura no tiene flete imputado
 -- o todavía no se confirmó.
 alter table facturas_compra_items add column if not exists estado_flete text;
+
+-- Ahora se puede imputar MÁS de una factura de flete a una misma factura
+-- de mercadería (se suman los totales de flete para calcular el %) — esta
+-- tabla reemplaza a la columna "flete_factura_id" de arriba, que solo
+-- admitía una. Cada factura de flete sigue pudiendo imputarse a una sola
+-- factura de mercadería a la vez (se controla en el código).
+create table if not exists facturas_compra_fletes (
+  factura_id integer not null references facturas_compra(id) on delete cascade,
+  flete_factura_id integer not null references facturas_compra(id) on delete cascade,
+  primary key (factura_id, flete_factura_id)
+);
+create index if not exists idx_facturas_compra_fletes_factura on facturas_compra_fletes(factura_id);
+create index if not exists idx_facturas_compra_fletes_flete on facturas_compra_fletes(flete_factura_id);
+
+-- Migra las imputaciones que ya existían en "flete_factura_id" (una por
+-- factura) a la tabla nueva, y borra la columna vieja — se corre una sola
+-- vez: después de la primera vez que corre, la columna ya no existe y el
+-- "if exists" de abajo da falso para siempre.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'facturas_compra' and column_name = 'flete_factura_id'
+  ) then
+    insert into facturas_compra_fletes (factura_id, flete_factura_id)
+    select id, flete_factura_id from facturas_compra where flete_factura_id is not null
+    on conflict do nothing;
+    alter table facturas_compra drop column flete_factura_id;
+  end if;
+end $$;
 
 create index if not exists idx_facturas_compra_items_factura on facturas_compra_items(factura_id);
 create index if not exists idx_prospectos_activo on prospectos(activo);

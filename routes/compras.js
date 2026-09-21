@@ -24,9 +24,9 @@ function redondear2(n) {
 }
 
 // "facturaIdActual" es el id de la factura que se está cargando/editando
-// (0 si es una nueva, todavía sin id) — sirve para que la factura de
-// flete que YA tiene imputada esta misma factura siga apareciendo en su
-// propio desplegable, sin dejar elegir una que ya esté imputada a otra.
+// (0 si es una nueva, todavía sin id) — sirve para que las facturas de
+// flete que YA tiene imputadas esta misma factura sigan apareciendo en su
+// propio listado, sin dejar elegir una que ya esté imputada a otra.
 async function datosFormulario(facturaIdActual) {
   const idActual = facturaIdActual || 0;
   const [{ rows: proveedores }, { rows: articulos }, { rows: fletesDisponibles }] = await Promise.all([
@@ -39,8 +39,8 @@ async function datosFormulario(facturaIdActual) {
       `select id, numero, fecha, total from facturas_compra
        where categoria = 'flete_mercaderia'
          and id not in (
-           select flete_factura_id from facturas_compra
-           where flete_factura_id is not null and id <> $1
+           select flete_factura_id from facturas_compra_fletes
+           where factura_id <> $1
          )
        order by fecha desc`,
       [idActual]
@@ -147,12 +147,17 @@ function leerImpuestos(body) {
     .filter((it) => it.monto > 0);
 }
 
-// El flete imputado solo tiene sentido en una factura de mercadería —
-// para cualquier otra categoría se ignora, aunque venga en el body.
-function leerFleteFacturaId(body, categoria) {
-  if (categoria !== 'mercaderia') return null;
-  const id = Number(body.flete_factura_id);
-  return id > 0 ? id : null;
+// Los fletes imputados solo tienen sentido en una factura de mercadería —
+// para cualquier otra categoría se ignora, aunque venga en el body. Llega
+// como fletes_imputados[] (uno o más checkboxes tildados): puede ser un
+// string suelto (un solo tildado), un array (varios) o undefined (ninguno).
+function leerFleteFacturaIds(body, categoria) {
+  if (categoria !== 'mercaderia') return [];
+  const raw = body.fletes_imputados;
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : [raw];
+  const ids = arr.map((v) => Number(v)).filter((id) => id > 0);
+  return [...new Set(ids)];
 }
 
 router.get('/', async (req, res, next) => {
@@ -170,7 +175,7 @@ router.get('/nueva', async (req, res, next) => {
   try {
     const [{ proveedores, articulos, fletesDisponibles }, config] = await Promise.all([datosFormulario(0), getConfig()]);
     res.render('compras/form', {
-      factura: { fecha: fechaHoraInput(), categoria: 'mercaderia', subtipo: null, flete_factura_id: null },
+      factura: { fecha: fechaHoraInput(), categoria: 'mercaderia', subtipo: null, fletes_imputados: [] },
       items: [{}],
       impuestos: [],
       proveedores,
@@ -188,7 +193,7 @@ router.post('/', async (req, res, next) => {
   const { proveedor_id, numero, fecha } = req.body;
   const categoria = leerCategoria(req.body);
   const subtipo = leerSubtipo(req.body, categoria);
-  const fleteFacturaId = leerFleteFacturaId(req.body, categoria);
+  const fleteFacturaIds = leerFleteFacturaIds(req.body, categoria);
   let config, items, impuestos;
   try {
     config = await getConfig();
@@ -200,7 +205,7 @@ router.post('/', async (req, res, next) => {
     try {
       const { proveedores, articulos, fletesDisponibles } = await datosFormulario(0);
       return res.render('compras/form', {
-        factura: { proveedor_id, numero, fecha, categoria, subtipo, flete_factura_id: fleteFacturaId },
+        factura: { proveedor_id, numero, fecha, categoria, subtipo, fletes_imputados: fleteFacturaIds },
         items: items.length ? items : [{}],
         impuestos: impuestos.length ? impuestos : [],
         proveedores,
@@ -223,9 +228,9 @@ router.post('/', async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
-      `insert into facturas_compra (proveedor_id, numero, fecha, total, categoria, subtipo, flete_factura_id)
-       values ($1,$2,$3,$4,$5,$6,$7) returning id`,
-      [proveedor_id, numero || null, inputAFecha(fecha) || new Date(), total, categoria, subtipo, fleteFacturaId]
+      `insert into facturas_compra (proveedor_id, numero, fecha, total, categoria, subtipo)
+       values ($1,$2,$3,$4,$5,$6) returning id`,
+      [proveedor_id, numero || null, inputAFecha(fecha) || new Date(), total, categoria, subtipo]
     );
     const facturaId = rows[0].id;
     for (const it of items) {
@@ -239,6 +244,12 @@ router.post('/', async (req, res, next) => {
       await client.query(
         `insert into facturas_compra_impuestos (factura_id, nombre, monto) values ($1,$2,$3)`,
         [facturaId, imp.nombre, imp.monto]
+      );
+    }
+    for (const fleteId of fleteFacturaIds) {
+      await client.query(
+        `insert into facturas_compra_fletes (factura_id, flete_factura_id) values ($1,$2)`,
+        [facturaId, fleteId]
       );
     }
     await client.query('COMMIT');
@@ -263,11 +274,13 @@ router.get('/:id/editar', async (req, res, next) => {
       return res.redirect(`/compras/${factura.id}`);
     }
 
-    const [{ rows: itemsGuardados }, { rows: impuestos }] = await Promise.all([
+    const [{ rows: itemsGuardados }, { rows: impuestos }, { rows: fletesImputadosRows }] = await Promise.all([
       pool.query('select * from facturas_compra_items where factura_id = $1 order by id', [factura.id]),
       pool.query('select * from facturas_compra_impuestos where factura_id = $1 order by id', [factura.id]),
+      pool.query('select flete_factura_id from facturas_compra_fletes where factura_id = $1', [factura.id]),
     ]);
     const [{ proveedores, articulos, fletesDisponibles }, config] = await Promise.all([datosFormulario(factura.id), getConfig()]);
+    const fletesImputados = fletesImputadosRows.map((r) => r.flete_factura_id);
 
     // El precio guardado siempre es el final (con IVA ya sumado si
     // correspondía) — para reabrir el formulario hay que reconstruir lo
@@ -282,7 +295,7 @@ router.get('/:id/editar', async (req, res, next) => {
     }));
 
     res.render('compras/form', {
-      factura: { ...factura, fecha: fechaHoraInput(factura.fecha) },
+      factura: { ...factura, fecha: fechaHoraInput(factura.fecha), fletes_imputados: fletesImputados },
       items,
       impuestos,
       proveedores,
@@ -300,7 +313,7 @@ router.post('/:id', async (req, res, next) => {
   const { proveedor_id, numero, fecha } = req.body;
   const categoria = leerCategoria(req.body);
   const subtipo = leerSubtipo(req.body, categoria);
-  const fleteFacturaId = leerFleteFacturaId(req.body, categoria);
+  const fleteFacturaIds = leerFleteFacturaIds(req.body, categoria);
   let config, items, impuestos;
   try {
     config = await getConfig();
@@ -319,7 +332,7 @@ router.post('/:id', async (req, res, next) => {
     if (!proveedor_id || items.length === 0) {
       const { proveedores, articulos, fletesDisponibles } = await datosFormulario(factura.id);
       return res.render('compras/form', {
-        factura: { id: factura.id, proveedor_id, numero, fecha, categoria, subtipo, flete_factura_id: fleteFacturaId, actualizo_costos: factura.actualizo_costos },
+        factura: { id: factura.id, proveedor_id, numero, fecha, categoria, subtipo, fletes_imputados: fleteFacturaIds, actualizo_costos: factura.actualizo_costos },
         items: items.length ? items : [{}],
         impuestos: impuestos.length ? impuestos : [],
         proveedores,
@@ -345,8 +358,8 @@ router.post('/:id', async (req, res, next) => {
     // renglones habían aplicado costo, que quedaba en estado_costo).
     await client.query('BEGIN');
     await client.query(
-      'update facturas_compra set proveedor_id=$1, numero=$2, fecha=$3, total=$4, categoria=$5, subtipo=$6, flete_factura_id=$7 where id=$8',
-      [proveedor_id, numero || null, inputAFecha(fecha) || factura.fecha, total, categoria, subtipo, fleteFacturaId, factura.id]
+      'update facturas_compra set proveedor_id=$1, numero=$2, fecha=$3, total=$4, categoria=$5, subtipo=$6 where id=$7',
+      [proveedor_id, numero || null, inputAFecha(fecha) || factura.fecha, total, categoria, subtipo, factura.id]
     );
     await client.query('delete from facturas_compra_items where factura_id = $1', [factura.id]);
     for (const it of items) {
@@ -361,6 +374,13 @@ router.post('/:id', async (req, res, next) => {
       await client.query(
         `insert into facturas_compra_impuestos (factura_id, nombre, monto) values ($1,$2,$3)`,
         [factura.id, imp.nombre, imp.monto]
+      );
+    }
+    await client.query('delete from facturas_compra_fletes where factura_id = $1', [factura.id]);
+    for (const fleteId of fleteFacturaIds) {
+      await client.query(
+        `insert into facturas_compra_fletes (factura_id, flete_factura_id) values ($1,$2)`,
+        [factura.id, fleteId]
       );
     }
     await client.query('COMMIT');
@@ -401,20 +421,24 @@ router.get('/:id', async (req, res, next) => {
       ? redondear2(items.reduce((acc, it) => acc + Number(it.cantidad), 0))
       : null;
 
-    // Info de la factura de flete imputada (si tiene) y el % que resultó
-    // de prorratearla — mismo cálculo que se usa al confirmar.
-    let fleteFactura = null;
+    // Fletes de mercadería imputados (puede ser más de uno) y el % que
+    // resulta de prorratear la suma de sus totales — mismo cálculo que se
+    // usa al confirmar.
+    const { rows: fletesImputados } = await pool.query(
+      `select fc.id, fc.numero, fc.fecha, fc.total
+       from facturas_compra_fletes fcf join facturas_compra fc on fc.id = fcf.flete_factura_id
+       where fcf.factura_id = $1
+       order by fc.fecha`,
+      [factura.id]
+    );
+    const fletesTotal = redondear2(fletesImputados.reduce((acc, f) => acc + Number(f.total), 0));
     let fletePct = null;
-    if (factura.flete_factura_id) {
-      const { rows: fleteRows } = await pool.query('select id, numero, fecha, total from facturas_compra where id = $1', [factura.flete_factura_id]);
-      fleteFactura = fleteRows[0] || null;
-      if (fleteFactura) {
-        const itemsTotal = redondear2(items.reduce((acc, it) => acc + Number(it.total), 0));
-        fletePct = itemsTotal > 0 ? redondear2((Number(fleteFactura.total) / itemsTotal) * 100) : null;
-      }
+    if (fletesImputados.length > 0) {
+      const itemsTotal = redondear2(items.reduce((acc, it) => acc + Number(it.total), 0));
+      fletePct = itemsTotal > 0 ? redondear2((fletesTotal / itemsTotal) * 100) : null;
     }
 
-    res.render('compras/detalle', { factura, items, impuestos, totalKg, fleteFactura, fletePct, categorias: CATEGORIAS_GASTO });
+    res.render('compras/detalle', { factura, items, impuestos, totalKg, fletesImputados, fletesTotal, fletePct, categorias: CATEGORIAS_GASTO });
   } catch (err) { next(err); }
 });
 
@@ -454,21 +478,24 @@ router.get('/:id/confirmar', async (req, res, next) => {
     // si acá se guardara el costo con IVA ya sumado, quedaría sumado dos
     // veces.
     //
-    // El % de flete nuevo (si esta factura tiene una factura de flete
-    // imputada) sale de prorratear: total de la factura de flete ÷ total
-    // de los renglones de ESTA factura (sin contar impuestos/percepciones,
-    // que no tienen que ver con el valor de la mercadería) — mismo % para
-    // todos los renglones, porque así se prorratea en la planilla de Excel
-    // que usa el negocio.
-    let fleteFactura = null;
+    // El % de flete nuevo (si esta factura tiene fletes de mercadería
+    // imputados, uno o más) sale de prorratear: suma de los totales de
+    // esas facturas de flete ÷ total de los renglones de ESTA factura (sin
+    // contar impuestos/percepciones, que no tienen que ver con el valor de
+    // la mercadería) — mismo % para todos los renglones, porque así se
+    // prorratea en la planilla de Excel que usa el negocio.
+    const { rows: fletesImputados } = await pool.query(
+      `select fc.id, fc.numero, fc.fecha, fc.total
+       from facturas_compra_fletes fcf join facturas_compra fc on fc.id = fcf.flete_factura_id
+       where fcf.factura_id = $1
+       order by fc.fecha`,
+      [factura.id]
+    );
+    const fletesTotal = redondear2(fletesImputados.reduce((acc, f) => acc + Number(f.total), 0));
     let fletePct = null;
-    if (factura.flete_factura_id) {
-      const { rows: fleteRows } = await pool.query('select id, numero, fecha, total from facturas_compra where id = $1', [factura.flete_factura_id]);
-      fleteFactura = fleteRows[0] || null;
-      if (fleteFactura) {
-        const itemsTotal = redondear2(items.reduce((acc, it) => acc + Number(it.total), 0));
-        fletePct = itemsTotal > 0 ? redondear2((Number(fleteFactura.total) / itemsTotal) * 100) : null;
-      }
+    if (fletesImputados.length > 0) {
+      const itemsTotal = redondear2(items.reduce((acc, it) => acc + Number(it.total), 0));
+      fletePct = itemsTotal > 0 ? redondear2((fletesTotal / itemsTotal) * 100) : null;
     }
 
     const itemsConCambio = items.map((it) => {
@@ -483,7 +510,7 @@ router.get('/:id/confirmar', async (req, res, next) => {
       };
     });
 
-    res.render('compras/confirmar', { factura, items: itemsConCambio, fleteFactura, fletePct });
+    res.render('compras/confirmar', { factura, items: itemsConCambio, fletesImputados, fletesTotal, fletePct });
   } catch (err) { next(err); }
 });
 
@@ -512,15 +539,17 @@ router.post('/:id/confirmar', async (req, res, next) => {
 
     // Mismo % de flete que se mostró en la pantalla de revisión — se
     // vuelve a calcular acá (no se confía en nada que venga del body) por
-    // si el total de la factura de flete cambió entre que se abrió la
+    // si el total de alguna factura de flete cambió entre que se abrió la
     // pantalla y se confirmó.
+    const { rows: fletesImputados } = await client.query(
+      'select flete_factura_id, (select total from facturas_compra where id = flete_factura_id) as total from facturas_compra_fletes where factura_id = $1',
+      [factura.id]
+    );
     let fletePct = null;
-    if (factura.flete_factura_id) {
-      const { rows: fleteRows } = await client.query('select total from facturas_compra where id = $1', [factura.flete_factura_id]);
-      if (fleteRows[0]) {
-        const itemsTotal = redondear2(items.reduce((acc, it) => acc + Number(it.total), 0));
-        fletePct = itemsTotal > 0 ? redondear2((Number(fleteRows[0].total) / itemsTotal) * 100) : null;
-      }
+    if (fletesImputados.length > 0) {
+      const fletesTotal = redondear2(fletesImputados.reduce((acc, f) => acc + Number(f.total), 0));
+      const itemsTotal = redondear2(items.reduce((acc, it) => acc + Number(it.total), 0));
+      fletePct = itemsTotal > 0 ? redondear2((fletesTotal / itemsTotal) * 100) : null;
     }
 
     await client.query('BEGIN');

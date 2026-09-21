@@ -30,15 +30,16 @@
   · Fecha: <%= formatearFechaHora(factura.fecha) %>
 </p>
 
-<% if (fleteFactura) { %>
+<% if (fletesImputados.length > 0) { %>
   <p style="color:var(--ink-soft);">
-    Flete de mercadería imputado: <a href="/compras/<%= fleteFactura.id %>"><%= fleteFactura.numero ? 'Nº ' + fleteFactura.numero : 'Factura #' + fleteFactura.id %></a>
-    · $<%= Number(fleteFactura.total).toFixed(2) %>
+    Flete<%= fletesImputados.length > 1 ? 's' : '' %> de mercadería imputado<%= fletesImputados.length > 1 ? 's' : '' %>:
+    <% fletesImputados.forEach((f, i) => { %><% if (i > 0) { %>, <% } %><a href="/compras/<%= f.id %>"><%= f.numero ? 'Nº ' + f.numero : 'Factura #' + f.id %></a> ($<%= Number(f.total).toFixed(2) %>)<% }) %>
+    <% if (fletesImputados.length > 1) { %>· Total flete: $<%= fletesTotal.toFixed(2) %><% } %>
     <% if (fletePct !== null) { %>· % de flete calculado: <strong style="color:var(--ink);"><%= fletePct.toFixed(2) %>%</strong><% } %>
   </p>
 <% } %>
 
-<% const mostrarColFlete = factura.actualizo_costos && !!factura.flete_factura_id;
+<% const mostrarColFlete = factura.actualizo_costos && fletesImputados.length > 0;
    const mostrarColCodigo = factura.categoria === 'mercaderia';
    const colspanBase = mostrarColCodigo ? 5 : 4; %>
 <table>

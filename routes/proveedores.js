@@ -35,8 +35,8 @@ router.post('/', async (req, res, next) => {
       });
     }
     await pool.query(
-      'insert into proveedores (nombre, contacto, telefono, categoria) values ($1,$2,$3,$4)',
-      [p.nombre.trim(), p.contacto || null, p.telefono || null, leerCategoria(p)]
+      'insert into proveedores (nombre, contacto, telefono, categoria, razon_social, cuit) values ($1,$2,$3,$4,$5,$6)',
+      [p.nombre.trim(), p.contacto || null, p.telefono || null, leerCategoria(p), (p.razon_social || '').trim() || null, (p.cuit || '').trim() || null]
     );
     res.redirect('/compras/proveedores');
   } catch (err) { next(err); }
@@ -62,8 +62,8 @@ router.post('/:id', async (req, res, next) => {
       });
     }
     await pool.query(
-      'update proveedores set nombre=$1, contacto=$2, telefono=$3, categoria=$4 where id=$5',
-      [p.nombre.trim(), p.contacto || null, p.telefono || null, leerCategoria(p), req.params.id]
+      'update proveedores set nombre=$1, contacto=$2, telefono=$3, categoria=$4, razon_social=$5, cuit=$6 where id=$7',
+      [p.nombre.trim(), p.contacto || null, p.telefono || null, leerCategoria(p), (p.razon_social || '').trim() || null, (p.cuit || '').trim() || null, req.params.id]
     );
     res.redirect('/compras/proveedores');
   } catch (err) { next(err); }
