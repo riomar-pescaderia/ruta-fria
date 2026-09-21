@@ -24,7 +24,8 @@
 
 <% const catFactura = categorias.find(c => c.clave === factura.categoria); %>
 <p style="color:var(--ink-soft);">
-  <span class="badge <%= factura.actualizo_costos ? 'confirmada' : 'borrador' %>"><%= factura.actualizo_costos ? 'Confirmada' : 'Borrador' %></span>
+  <span class="badge confirmada">Confirmada</span>
+  <% if (factura.categoria === 'mercaderia' && !factura.actualizo_costos) { %><span class="badge borrador" style="margin-left:4px;">Precios pendientes de revisar</span><% } %>
   · <%= catFactura ? catFactura.etiqueta : factura.categoria %><%= factura.subtipo ? ' (' + factura.subtipo + ')' : '' %>
   · Proveedor: <strong style="color:var(--ink);"><%= factura.proveedor_nombre %></strong>
   · Fecha: <%= formatearFechaHora(factura.fecha) %>

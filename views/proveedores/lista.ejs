@@ -2,10 +2,7 @@
 
 <div class="toolbar">
   <h1>Proveedores</h1>
-  <div style="display:flex; gap:8px;">
-    <a class="btn secondary" href="/compras">← Volver a compras</a>
-    <a class="btn" href="/compras/proveedores/nuevo">+ Nuevo proveedor</a>
-  </div>
+  <a class="btn" href="/proveedores/nuevo">+ Nuevo proveedor</a>
 </div>
 
 <% if (error) { %>
@@ -29,7 +26,7 @@
   <tbody>
     <% const catPorClave = {}; categorias.forEach(c => { catPorClave[c.clave] = c.etiqueta; }); %>
     <% proveedores.forEach(p => { %>
-    <tr data-href="/compras/proveedores/<%= p.id %>/editar">
+    <tr data-href="/proveedores/<%= p.id %>/editar">
       <td data-label="Nombre"><%= p.nombre %></td>
       <td data-label="Razón social" class="col-mobile-oculta"><%= p.razon_social || '—' %></td>
       <td data-label="CUIT" class="mono col-mobile-oculta"><%= p.cuit || '—' %></td>

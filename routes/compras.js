@@ -8,7 +8,6 @@
 // carga a mano y queda siempre editable.
 const express = require('express');
 const pool = require('../db/pool');
-const proveedoresRouter = require('./proveedores');
 const { getConfig } = require('../lib/config');
 const { puedeEditarConfirmadas } = require('../lib/auth');
 const { CATEGORIAS_GASTO, esClaveValida, categoriaPorClave } = require('../lib/categoriasGasto');
@@ -16,8 +15,6 @@ const { registrarMovimiento, obtenerConfigStock } = require('../lib/stock');
 const { fechaHoraInput, inputAFecha } = require('../lib/fechas');
 
 const router = express.Router();
-
-router.use('/proveedores', proveedoresRouter);
 
 function redondear2(n) {
   return Math.round(n * 100) / 100;

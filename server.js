@@ -12,6 +12,7 @@ const articulosRouter = require('./routes/articulos');
 const usuariosRouter = require('./routes/usuarios');
 const authRouter = require('./routes/auth');
 const comprasRouter = require('./routes/compras');
+const proveedoresRouter = require('./routes/proveedores');
 const prospectosRouter = require('./routes/prospectos');
 const ventasRouter = require('./routes/ventas');
 const cuentaCorrienteRouter = require('./routes/cuentaCorriente');
@@ -71,6 +72,10 @@ app.use('/clientes', requireAcceso('clientes'), clientesRouter);
 app.use('/articulos', requireAcceso('articulos'), articulosRouter);
 app.use('/usuarios', requireAdmin, usuariosRouter);
 app.use('/compras', requireAcceso('compras'), comprasRouter);
+// Proveedores tiene su propia sección en el menú (entre Compras e Informes),
+// separada de Compras, pero usa el mismo permiso de acceso ("compras") ya
+// que conceptualmente sigue siendo parte de esa gestión.
+app.use('/proveedores', requireAcceso('compras'), proveedoresRouter);
 app.use('/prospectos', requireAcceso('prospectos'), prospectosRouter);
 app.use('/informes', requireAcceso('informes'), informesRouter);
 app.use('/ventas', requireAcceso('ventas'), ventasRouter);

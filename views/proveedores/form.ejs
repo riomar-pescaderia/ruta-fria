@@ -41,13 +41,13 @@
   </div>
   <div style="display:flex; gap:8px; flex-wrap:wrap;">
     <button class="btn" type="submit">Guardar</button>
-    <a class="btn secondary" href="/compras/proveedores">Cancelar</a>
+    <a class="btn secondary" href="/proveedores">Cancelar</a>
   </div>
 </form>
 
 <% if (proveedor.id) { %>
 <div style="max-width:520px; margin-top:16px;">
-  <form method="post" action="/compras/proveedores/<%= proveedor.id %>/eliminar" style="margin:0;" onsubmit="return confirm('¿Eliminar este proveedor? No se puede deshacer.');">
+  <form method="post" action="/proveedores/<%= proveedor.id %>/eliminar" style="margin:0;" onsubmit="return confirm('¿Eliminar este proveedor? No se puede deshacer.');">
     <button type="submit" class="btn secondary" style="color:#a33;">Eliminar proveedor</button>
   </form>
 </div>
