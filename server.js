@@ -18,6 +18,8 @@ const ventasRouter = require('./routes/ventas');
 const cuentaCorrienteRouter = require('./routes/cuentaCorriente');
 const stockRouter = require('./routes/stock');
 const informesRouter = require('./routes/informes');
+const appApiRouter = require('./routes/appApi');
+const vendedoresUbicacionRouter = require('./routes/vendedoresUbicacion');
 
 const app = express();
 
@@ -59,6 +61,11 @@ app.use((req, res, next) => {
 // /login, /logout y /setup quedan siempre accesibles, sin login
 app.use('/', authRouter);
 
+// La API que usa la app Android de los vendedores queda siempre
+// accesible, sin la sesión con cookie que usa la web — se autentica sola
+// con el token que devuelve /api/app/login (ver routes/appApi.js).
+app.use('/api/app', appApiRouter);
+
 // todo lo que se registre de acá para abajo queda protegido — primero
 // hay que estar logueado, y después se refresca el usuario de la sesión
 // contra la base en cada pedido, para que un cambio de permisos hecho
@@ -71,6 +78,7 @@ app.get('/', (req, res) => res.redirect('/clientes'));
 app.use('/clientes', requireAcceso('clientes'), clientesRouter);
 app.use('/articulos', requireAcceso('articulos'), articulosRouter);
 app.use('/usuarios', requireAdmin, usuariosRouter);
+app.use('/vendedores/ubicacion', requireAdmin, vendedoresUbicacionRouter);
 app.use('/compras', requireAcceso('compras'), comprasRouter);
 // Proveedores tiene su propia sección en el menú (entre Compras e Informes),
 // separada de Compras, pero usa el mismo permiso de acceso ("compras") ya

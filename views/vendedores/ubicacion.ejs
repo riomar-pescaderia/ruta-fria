@@ -1,0 +1,180 @@
+<%- include('../partials/head') %>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+
+<div class="toolbar">
+  <h1>Ubicación de vendedores</h1>
+</div>
+
+<p style="color:var(--ink-soft); font-size:.9rem; margin-top:-8px;">
+  No hay rastreo continuo: cada vez que tocás "Localizar ahora" se le manda una notificación al celular de esa persona pidiéndole su ubicación en ese momento. El resto del tiempo el sistema no sabe dónde está.
+</p>
+
+<% if (!firebaseConfigurado) { %>
+  <div class="pendiente" style="border-color:#f0d9a8; color:#8a5a12; margin-bottom:16px; padding:14px 20px;">
+    <p style="margin:0;">Todavía falta terminar de conectar las notificaciones push (Firebase) en el servidor — hasta que eso esté, "Localizar ahora" no va a poder avisarle al celular. Esto se configura una sola vez, desde las variables de entorno en Render.</p>
+  </div>
+<% } %>
+
+<div id="mapa" style="height:420px; border:1px solid var(--line); border-radius:10px; margin-bottom:20px;"></div>
+
+<% if (vendedores.length === 0) { %>
+  <p class="empty">Todavía no hay usuarios activos cargados.</p>
+<% } else { %>
+<table>
+  <thead>
+    <tr>
+      <th>Vendedor</th>
+      <th>Estado</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody id="cuerpo-vendedores">
+    <% vendedores.forEach(v => { %>
+    <tr data-id="<%= v.id %>">
+      <td data-label="Vendedor"><%= v.nombre || v.username %></td>
+      <td data-label="Estado"><span class="estado-texto" style="color:var(--ink-soft); font-size:.85rem;">—</span></td>
+      <td data-label="">
+        <% if (v.tiene_app) { %>
+          <button type="button" class="btn secondary btn-localizar" data-id="<%= v.id %>">Localizar ahora</button>
+        <% } else { %>
+          <span style="color:var(--ink-soft); font-size:.8rem;">Sin la app instalada</span>
+        <% } %>
+      </td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+<% } %>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function () {
+  var VENDEDORES_INICIAL = <%- JSON.stringify(vendedores.map(v => ({
+    id: v.id,
+    nombre: v.nombre || v.username,
+    lat: v.latitud !== null ? Number(v.latitud) : null,
+    lng: v.longitud !== null ? Number(v.longitud) : null,
+    precision: v.precision_metros !== null ? Number(v.precision_metros) : null,
+    actualizado_en: v.actualizado_en,
+    solicitado_en: v.solicitado_en,
+    tiene_app: v.tiene_app,
+  }))) %>;
+
+  var CENTRO_DEFECTO = [-27.4512, -58.9867]; // Resistencia, Chaco
+  var map = L.map('mapa').setView(CENTRO_DEFECTO, 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  }).addTo(map);
+
+  var marcadores = {}; // id -> L.circle
+
+  function textoHaceRato(fechaIso) {
+    if (!fechaIso) return null;
+    var minutos = Math.round((Date.now() - new Date(fechaIso).getTime()) / 60000);
+    if (minutos < 1) return 'recién';
+    if (minutos === 1) return 'hace 1 minuto';
+    if (minutos < 60) return 'hace ' + minutos + ' minutos';
+    var horas = Math.round(minutos / 60);
+    if (horas === 1) return 'hace 1 hora';
+    if (horas < 24) return 'hace ' + horas + ' horas';
+    var dias = Math.round(horas / 24);
+    return 'hace ' + dias + (dias === 1 ? ' día' : ' días');
+  }
+
+  function pintarVendedor(v) {
+    var fila = document.querySelector('tr[data-id="' + v.id + '"]');
+    if (fila) {
+      var estadoEl = fila.querySelector('.estado-texto');
+      var texto;
+      if (v.solicitado_en && (!v.actualizado_en || new Date(v.solicitado_en) > new Date(v.actualizado_en))) {
+        texto = 'Esperando respuesta del celular...';
+      } else if (v.actualizado_en) {
+        texto = 'Ubicado ' + textoHaceRato(v.actualizado_en);
+      } else if (!v.tiene_app) {
+        texto = 'Sin la app instalada todavía';
+      } else {
+        texto = 'Todavía no se pidió su ubicación';
+      }
+      estadoEl.textContent = texto;
+    }
+
+    if (v.lat !== null && v.lng !== null) {
+      if (marcadores[v.id]) {
+        marcadores[v.id].setLatLng([v.lat, v.lng]);
+      } else {
+        marcadores[v.id] = L.circle([v.lat, v.lng], {
+          radius: Math.max(v.precision || 30, 20),
+          color: '#1b5e8a',
+          weight: 2,
+          fillColor: '#2e86c1',
+          fillOpacity: 0.7,
+        }).addTo(map);
+      }
+      marcadores[v.id].bindPopup('<strong>' + v.nombre + '</strong><br>' + textoHaceRato(v.actualizado_en));
+    }
+  }
+
+  function actualizarTodos(lista) {
+    lista.forEach(pintarVendedor);
+    var conUbicacion = lista.filter(function (v) { return v.lat !== null && v.lng !== null; });
+    if (conUbicacion.length > 0) {
+      var bounds = conUbicacion.map(function (v) { return [v.lat, v.lng]; });
+      if (bounds.length === 1) map.setView(bounds[0], 14);
+      else map.fitBounds(bounds, { padding: [30, 30] });
+    }
+  }
+
+  actualizarTodos(VENDEDORES_INICIAL);
+
+  document.querySelectorAll('.btn-localizar').forEach(function (boton) {
+    boton.addEventListener('click', function () {
+      var id = boton.dataset.id;
+      boton.disabled = true;
+      var textoOriginal = boton.textContent;
+      boton.textContent = 'Pidiendo...';
+      fetch('/vendedores/ubicacion/' + id + '/solicitar', { method: 'POST' })
+        .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+        .then(function (res) {
+          if (!res.ok) {
+            alert(res.data.error || 'No se pudo pedir la ubicación.');
+          } else {
+            refrescar();
+          }
+        })
+        .catch(function () { alert('No se pudo conectar con el servidor.'); })
+        .finally(function () {
+          boton.disabled = false;
+          boton.textContent = textoOriginal;
+        });
+    });
+  });
+
+  // Se refresca sola cada 10 segundos mientras la pantalla esté abierta,
+  // así se ve la respuesta apenas llega sin que el administrador tenga
+  // que recargar la página a mano.
+  function refrescar() {
+    fetch('/vendedores/ubicacion/estado')
+      .then(function (r) { return r.json(); })
+      .then(function (lista) {
+        var porId = {};
+        VENDEDORES_INICIAL.forEach(function (v) { porId[v.id] = v; });
+        lista.forEach(function (v) {
+          if (porId[v.id]) {
+            porId[v.id].lat = v.latitud !== null ? Number(v.latitud) : null;
+            porId[v.id].lng = v.longitud !== null ? Number(v.longitud) : null;
+            porId[v.id].precision = v.precision_metros !== null ? Number(v.precision_metros) : null;
+            porId[v.id].actualizado_en = v.actualizado_en;
+            porId[v.id].solicitado_en = v.solicitado_en;
+          }
+        });
+        actualizarTodos(Object.values(porId));
+      })
+      .catch(function () {});
+  }
+  setInterval(refrescar, 10000);
+})();
+</script>
+
+<%- include('../partials/foot') %>

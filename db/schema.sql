@@ -719,3 +719,34 @@ create index if not exists idx_movimientos_venta on cuenta_corriente_movimientos
 create index if not exists idx_movimientos_recibo on cuenta_corriente_movimientos(recibo_id);
 create index if not exists idx_recibos_cliente on recibos(cliente_id);
 create index if not exists idx_stock_movimientos_articulo on stock_movimientos (articulo_id, fecha desc);
+
+-- App de vendedores (localización a pedido). Cada celular que instala la
+-- app queda identificado con un token de sesión propio, generado al
+-- loguearse (la app no usa cookies como la web) — se guarda solo un hash
+-- del token, nunca el token en sí. Aparte se guarda el token de Firebase
+-- Cloud Messaging de ese dispositivo, que es lo que permite mandarle una
+-- notificación push pidiéndole la ubicación en cualquier momento.
+create table if not exists app_dispositivos (
+  id serial primary key,
+  usuario_id integer not null references usuarios(id) on delete cascade,
+  token_sesion_hash text not null unique,
+  token_fcm text,
+  modelo text,
+  creado_en timestamptz not null default now(),
+  ultimo_uso timestamptz not null default now()
+);
+create index if not exists idx_app_dispositivos_usuario on app_dispositivos(usuario_id);
+
+-- Última ubicación conocida de cada usuario — se pisa con cada reporte
+-- nuevo, no se guarda historial de recorrido (alcanza con saber dónde
+-- está ahora). "solicitado_en" queda en null en cuanto llega una
+-- ubicación nueva; si tiene fecha y no hay una ubicación más reciente
+-- que ella, significa que se le pidió la ubicación y todavía no respondió.
+create table if not exists ubicaciones_usuarios (
+  usuario_id integer primary key references usuarios(id) on delete cascade,
+  latitud double precision,
+  longitud double precision,
+  precision_metros double precision,
+  actualizado_en timestamptz,
+  solicitado_en timestamptz
+);
