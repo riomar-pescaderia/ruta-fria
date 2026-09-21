@@ -44,6 +44,7 @@ router.post('/:usuarioId/solicitar', async (req, res) => {
       [usuarioId]
     );
     const tokens = rows.map((r) => r.token_fcm);
+    console.log(`[ruta-fria] solicitando ubicación: usuario_id=${usuarioId} dispositivos_con_token=${tokens.length}`);
     if (tokens.length === 0) {
       return res.status(400).json({
         error: 'Este usuario todavía no instaló la app (o no terminó de configurarla), así que no le puedo pedir la ubicación todavía.',
@@ -55,6 +56,7 @@ router.post('/:usuarioId/solicitar', async (req, res) => {
       [usuarioId]
     );
     const resultado = await solicitarUbicacion(tokens);
+    console.log(`[ruta-fria] resultado del envío: enviados=${resultado.enviados} fallidos=${JSON.stringify(resultado.fallidos)}`);
     res.json({ ok: true, ...resultado });
   } catch (err) {
     console.error('[ruta-fria] error solicitando ubicación:', err.message);
