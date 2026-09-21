@@ -22,6 +22,13 @@ create table if not exists proveedores (
   created_at timestamptz not null default now()
 );
 
+-- Categoría de gasto que provee este proveedor (ver lib/categoriasGasto.js)
+-- — se usa para filtrar el desplegable de proveedores en Compras según la
+-- categoría elegida. Null mientras no se categorice: un proveedor sin
+-- categoría asignada sigue apareciendo para cualquier categoría, para no
+-- romper facturas ya cargadas con proveedores todavía sin categorizar.
+alter table proveedores add column if not exists categoria text;
+
 create table if not exists clientes (
   id serial primary key,
   razon_social text not null,

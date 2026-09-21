@@ -22,6 +22,16 @@
     <input type="text" id="telefono" name="telefono" value="<%= proveedor.telefono || '' %>">
   </div>
   <div>
+    <label for="categoria">Categoría</label>
+    <select id="categoria" name="categoria">
+      <option value="">— sin categoría asignada —</option>
+      <% categorias.forEach(c => { %>
+        <option value="<%= c.clave %>" <%= proveedor.categoria === c.clave ? 'selected' : '' %>><%= c.etiqueta %></option>
+      <% }) %>
+    </select>
+    <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Al cargar una factura de compra con esta categoría, el desplegable de proveedor va a mostrar solo los que la tengan asignada (más los que todavía no tienen categoría).</p>
+  </div>
+  <div>
     <button class="btn" type="submit">Guardar</button>
     <a class="btn secondary" href="/compras/proveedores">Cancelar</a>
   </div>

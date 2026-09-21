@@ -2,18 +2,25 @@
 // a quién se le está comprando en cada factura.
 const express = require('express');
 const pool = require('../db/pool');
+const { CATEGORIAS_GASTO, esClaveValida } = require('../lib/categoriasGasto');
 
 const router = express.Router();
+
+// La categoría es opcional: sin ella, el proveedor sigue apareciendo para
+// cualquier categoría en el desplegable de Compras (ver routes/compras.js).
+function leerCategoria(body) {
+  return esClaveValida(body.categoria) ? body.categoria : null;
+}
 
 router.get('/', async (req, res, next) => {
   try {
     const { rows } = await pool.query('select * from proveedores order by nombre');
-    res.render('proveedores/lista', { proveedores: rows, error: req.query.error || null });
+    res.render('proveedores/lista', { proveedores: rows, categorias: CATEGORIAS_GASTO, error: req.query.error || null });
   } catch (err) { next(err); }
 });
 
 router.get('/nuevo', (req, res) => {
-  res.render('proveedores/form', { proveedor: {}, accion: '/compras/proveedores', error: null });
+  res.render('proveedores/form', { proveedor: {}, categorias: CATEGORIAS_GASTO, accion: '/compras/proveedores', error: null });
 });
 
 router.post('/', async (req, res, next) => {
@@ -22,13 +29,14 @@ router.post('/', async (req, res, next) => {
     if (!p.nombre || !p.nombre.trim()) {
       return res.render('proveedores/form', {
         proveedor: p,
+        categorias: CATEGORIAS_GASTO,
         accion: '/compras/proveedores',
         error: 'Falta el nombre del proveedor.',
       });
     }
     await pool.query(
-      'insert into proveedores (nombre, contacto, telefono) values ($1,$2,$3)',
-      [p.nombre.trim(), p.contacto || null, p.telefono || null]
+      'insert into proveedores (nombre, contacto, telefono, categoria) values ($1,$2,$3,$4)',
+      [p.nombre.trim(), p.contacto || null, p.telefono || null, leerCategoria(p)]
     );
     res.redirect('/compras/proveedores');
   } catch (err) { next(err); }
@@ -38,7 +46,7 @@ router.get('/:id/editar', async (req, res, next) => {
   try {
     const { rows } = await pool.query('select * from proveedores where id = $1', [req.params.id]);
     if (!rows[0]) return res.redirect('/compras/proveedores');
-    res.render('proveedores/form', { proveedor: rows[0], accion: `/compras/proveedores/${req.params.id}`, error: null });
+    res.render('proveedores/form', { proveedor: rows[0], categorias: CATEGORIAS_GASTO, accion: `/compras/proveedores/${req.params.id}`, error: null });
   } catch (err) { next(err); }
 });
 
@@ -48,13 +56,14 @@ router.post('/:id', async (req, res, next) => {
     if (!p.nombre || !p.nombre.trim()) {
       return res.render('proveedores/form', {
         proveedor: { ...p, id: req.params.id },
+        categorias: CATEGORIAS_GASTO,
         accion: `/compras/proveedores/${req.params.id}`,
         error: 'Falta el nombre del proveedor.',
       });
     }
     await pool.query(
-      'update proveedores set nombre=$1, contacto=$2, telefono=$3 where id=$4',
-      [p.nombre.trim(), p.contacto || null, p.telefono || null, req.params.id]
+      'update proveedores set nombre=$1, contacto=$2, telefono=$3, categoria=$4 where id=$5',
+      [p.nombre.trim(), p.contacto || null, p.telefono || null, leerCategoria(p), req.params.id]
     );
     res.redirect('/compras/proveedores');
   } catch (err) { next(err); }

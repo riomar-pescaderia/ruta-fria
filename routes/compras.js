@@ -504,11 +504,11 @@ router.post('/:id/confirmar', async (req, res, next) => {
     );
     if (items.length === 0) return res.redirect(`/compras/${factura.id}`);
 
-    // Qué renglones marcó el usuario para aplicar, en la pantalla de
-    // revisión — llega como { "<item_id>": "on", ... }, solo con las
-    // claves de los checkboxes tildados.
+    // Qué renglones marcó el usuario para aplicar el cambio de precio, en
+    // la pantalla de revisión — llega como { "<item_id>": "on", ... }, solo
+    // con las claves de los checkboxes tildados. El % de flete, en cambio,
+    // no se consulta: se aplica solo a cada artículo (ver más abajo).
     const aplicar = req.body.aplicar || {};
-    const aplicarFlete = req.body.aplicarFlete || {};
 
     // Mismo % de flete que se mostró en la pantalla de revisión — se
     // vuelve a calcular acá (no se confía en nada que venga del body) por
@@ -541,33 +541,34 @@ router.post('/:id/confirmar', async (req, res, next) => {
         });
       }
       // Mismo criterio que en la pantalla de revisión: el costo nuevo del
-      // artículo es el neto sin IVA, no el precio final de la factura.
+      // artículo es el neto sin IVA, no el precio final de la factura. Ya
+      // no se corta con "continue" cuando el precio no cambia: el flete
+      // (más abajo) es una decisión independiente y tiene que evaluarse
+      // igual para este renglón.
       const costoNuevo = redondear2(Number(it.neto) / Number(it.cantidad));
       const cambia = Number(it.costo_actual) !== costoNuevo;
       if (!cambia) {
         await client.query('update facturas_compra_items set estado_costo = $1 where id = $2', ['sin_cambio', it.id]);
-        continue;
-      }
-      if (aplicar[it.id] === 'on') {
+      } else if (aplicar[it.id] === 'on') {
         await client.query('update articulos set costo = $1 where id = $2', [costoNuevo, it.articulo_id]);
         await client.query('update facturas_compra_items set estado_costo = $1 where id = $2', ['aplicado', it.id]);
       } else {
         await client.query('update facturas_compra_items set estado_costo = $1 where id = $2', ['no_aplicado', it.id]);
       }
 
-      // El % de flete se pisa artículo por artículo, igual que el costo —
-      // por ahora no se toca ningún artículo que no pase por acá (ver
-      // pedido del usuario: los flete_pct existentes quedan como están
-      // hasta que se vaya cargando cada factura con esta modalidad).
+      // El % de flete se pisa solo, sin preguntar renglón por renglón (a
+      // diferencia del costo) — el usuario ya decidió imputar esta factura
+      // de flete al elegirla en el formulario. Los artículos que no pasan
+      // por acá (facturas sin flete imputado) no se tocan, como pidió el
+      // usuario: los flete_pct existentes quedan como están hasta que se
+      // vaya cargando cada factura con esta modalidad.
       if (fletePct !== null) {
         const cambiaFlete = Number(it.flete_actual) !== fletePct;
         if (!cambiaFlete) {
           await client.query('update facturas_compra_items set estado_flete = $1 where id = $2', ['sin_cambio', it.id]);
-        } else if (aplicarFlete[it.id] === 'on') {
+        } else {
           await client.query('update articulos set flete_pct = $1 where id = $2', [fletePct, it.articulo_id]);
           await client.query('update facturas_compra_items set estado_flete = $1 where id = $2', ['aplicado', it.id]);
-        } else {
-          await client.query('update facturas_compra_items set estado_flete = $1 where id = $2', ['no_aplicado', it.id]);
         }
       }
     }

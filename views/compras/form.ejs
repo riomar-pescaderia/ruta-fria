@@ -69,7 +69,6 @@
         <option value="<%= f.id %>" <%= factura.flete_factura_id && String(factura.flete_factura_id) === String(f.id) ? 'selected' : '' %>><%= f.numero ? 'Nº ' + f.numero + ' — ' : '' %><%= new Date(f.fecha).toLocaleDateString('es-AR') %> — $<%= Number(f.total).toFixed(2) %></option>
       <% }) %>
     </select>
-    <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Al confirmar la factura, el sistema calcula el % de flete a prorratear entre los artículos (total de la factura de flete ÷ total de esta factura) y lo va a sugerir aplicar en cada artículo, igual que con el costo. Por ahora no se pisa ningún flete % existente salvo el de los artículos que se confirmen con esta modalidad.</p>
   </div>
 
   <% const mapaArticulos = {}; articulos.forEach(a => { mapaArticulos[a.id] = a; }); %>
@@ -77,7 +76,7 @@
   <table id="tabla-items">
     <thead>
       <tr>
-        <th style="width:110px;">Código</th>
+        <th class="col-codigo" style="width:110px;">Código</th>
         <th style="min-width:220px;">Artículo</th>
         <th style="width:110px;">Cantidad</th>
         <th style="width:130px;">Precio unit.</th>
@@ -97,7 +96,7 @@
            const codigoValor = artSel ? artSel.codigo : (it.codigo_manual || '');
            const articuloValor = artSel ? (artSel.codigo + ' — ' + artSel.nombre) : (it.descripcion || ''); %>
       <tr>
-        <td data-label="Código">
+        <td class="col-codigo" data-label="Código">
           <input class="f-codigo" data-campo="codigo_manual" type="text" name="items[<%= i %>][codigo_manual]" placeholder="Código" autocomplete="off" value="<%= codigoValor %>">
         </td>
         <td data-label="Artículo">
@@ -123,22 +122,22 @@
     </tbody>
     <tfoot>
       <tr>
-        <td colspan="5" style="text-align:right; border-bottom:none;">Neto</td>
+        <td class="label-colspan" data-colspan-full="5" colspan="5" style="text-align:right; border-bottom:none;">Neto</td>
         <td class="mono" id="total-neto" style="border-bottom:none;">$0.00</td>
         <td style="border-bottom:none;"></td>
       </tr>
       <tr>
-        <td colspan="5" style="text-align:right; border-bottom:none;">IVA</td>
+        <td class="label-colspan" data-colspan-full="5" colspan="5" style="text-align:right; border-bottom:none;">IVA</td>
         <td class="mono" id="total-iva" style="border-bottom:none;">$0.00</td>
         <td style="border-bottom:none;"></td>
       </tr>
       <tr>
-        <td colspan="5" style="text-align:right; border-bottom:none;">Impuestos y percepciones</td>
+        <td class="label-colspan" data-colspan-full="5" colspan="5" style="text-align:right; border-bottom:none;">Impuestos y percepciones</td>
         <td class="mono" id="total-impuestos" style="border-bottom:none;">$0.00</td>
         <td style="border-bottom:none;"></td>
       </tr>
       <tr>
-        <td style="border-bottom:none;"></td>
+        <td class="col-codigo" style="border-bottom:none;"></td>
         <td style="border-bottom:none;"></td>
         <td class="mono" id="total-kg" style="border-bottom:none; font-weight:600;"></td>
         <td colspan="2" style="text-align:right; font-weight:600; border-bottom:none;">Total</td>
@@ -148,9 +147,6 @@
     </tfoot>
   </table>
   </div>
-  <p style="color:var(--ink-soft); font-size:.85rem; margin-top:-8px;">
-    Podés cargar cada renglón escribiendo el código directamente, o buscando por nombre o código en la columna "Artículo" — se completan uno al otro solos. Casilla "IVA" tildada: el precio unitario cargado es <strong>sin IVA</strong> y el sistema le suma el <%= ivaPct %>% automáticamente (el caso más común). Destildada: el precio unitario cargado <strong>ya incluye el IVA</strong> integrado, tal cual viene en la factura. Usá "todos" para tildar o destildar la columna completa de una vez.
-  </p>
 
   <div>
     <button type="button" id="agregar-fila" class="btn secondary">+ Agregar artículo</button>
@@ -212,6 +208,45 @@
   var grupoFlete = document.getElementById('grupo-flete-factura');
   function actualizarVisibilidadFlete() {
     grupoFlete.style.display = esMercaderia() ? '' : 'none';
+  }
+
+  // El código solo identifica artículos de mercadería (los que se venden
+  // del catálogo) — en cualquier otra categoría no tiene sentido, así que
+  // se oculta la columna entera. Los cabezales/pies con colspan tienen que
+  // achicarse un lugar para que las columnas sigan alineadas.
+  function actualizarColumnaCodigo() {
+    var mostrar = esMercaderia();
+    document.querySelectorAll('.col-codigo').forEach(function (el) { el.hidden = !mostrar; });
+    document.querySelectorAll('.label-colspan').forEach(function (td) {
+      td.colSpan = mostrar ? Number(td.dataset.colspanFull) : Number(td.dataset.colspanFull) - 1;
+    });
+  }
+
+  // El desplegable de proveedor solo muestra los que están asignados a la
+  // categoría elegida — los proveedores sin categoría asignada (todavía)
+  // se siguen mostrando siempre, para no romper facturas de proveedores
+  // que no se categorizaron.
+  var PROVEEDORES = <%- JSON.stringify(proveedores.map(p => ({ id: String(p.id), nombre: p.nombre, categoria: p.categoria || null }))) %>;
+  var proveedorSelect = document.getElementById('proveedor_id');
+
+  function actualizarProveedores() {
+    var cat = categoriaSelect.value;
+    var valorPrevio = proveedorSelect.value;
+    var disponibles = PROVEEDORES.filter(function (p) { return !p.categoria || p.categoria === cat; });
+    proveedorSelect.innerHTML = '';
+    var opcionVacia = document.createElement('option');
+    opcionVacia.value = '';
+    opcionVacia.textContent = '— elegir —';
+    proveedorSelect.appendChild(opcionVacia);
+    disponibles.forEach(function (p) {
+      var opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.nombre;
+      proveedorSelect.appendChild(opt);
+    });
+    if (valorPrevio && disponibles.some(function (p) { return p.id === valorPrevio; })) {
+      proveedorSelect.value = valorPrevio;
+    }
   }
 
   // Subtipo dentro de la categoría (por ejemplo "Electricidad" dentro de
@@ -533,6 +568,8 @@
     actualizarPlaceholders();
     actualizarSubtipos(false);
     actualizarVisibilidadFlete();
+    actualizarColumnaCodigo();
+    actualizarProveedores();
     actualizarTotales();
   });
 
@@ -540,6 +577,8 @@
   actualizarPlaceholders();
   actualizarSubtipos(false);
   actualizarVisibilidadFlete();
+  actualizarColumnaCodigo();
+  actualizarProveedores();
   reindexarImpuestos();
   if (SUBTIPO_INICIAL && (SUBTIPOS_POR_CATEGORIA[categoriaSelect.value] || []).indexOf(SUBTIPO_INICIAL) !== -1) {
     subtipoSelect.value = SUBTIPO_INICIAL;

@@ -21,15 +21,18 @@
       <th>Nombre</th>
       <th>Contacto</th>
       <th>Teléfono</th>
+      <th>Categoría</th>
       <th></th>
     </tr>
   </thead>
   <tbody>
+    <% const catPorClave = {}; categorias.forEach(c => { catPorClave[c.clave] = c.etiqueta; }); %>
     <% proveedores.forEach(p => { %>
     <tr>
       <td data-label="Nombre"><%= p.nombre %></td>
       <td data-label="Contacto"><%= p.contacto || '—' %></td>
       <td data-label="Teléfono" class="mono"><%= p.telefono || '—' %></td>
+      <td data-label="Categoría"><%= p.categoria ? (catPorClave[p.categoria] || p.categoria) : '—' %></td>
       <td data-label="" style="display:flex; gap:8px; flex-wrap:wrap;">
         <a class="btn secondary" href="/compras/proveedores/<%= p.id %>/editar">Editar</a>
         <form method="post" action="/compras/proveedores/<%= p.id %>/eliminar" style="display:inline;" onsubmit="return confirm('¿Eliminar este proveedor? No se puede deshacer.');">

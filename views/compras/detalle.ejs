@@ -38,11 +38,13 @@
   </p>
 <% } %>
 
-<% const mostrarColFlete = factura.actualizo_costos && !!factura.flete_factura_id; %>
+<% const mostrarColFlete = factura.actualizo_costos && !!factura.flete_factura_id;
+   const mostrarColCodigo = factura.categoria === 'mercaderia';
+   const colspanBase = mostrarColCodigo ? 5 : 4; %>
 <table>
   <thead>
     <tr>
-      <th>Código</th>
+      <% if (mostrarColCodigo) { %><th>Código</th><% } %>
       <th>Artículo</th>
       <th>Cantidad</th>
       <th>Precio unit.</th>
@@ -55,7 +57,7 @@
   <tbody>
     <% items.forEach(it => { %>
     <tr>
-      <td data-label="Código" class="mono"><%= it.codigo %></td>
+      <% if (mostrarColCodigo) { %><td data-label="Código" class="mono"><%= it.codigo %></td><% } %>
       <td data-label="Artículo"><%= it.nombre %></td>
       <td data-label="Cantidad" class="mono"><%= Number(it.cantidad) %></td>
       <td data-label="Precio unit." class="mono">$<%= Number(it.precio_unitario).toFixed(2) %></td>
@@ -99,24 +101,24 @@
      const colsExtra = (factura.actualizo_costos ? 1 : 0) + (mostrarColFlete ? 1 : 0); %>
   <tfoot>
     <tr>
-      <td colspan="5" style="text-align:right; border-bottom:none;">Neto</td>
+      <td colspan="<%= colspanBase %>" style="text-align:right; border-bottom:none;">Neto</td>
       <td class="mono" style="border-bottom:none;">$<%= totalNeto.toFixed(2) %></td>
       <% for (let i = 0; i < colsExtra; i++) { %><td style="border-bottom:none;"></td><% } %>
     </tr>
     <tr>
-      <td colspan="5" style="text-align:right; border-bottom:none;">IVA</td>
+      <td colspan="<%= colspanBase %>" style="text-align:right; border-bottom:none;">IVA</td>
       <td class="mono" style="border-bottom:none;">$<%= totalIva.toFixed(2) %></td>
       <% for (let i = 0; i < colsExtra; i++) { %><td style="border-bottom:none;"></td><% } %>
     </tr>
     <% if (impuestos.length > 0) { %>
     <tr>
-      <td colspan="5" style="text-align:right; border-bottom:none;">Impuestos y percepciones</td>
+      <td colspan="<%= colspanBase %>" style="text-align:right; border-bottom:none;">Impuestos y percepciones</td>
       <td class="mono" style="border-bottom:none;">$<%= impuestosTotal.toFixed(2) %></td>
       <% for (let i = 0; i < colsExtra; i++) { %><td style="border-bottom:none;"></td><% } %>
     </tr>
     <% } %>
     <tr>
-      <td></td>
+      <% if (mostrarColCodigo) { %><td></td><% } %>
       <td></td>
       <td class="mono" style="font-weight:600;"><% if (totalKg !== null && totalKg > 0) { %><%= totalKg.toFixed(2) %> kg<% } %></td>
       <td colspan="2" style="text-align:right; font-weight:600;">Total</td>
