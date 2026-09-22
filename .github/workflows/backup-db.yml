@@ -1,0 +1,55 @@
+name: Backup diario de la base de datos
+
+# Corre todos los días a las 06:00 UTC (03:00 en Argentina, un horario sin
+# actividad) y además se puede disparar a mano desde la pestaña Actions
+# con el botón "Run workflow" — útil para probar que anda sin tener que
+# esperar al día siguiente.
+#
+# Hacen falta dos secretos configurados en este repo (Settings → Secrets
+# and variables → Actions → "New repository secret"):
+#   - DATABASE_URL: la "External Database URL" de la base, del panel de
+#     Render (Postgres → Connect). Empieza con postgres://
+#   - BACKUP_REPO_TOKEN: un token de acceso personal de GitHub (fine-
+#     grained), con permiso de escritura SOLO sobre el repo de backups
+#     (riomar-pescaderia/ruta-fria-backups → Contents: Read and write).
+#
+# El dump del día queda como un archivo nuevo en ese repo de backups —
+# separado de este repo para no mezclar código con datos, y para poder
+# darle acceso a ese repo aparte si hiciera falta en el futuro.
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generar el dump de la base
+        run: |
+          set -e
+          FECHA=$(date -u +%Y-%m-%d)
+          ARCHIVO="backup-$FECHA.sql.gz"
+          pg_dump "${{ secrets.DATABASE_URL }}" --no-owner --no-privileges | gzip > "$ARCHIVO"
+          echo "Dump generado: $ARCHIVO ($(du -h "$ARCHIVO" | cut -f1))"
+          echo "ARCHIVO=$ARCHIVO" >> "$GITHUB_ENV"
+
+      - name: Subir el dump al repo de backups
+        run: |
+          set -e
+          git clone "https://x-access-token:${{ secrets.BACKUP_REPO_TOKEN }}@github.com/riomar-pescaderia/ruta-fria-backups.git" repo-backups
+          cp "$ARCHIVO" repo-backups/
+          cd repo-backups
+          git config user.email "backups@ruta-fria.local"
+          git config user.name "Backup automático"
+          git add "$ARCHIVO"
+          # Conserva solo los últimos 90 backups diarios (~3 meses) para
+          # que el repo no crezca sin límite. Si en algún momento hace
+          # falta guardar más historial, alcanza con subir este número.
+          ls -1t backup-*.sql.gz | tail -n +91 | xargs -r git rm -q --
+          if git diff --cached --quiet; then
+            echo "Sin cambios para subir (no debería pasar, pero por las dudas no falla el job)."
+          else
+            git commit -q -m "Backup $(date -u +%Y-%m-%d)"
+            git push -q
+          fi
