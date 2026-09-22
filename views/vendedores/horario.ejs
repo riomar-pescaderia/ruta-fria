@@ -1,0 +1,32 @@
+<%- include('../partials/head') %>
+
+<div class="toolbar">
+  <h1>Horario de seguimiento</h1>
+  <a class="btn secondary" href="/vendedores/ubicacion">&larr; Volver a Ubicación</a>
+</div>
+
+<p style="color:var(--ink-soft); font-size:.9rem; margin-top:-8px;">
+  Entre estas horas, la app de cada vendedor manda su posición sola cada
+  cinco minutos (así se arma el historial de recorrido). Fuera de este
+  horario la app no manda nada por su cuenta — "Localizar ahora" sigue
+  funcionando a cualquier hora, eso es aparte.
+</p>
+
+<form class="card" method="post" action="/vendedores/ubicacion/horario" style="max-width:420px;">
+  <% if (guardado) { %>
+    <p style="color:#1e7a34; margin-top:0;">Horario guardado.</p>
+  <% } %>
+  <div>
+    <label for="hora_inicio">Desde</label>
+    <input type="time" id="hora_inicio" name="hora_inicio" value="<%= horaInicio %>" required>
+  </div>
+  <div>
+    <label for="hora_fin">Hasta</label>
+    <input type="time" id="hora_fin" name="hora_fin" value="<%= horaFin %>" required>
+  </div>
+  <div>
+    <button class="btn" type="submit">Guardar</button>
+  </div>
+</form>
+
+<%- include('../partials/foot') %>

@@ -94,9 +94,13 @@ router.post('/dispositivo/fcm', requireTokenApp, async (req, res) => {
   }
 });
 
-// POST /api/app/ubicacion — la app manda su posición actual. Solo lo
-// hace en respuesta a la notificación push de "solicitar_ubicacion"; no
-// hay ningún envío automático ni periódico programado en la app.
+// POST /api/app/ubicacion — la app manda su posición actual. Pasa en dos
+// casos: en respuesta a la notificación push de "solicitar_ubicacion", o
+// sola cada cinco minutos mientras el vendedor está en horario laboral
+// (ver TrackingService.kt en la app y GET /config acá abajo). En los dos
+// casos queda: se pisa la "última posición conocida" (ubicaciones_usuarios,
+// para el mapa en vivo) y además se agrega un renglón al historial de
+// recorrido (ubicaciones_historial, para poder reconstruir la ruta del día).
 router.post('/ubicacion', requireTokenApp, async (req, res) => {
   try {
     const { lat, lng, precision } = req.body || {};
@@ -117,10 +121,36 @@ router.post('/ubicacion', requireTokenApp, async (req, res) => {
          solicitado_en = null`,
       [req.usuarioAppId, latitud, longitud, precisionMetros]
     );
+    await pool.query(
+      `insert into ubicaciones_historial (usuario_id, latitud, longitud, precision_metros)
+       values ($1,$2,$3,$4)`,
+      [req.usuarioAppId, latitud, longitud, precisionMetros]
+    );
     console.log(`[ruta-fria] ubicación recibida del celular: usuario_id=${req.usuarioAppId}`);
     res.json({ ok: true });
   } catch (err) {
     console.error('[ruta-fria] error guardando ubicación:', err.message);
+    res.status(500).json({ error: 'Error del servidor.' });
+  }
+});
+
+// GET /api/app/config — la app lo consulta al loguearse y cada vez que
+// arranca el seguimiento del día, para saber entre qué horas tiene
+// permitido mandar ubicación sola (lo configura un administrador desde
+// /vendedores/ubicacion/horario). Son minutos desde la medianoche.
+router.get('/config', requireTokenApp, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `select clave, valor from config where clave in ('tracking_hora_inicio_min', 'tracking_hora_fin_min')`
+    );
+    const porClave = {};
+    rows.forEach((r) => { porClave[r.clave] = Number(r.valor); });
+    res.json({
+      tracking_hora_inicio_min: porClave.tracking_hora_inicio_min ?? 480,
+      tracking_hora_fin_min: porClave.tracking_hora_fin_min ?? 1140,
+    });
+  } catch (err) {
+    console.error('[ruta-fria] error leyendo config de app:', err.message);
     res.status(500).json({ error: 'Error del servidor.' });
   }
 });

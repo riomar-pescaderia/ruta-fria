@@ -750,3 +750,30 @@ create table if not exists ubicaciones_usuarios (
   actualizado_en timestamptz,
   solicitado_en timestamptz
 );
+
+-- Historial de recorrido: a diferencia de ubicaciones_usuarios (que solo
+-- guarda la última posición conocida), acá queda un renglón por cada
+-- punto que manda el celular mientras el vendedor está "en jornada"
+-- (ver TrackingService.kt en la app) — es lo que permite dibujar la ruta
+-- del día y calcular los km recorridos. No se borra nada automáticamente
+-- (retención: para siempre, por decisión del negocio).
+create table if not exists ubicaciones_historial (
+  id bigserial primary key,
+  usuario_id integer not null references usuarios(id) on delete cascade,
+  latitud double precision not null,
+  longitud double precision not null,
+  precision_metros double precision,
+  capturado_en timestamptz not null default now()
+);
+create index if not exists idx_ubicaciones_historial_usuario_fecha
+  on ubicaciones_historial (usuario_id, capturado_en);
+
+-- Horario laboral en el que la app tiene permitido mandar ubicación sola
+-- (además de "Localizar ahora", que sigue funcionando a cualquier hora).
+-- Se guarda como minutos desde la medianoche (480 = 08:00, 1140 = 19:00)
+-- para poder reusar la tabla "config" (clave/valor numérico) que ya
+-- existe, editable desde /vendedores/ubicacion/horario.
+insert into config (clave, valor) values
+  ('tracking_hora_inicio_min', 480),
+  ('tracking_hora_fin_min', 1140)
+on conflict (clave) do nothing;

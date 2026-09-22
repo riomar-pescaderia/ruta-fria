@@ -4,10 +4,11 @@
 
 <div class="toolbar">
   <h1>Ubicación de vendedores</h1>
+  <a class="btn secondary" href="/vendedores/ubicacion/horario">Horario de seguimiento</a>
 </div>
 
 <p style="color:var(--ink-soft); font-size:.9rem; margin-top:-8px;">
-  No hay rastreo continuo: cada vez que tocás "Localizar ahora" se le manda una notificación al celular de esa persona pidiéndole su ubicación en ese momento. El resto del tiempo el sistema no sabe dónde está.
+  "Localizar ahora" le manda una notificación al celular de esa persona pidiéndole su ubicación en ese momento puntual. Aparte, mientras esté en su horario laboral, la app manda su posición sola cada cinco minutos — eso arma el historial de recorrido de cada vendedor (botón "Ver recorrido" en su fila).
 </p>
 
 <% if (!firebaseConfigurado) { %>
@@ -37,6 +38,7 @@
       <td data-label="">
         <% if (v.tiene_app) { %>
           <button type="button" class="btn secondary btn-localizar" data-id="<%= v.id %>">Localizar ahora</button>
+          <a class="btn secondary" href="/vendedores/ubicacion/<%= v.id %>/historial">Ver recorrido</a>
         <% } else { %>
           <span style="color:var(--ink-soft); font-size:.8rem;">Sin la app instalada</span>
         <% } %>

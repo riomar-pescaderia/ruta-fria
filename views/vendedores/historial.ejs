@@ -1,0 +1,87 @@
+<%- include('../partials/head') %>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+
+<div class="toolbar">
+  <h1>Recorrido de <%= vendedor.nombre || vendedor.username %></h1>
+  <a class="btn secondary" href="/vendedores/ubicacion">&larr; Volver a Ubicación</a>
+</div>
+
+<div class="card" style="display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-bottom:16px;">
+  <div style="margin:0;">
+    <label for="fecha">Día</label>
+    <input type="date" id="fecha" value="<%= fechaInicial %>">
+  </div>
+  <div style="color:var(--ink-soft); font-size:.9rem; padding-bottom:8px;">
+    <span id="resumen">Cargando...</span>
+  </div>
+</div>
+
+<div id="mapa" style="height:480px; border:1px solid var(--line); border-radius:10px;"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function () {
+  var USUARIO_ID = <%= vendedor.id %>;
+  var CENTRO_DEFECTO = [-27.4512, -58.9867]; // Resistencia, Chaco
+
+  var map = L.map('mapa').setView(CENTRO_DEFECTO, 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  }).addTo(map);
+
+  var ruta = null;
+  var marcadorInicio = null;
+  var marcadorFin = null;
+
+  function limpiarMapa() {
+    if (ruta) { map.removeLayer(ruta); ruta = null; }
+    if (marcadorInicio) { map.removeLayer(marcadorInicio); marcadorInicio = null; }
+    if (marcadorFin) { map.removeLayer(marcadorFin); marcadorFin = null; }
+  }
+
+  function horaDe(iso) {
+    var d = new Date(iso);
+    return d.toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function cargar(fecha) {
+    document.getElementById('resumen').textContent = 'Cargando...';
+    fetch('/vendedores/ubicacion/' + USUARIO_ID + '/historial/datos?fecha=' + fecha)
+      .then(function (r) { return r.json(); })
+      .then(function (datos) {
+        limpiarMapa();
+        var puntos = datos.puntos;
+        if (puntos.length === 0) {
+          document.getElementById('resumen').textContent = 'No hay recorrido guardado para este día.';
+          map.setView(CENTRO_DEFECTO, 12);
+          return;
+        }
+        var latlngs = puntos.map(function (p) { return [p.lat, p.lng]; });
+        ruta = L.polyline(latlngs, { color: '#1b5e8a', weight: 4, opacity: 0.85 }).addTo(map);
+        marcadorInicio = L.circleMarker(latlngs[0], { radius: 7, color: '#1e7a34', fillColor: '#2ea84a', fillOpacity: 1, weight: 2 })
+          .addTo(map).bindPopup('Inicio — ' + horaDe(puntos[0].capturado_en));
+        marcadorFin = L.circleMarker(latlngs[latlngs.length - 1], { radius: 7, color: '#b3261e', fillColor: '#e5473b', fillOpacity: 1, weight: 2 })
+          .addTo(map).bindPopup('Última posición — ' + horaDe(puntos[puntos.length - 1].capturado_en));
+        map.fitBounds(ruta.getBounds(), { padding: [30, 30] });
+
+        var resumen = puntos.length + (puntos.length === 1 ? ' punto' : ' puntos') +
+          ' · ' + datos.km.toFixed(1).replace('.', ',') + ' km aprox. (línea recta entre capturas)' +
+          ' · de ' + horaDe(puntos[0].capturado_en) + ' a ' + horaDe(puntos[puntos.length - 1].capturado_en);
+        document.getElementById('resumen').textContent = resumen;
+      })
+      .catch(function () {
+        document.getElementById('resumen').textContent = 'No se pudo cargar el recorrido.';
+      });
+  }
+
+  document.getElementById('fecha').addEventListener('change', function () {
+    cargar(this.value);
+  });
+
+  cargar('<%= fechaInicial %>');
+})();
+</script>
+
+<%- include('../partials/foot') %>
