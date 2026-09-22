@@ -7,8 +7,8 @@
 </div>
 
 <p style="color:var(--ink-soft); font-size:.9rem; margin-top:-10px;">
-  Informes de solo lectura sobre lo cargado en Compras, comparado contra las ventas. Para registrar un gasto nuevo, entrá a
-  <a href="/compras/nueva">+ Nueva factura</a> desde Compras, elegí la categoría que corresponda (distinta de "Mercadería") y quedará reflejado acá.
+  Informe de solo lectura sobre lo cargado en Compras con una categoría distinta de "Mercadería" — pensado para ver en qué se va la plata, comparar entre meses y encontrar dónde se podría ahorrar. Para registrar un gasto nuevo, entrá a
+  <a href="/compras/nueva">+ Nueva factura</a> desde Compras y elegí la categoría que corresponda.
 </p>
 
 <div class="rangos-rapidos">
@@ -64,87 +64,152 @@
     </div>
   </div>
   <div class="kpi">
-    <div class="kpi-etiqueta">Ventas del período</div>
-    <div class="kpi-valor">$<%= resumen.venta.total.toFixed(2) %></div>
-    <div class="kpi-sub">
-      <%= resumen.venta.cantidad %> venta<%= resumen.venta.cantidad === 1 ? '' : 's' %> · <%= Number(resumen.venta.unidades.toFixed(2)) %> kg
-      <% if (resumen.venta.variacion !== null) { %>
-        · <span class="kpi-variacion <%= resumen.venta.variacion >= 0 ? 'positiva' : 'negativa' %>"><%= resumen.venta.variacion > 0 ? '+' : '' %><%= resumen.venta.variacion.toFixed(1) %>%</span> vs. período anterior
-      <% } %>
-    </div>
+    <div class="kpi-etiqueta">Promedio por factura</div>
+    <div class="kpi-valor">$<%= resumen.promedioPorFactura.toFixed(2) %></div>
+    <div class="kpi-sub">Sobre <%= resumen.gasto.cantidad %> factura<%= resumen.gasto.cantidad === 1 ? '' : 's' %> cargada<%= resumen.gasto.cantidad === 1 ? '' : 's' %> en el período</div>
   </div>
   <div class="kpi">
-    <div class="kpi-etiqueta">Resultado (ventas − gastos)</div>
-    <div class="kpi-valor" style="color: <%= resumen.resultado.total >= 0 ? 'var(--navy)' : '#a33' %>;">$<%= resumen.resultado.total.toFixed(2) %></div>
-    <div class="kpi-sub">
-      <% if (resumen.resultado.variacion !== null) { %>
-        <span class="kpi-variacion <%= resumen.resultado.variacion >= 0 ? 'positiva' : 'negativa' %>"><%= resumen.resultado.variacion > 0 ? '+' : '' %><%= resumen.resultado.variacion.toFixed(1) %>%</span> vs. período anterior
-      <% } else { %>
-        No incluye el costo de mercadería ni su flete — es sobre gastos generales. Esos dos se ven en Ventas, junto con la rentabilidad.
-      <% } %>
-    </div>
+    <div class="kpi-etiqueta">Categoría con más gasto</div>
+    <% if (categoriaTop) { %>
+      <div class="kpi-valor" style="font-size:1.25rem;"><%= categoriaTop.etiqueta %></div>
+      <div class="kpi-sub">$<%= categoriaTop.total.toFixed(2) %> · <%= categoriaTop.pct.toFixed(0) %>% del total del período</div>
+    <% } else { %>
+      <div class="kpi-valor" style="font-size:1.25rem; color:var(--ink-soft);">—</div>
+      <div class="kpi-sub">Sin gastos cargados en el período</div>
+    <% } %>
   </div>
-</div>
-
-<div class="aviso-franja">
-  Ventas y Compras ya registran la hora de cada operación, pero todo lo cargado antes de este cambio quedó con la hora en 00:00 (no se puede reconstruir la hora real de esos datos viejos). Filtrar por franja horaria o por turno todavía no está en este panel — a medida que se acumulen operaciones con la hora real cargada, se puede sumar ese desglose acá.
 </div>
 
 <div class="informe-seccion">
   <h2>Gastos por categoría</h2>
-  <p class="informe-nota">Hacé click en una categoría para ver el detalle por subtipo.</p>
+  <p class="informe-nota">Hacé click en una categoría para ver el detalle por subtipo. Ordenado de mayor a menor gasto.</p>
   <% if (porCategoria.length === 0) { %>
     <p class="empty">No hay gastos cargados en este período con estos filtros.</p>
   <% } else { %>
-  <table class="tabla-informe">
-    <thead>
-      <tr><th>Categoría</th><th class="num">Facturas</th><th class="num">Total</th></tr>
-    </thead>
-    <tbody>
-      <% porCategoria.forEach((c, i) => { %>
-      <tr class="fila-categoria" data-toggle="subtipos-<%= i %>">
-        <td><%= c.etiqueta %></td>
-        <td class="num mono"><%= c.cantidad %></td>
-        <td class="num mono">$<%= c.total.toFixed(2) %></td>
-      </tr>
-      <% if (c.subtipos.length) { %>
-      <tr class="subtipos-detalle" id="subtipos-<%= i %>" hidden>
-        <td colspan="3">
-          <% c.subtipos.forEach(s => { %>
-            <div style="display:flex; justify-content:space-between; max-width:420px;">
-              <span><%= s.nombre %></span>
-              <span class="mono">$<%= s.total.toFixed(2) %> (<%= s.cantidad %>)</span>
-            </div>
-          <% }) %>
-        </td>
-      </tr>
-      <% } %>
+  <div>
+    <% porCategoria.forEach((c, i) => { %>
+    <div class="fila-ranking fila-categoria" data-toggle="subtipos-<%= i %>" style="cursor:pointer;">
+      <div class="fila-ranking-encabezado">
+        <span class="fila-ranking-nombre"><%= c.etiqueta %></span>
+        <span class="fila-ranking-valor mono">$<%= c.total.toFixed(2) %> · <%= c.pct.toFixed(0) %>% · <%= c.cantidad %> fact.</span>
+      </div>
+      <div class="fila-ranking-barra-fondo"><div class="fila-ranking-barra" style="width: <%= maxCategoria > 0 ? Math.round(c.total / maxCategoria * 100) : 0 %>%; background: var(--orange);"></div></div>
+    </div>
+    <% if (c.subtipos.length) { %>
+    <div id="subtipos-<%= i %>" hidden style="padding: 4px 0 12px 16px;">
+      <% c.subtipos.forEach(s => { %>
+        <div style="display:flex; justify-content:space-between; max-width:460px; font-size:.85rem; color:var(--ink-soft); padding:3px 0;">
+          <span><%= s.nombre %></span>
+          <span class="mono">$<%= s.total.toFixed(2) %> (<%= s.cantidad %>)</span>
+        </div>
       <% }) %>
-    </tbody>
-  </table>
+    </div>
+    <% } %>
+    <% }) %>
+  </div>
   <% } %>
 </div>
 
 <div class="informe-seccion">
   <h2>Evolución mensual (últimos 12 meses)</h2>
-  <p class="informe-nota">Para comparar entre meses — incluye el mes en curso. Respeta el filtro de categoría/subtipo del lado de gastos.</p>
+  <p class="informe-nota">Para comparar entre meses — incluye el mes en curso. Respeta el filtro de categoría/subtipo de arriba.</p>
   <div class="grafico-caja"><canvas id="grafico-evolucion-gastos" height="90"></canvas></div>
   <div style="overflow-x:auto;">
   <table class="tabla-informe">
     <thead>
-      <tr><th>Mes</th><th class="num">Gastos</th><th class="num">Ventas</th><th class="num">Resultado</th></tr>
+      <tr><th>Mes</th><th class="num">Gastos</th><th class="num">Facturas</th><th class="num">Vs. mes anterior</th></tr>
     </thead>
     <tbody>
       <% evolucionMensual.forEach(m => { %>
       <tr>
         <td><%= m.mes %></td>
         <td class="num mono">$<%= m.gasto.toFixed(2) %></td>
-        <td class="num mono">$<%= m.venta.toFixed(2) %></td>
-        <td class="num mono" style="color: <%= m.resultado >= 0 ? 'inherit' : '#a33' %>;">$<%= m.resultado.toFixed(2) %></td>
+        <td class="num mono"><%= m.cantidad %></td>
+        <td class="num mono">
+          <% if (m.variacionMensual === null) { %>
+            —
+          <% } else { %>
+            <span style="color: <%= m.variacionMensual > 0 ? '#a33' : (m.variacionMensual < 0 ? '#1e6b34' : 'inherit') %>;"><%= m.variacionMensual > 0 ? '+' : '' %><%= m.variacionMensual.toFixed(1) %>%</span>
+          <% } %>
+        </td>
       </tr>
       <% }) %>
     </tbody>
   </table>
+  </div>
+</div>
+
+<div class="informe-seccion">
+  <h2>Comparativa por categoría: este período vs. el anterior</h2>
+  <p class="informe-nota">Mismo período elegido arriba, contra el tramo inmediatamente anterior de igual duración — para ver rápido dónde se gastó más o menos que la vez pasada. Ordenado por la mayor diferencia en pesos.</p>
+  <% if (comparativaCategorias.length === 0) { %>
+    <p class="empty">No hay gastos para comparar en estos dos períodos.</p>
+  <% } else { %>
+  <div style="overflow-x:auto;">
+  <table class="tabla-informe">
+    <thead>
+      <tr><th>Categoría</th><th class="num">Este período</th><th class="num">Período anterior</th><th class="num">Diferencia</th><th class="num">Variación</th></tr>
+    </thead>
+    <tbody>
+      <% comparativaCategorias.forEach(c => { %>
+      <tr>
+        <td><%= c.etiqueta %></td>
+        <td class="num mono">$<%= c.actual.toFixed(2) %></td>
+        <td class="num mono">$<%= c.anterior.toFixed(2) %></td>
+        <td class="num mono" style="color: <%= c.diferencia > 0 ? '#a33' : (c.diferencia < 0 ? '#1e6b34' : 'inherit') %>;"><%= c.diferencia > 0 ? '+' : '' %>$<%= c.diferencia.toFixed(2) %></td>
+        <td class="num mono">
+          <% if (c.variacion === null) { %>
+            —
+          <% } else { %>
+            <span style="color: <%= c.variacion > 0 ? '#a33' : (c.variacion < 0 ? '#1e6b34' : 'inherit') %>;"><%= c.variacion > 0 ? '+' : '' %><%= c.variacion.toFixed(1) %>%</span>
+          <% } %>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  </div>
+  <% } %>
+</div>
+
+<div class="informe-seccion">
+  <h2>Oportunidades de ahorro</h2>
+  <p class="informe-nota">Reglas simples sobre lo cargado en Compras — no reemplazan tu criterio, son una ayuda para saber dónde mirar primero. Comparan renglones de factura con la misma descripción cargada (por eso conviene escribir siempre igual el mismo concepto cuando se repite mes a mes).</p>
+  <div class="tarjetas-recomendacion">
+    <div class="tarjeta-recomendacion">
+      <h3><span class="badge ahorro">Ahorro potencial</span></h3>
+      <p class="explicacion">El mismo concepto, pagado a distinto precio según el proveedor — 5% de diferencia o más, en el período elegido arriba.</p>
+      <% if (comparativaProveedores.length === 0) { %>
+        <p class="empty" style="padding:10px 0;">No se encontraron conceptos cargados a 2 o más proveedores distintos en este período.</p>
+      <% } else { %>
+        <% comparativaProveedores.forEach(c => { %>
+        <div class="item-recomendacion">
+          <span>
+            <%= c.categoriaEtiqueta %><%= c.subtipo ? ' · ' + c.subtipo : '' %> — "<%= c.concepto %>"<br>
+            <span style="color:var(--ink-soft); font-size:.82rem;">Más barato con <%= c.masBarato.nombre %> ($<%= c.masBarato.precioPromedio.toFixed(2) %>) que con <%= c.masCaro.nombre %> ($<%= c.masCaro.precioPromedio.toFixed(2) %>)</span>
+          </span>
+          <span class="mono" style="color:#1e6b34; white-space:nowrap;">-<%= c.ahorroPct.toFixed(0) %>%</span>
+        </div>
+        <% }) %>
+      <% } %>
+    </div>
+    <div class="tarjeta-recomendacion">
+      <h3><span class="badge alerta">Subió más</span></h3>
+      <p class="explicacion">Conceptos que más aumentaron de precio unitario entre su primera y su última carga, mirando los últimos 12 meses (no depende del filtro de fecha de arriba).</p>
+      <% if (evolucionPrecioConcepto.length === 0) { %>
+        <p class="empty" style="padding:10px 0;">Todavía no hay un mismo concepto cargado en 2 o más meses distintos para comparar.</p>
+      <% } else { %>
+        <% evolucionPrecioConcepto.forEach(c => { %>
+        <div class="item-recomendacion">
+          <span>
+            <%= c.categoriaEtiqueta %><%= c.subtipo ? ' · ' + c.subtipo : '' %> — "<%= c.concepto %>" (<%= c.proveedorNombre %>)<br>
+            <span style="color:var(--ink-soft); font-size:.82rem;"><%= c.primero.mes %>: $<%= c.primero.precio.toFixed(2) %> → <%= c.ultimo.mes %>: $<%= c.ultimo.precio.toFixed(2) %></span>
+          </span>
+          <span class="mono" style="color:#a33; white-space:nowrap;">+<%= c.variacion.toFixed(0) %>%</span>
+        </div>
+        <% }) %>
+      <% } %>
+    </div>
   </div>
 </div>
 
@@ -154,15 +219,14 @@
   <div style="overflow-x:auto;">
   <table class="tabla-informe">
     <thead>
-      <tr><th>Día</th><th class="num">Gastos</th><th class="num">Ventas</th><th class="num">Kg vendidos</th></tr>
+      <tr><th>Día</th><th class="num">Gastos</th><th class="num">Facturas</th></tr>
     </thead>
     <tbody>
       <% porDiaSemana.forEach(d => { %>
       <tr>
         <td><%= d.nombre %></td>
-        <td class="num mono">$<%= d.gasto.toFixed(2) %> (<%= d.cantidadGasto %>)</td>
-        <td class="num mono">$<%= d.venta.toFixed(2) %> (<%= d.cantidadVenta %>)</td>
-        <td class="num mono"><%= Number(d.unidadesVenta.toFixed(2)) %></td>
+        <td class="num mono">$<%= d.gasto.toFixed(2) %></td>
+        <td class="num mono"><%= d.cantidad %></td>
       </tr>
       <% }) %>
     </tbody>
@@ -176,15 +240,14 @@
   <div style="overflow-x:auto;">
   <table class="tabla-informe">
     <thead>
-      <tr><th>Semana</th><th class="num">Gastos</th><th class="num">Ventas</th><th class="num">Kg vendidos</th></tr>
+      <tr><th>Semana</th><th class="num">Gastos</th><th class="num">Facturas</th></tr>
     </thead>
     <tbody>
       <% porSemanaMes.forEach(s => { %>
       <tr>
         <td>Semana <%= s.semana %></td>
-        <td class="num mono">$<%= s.gasto.toFixed(2) %> (<%= s.cantidadGasto %>)</td>
-        <td class="num mono">$<%= s.venta.toFixed(2) %> (<%= s.cantidadVenta %>)</td>
-        <td class="num mono"><%= Number(s.unidadesVenta.toFixed(2)) %></td>
+        <td class="num mono">$<%= s.gasto.toFixed(2) %></td>
+        <td class="num mono"><%= s.cantidad %></td>
       </tr>
       <% }) %>
     </tbody>
@@ -195,10 +258,9 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
 (function () {
-  // Colores validados para uso en gráficos (ver skill de dataviz) — no
-  // son los mismos que los de la marca (esos están pensados para texto e
-  // interfaz, no para diferenciar series en un gráfico).
-  var COLOR_VENTAS = '#2a78d6';
+  // Color validado para uso en gráficos (ver skill de dataviz) — una
+  // sola serie (Gastos), así que alcanza con un solo tono; no hace falta
+  // la paleta categórica de varios colores.
   var COLOR_GASTOS = '#eb6834';
 
   var evolucion = <%- JSON.stringify(evolucionMensual) %>;
@@ -209,7 +271,6 @@
       data: {
         labels: evolucion.map(function (m) { return m.mes; }),
         datasets: [
-          { label: 'Ventas', data: evolucion.map(function (m) { return m.venta; }), backgroundColor: COLOR_VENTAS, borderRadius: 4 },
           { label: 'Gastos', data: evolucion.map(function (m) { return m.gasto; }), backgroundColor: COLOR_GASTOS, borderRadius: 4 },
         ],
       },
@@ -218,7 +279,7 @@
         maintainAspectRatio: false,
         scales: { y: { beginAtZero: true, ticks: { callback: function (v) { return '$' + v; } } } },
         plugins: {
-          legend: { position: 'top', labels: { boxWidth: 12 } },
+          legend: { display: false },
           tooltip: { callbacks: { label: function (ctx) { return ctx.dataset.label + ': $' + Number(ctx.raw).toFixed(2); } } },
         },
       },

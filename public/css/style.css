@@ -625,3 +625,5 @@ table.tabla-informe td.num, table.tabla-informe th.num { text-align: right; }
 .item-recomendacion:last-child { border-bottom: none; }
 .badge.estrella { background: var(--orange-soft); color: #8a5a12; }
 .badge.oportunidad { background: var(--blue-soft); color: #1e4f8a; }
+.badge.ahorro { background: #e2f3e6; color: #1e6b34; }
+.badge.alerta { background: #fbe4e2; color: #a33; }

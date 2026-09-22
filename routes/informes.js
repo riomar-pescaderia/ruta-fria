@@ -137,25 +137,22 @@ router.get('/gastos', async (req, res, next) => {
     const filtro = { desde, hasta, categoria, subtipo };
     const filtroAnt = { desde: desdeAnt, hasta: hastaAnt, categoria, subtipo };
 
-    const [gastoActual, gastoAnterior, ventaActual, ventaAnterior] = await Promise.all([
+    // Este informe es solo de gastos (las ventas ya tienen su propio
+    // informe en /informes/ventas — no hace falta repetirlas acá).
+    const [gastoActual, gastoAnterior] = await Promise.all([
       totalesGasto(filtro),
       totalesGasto(filtroAnt),
-      totalesVenta(filtro),
-      totalesVenta(filtroAnt),
     ]);
-
-    const resultadoActual = ventaActual.total - gastoActual.total;
-    const resultadoAnterior = ventaAnterior.total - gastoAnterior.total;
 
     const resumen = {
       gasto: { ...gastoActual, variacion: variacion(gastoActual.total, gastoAnterior.total) },
-      venta: { ...ventaActual, variacion: variacion(ventaActual.total, ventaAnterior.total) },
-      resultado: { total: resultadoActual, variacion: variacion(resultadoActual, resultadoAnterior) },
+      promedioPorFactura: gastoActual.cantidad ? gastoActual.total / gastoActual.cantidad : 0,
     };
 
-    // Gastos por categoría, con el detalle de subtipo anidado — respeta
-    // los mismos filtros que el resumen (si ya se filtró por categoría,
-    // esta tabla queda mostrando solo sus subtipos).
+    // Gastos por categoría, con el detalle de subtipo anidado y el % que
+    // representa cada una sobre el total del período — respeta los mismos
+    // filtros que el resumen (si ya se filtró por categoría, esta tabla
+    // queda mostrando solo sus subtipos).
     const condCat = [CONDICION_NO_MERCADERIA, `fecha::date >= $1`, `fecha::date <= $2`];
     const paramsCat = [desde, hasta];
     if (categoria) { paramsCat.push(categoria); condCat.push(`categoria = $${paramsCat.length}`); }
@@ -186,59 +183,194 @@ router.get('/gastos', async (req, res, next) => {
       }
     }
     const porCategoria = [...porCategoriaMap.values()].sort((a, b) => b.total - a.total);
-    porCategoria.forEach((c) => c.subtipos.sort((a, b) => b.total - a.total));
+    porCategoria.forEach((c) => {
+      c.subtipos.sort((a, b) => b.total - a.total);
+      c.pct = resumen.gasto.total ? (c.total / resumen.gasto.total) * 100 : 0;
+    });
+    const categoriaTop = porCategoria[0] || null;
+    const maxCategoria = categoriaTop ? categoriaTop.total : 0;
 
-    // Evolución mensual: últimos 12 meses completos hasta el actual,
-    // gastos y ventas lado a lado — para comparar entre meses más allá
-    // del rango elegido arriba. Respeta el filtro de categoría/subtipo
-    // del lado de gastos (ventas no tiene ese concepto).
+    // Comparativa por categoría: período elegido contra el período
+    // anterior equivalente — para responder "¿en qué gasté más o menos
+    // que la vez pasada?" de un vistazo. Ordenado por mayor diferencia en
+    // PESOS primero (no en %), para que una categoría chica que se
+    // duplicó no tape a una grande que subió bastante más en plata.
+    const condCatAnt = [CONDICION_NO_MERCADERIA, `fecha::date >= $1`, `fecha::date <= $2`];
+    const paramsCatAnt = [desdeAnt, hastaAnt];
+    if (categoria) { paramsCatAnt.push(categoria); condCatAnt.push(`categoria = $${paramsCatAnt.length}`); }
+    if (subtipo) { paramsCatAnt.push(subtipo); condCatAnt.push(`subtipo = $${paramsCatAnt.length}`); }
+    const { rows: filasCategoriaAnt } = await pool.query(
+      `select categoria, coalesce(sum(total),0)::numeric as total
+       from facturas_compra where ${condCatAnt.join(' and ')}
+       group by categoria`,
+      paramsCatAnt
+    );
+    const totalAntPorCategoria = new Map(filasCategoriaAnt.map((f) => [f.categoria, Number(f.total)]));
+    const clavesCategorias = new Set([...porCategoria.map((c) => c.clave), ...totalAntPorCategoria.keys()]);
+    const comparativaCategorias = [...clavesCategorias]
+      .map((clave) => {
+        const info = categoriaPorClave(clave);
+        const actual = (porCategoria.find((c) => c.clave === clave) || {}).total || 0;
+        const anterior = totalAntPorCategoria.get(clave) || 0;
+        return {
+          clave,
+          etiqueta: info ? info.etiqueta : clave,
+          actual,
+          anterior,
+          diferencia: actual - anterior,
+          variacion: variacion(actual, anterior),
+        };
+      })
+      .filter((c) => c.actual > 0 || c.anterior > 0)
+      .sort((a, b) => b.diferencia - a.diferencia);
+
+    // Evolución mensual (últimos 12 meses) — solo gasto. La variación de
+    // cada mes es contra el mes inmediato anterior de esta misma lista
+    // (para ver la tendencia mes a mes), no contra el año pasado.
     const desdeEvolucion = primerDiaMesesAtras(hoy, 11);
     const condEvolGasto = [CONDICION_NO_MERCADERIA, `fecha::date >= $1`];
     const paramsEvolGasto = [desdeEvolucion];
     if (categoria) { paramsEvolGasto.push(categoria); condEvolGasto.push(`categoria = $${paramsEvolGasto.length}`); }
     if (subtipo) { paramsEvolGasto.push(subtipo); condEvolGasto.push(`subtipo = $${paramsEvolGasto.length}`); }
-    const [{ rows: evolGastoRows }, { rows: evolVentaRows }] = await Promise.all([
-      pool.query(
-        `select to_char(date_trunc('month', fecha), 'YYYY-MM') as mes,
-                coalesce(sum(total),0)::numeric as total, count(*)::int as cantidad
-         from facturas_compra where ${condEvolGasto.join(' and ')}
-         group by 1`,
-        paramsEvolGasto
-      ),
-      pool.query(
-        `select to_char(date_trunc('month', v.fecha), 'YYYY-MM') as mes,
-                coalesce(sum(v.total),0)::numeric as total, count(distinct v.id)::int as cantidad,
-                coalesce(sum(vi.cantidad),0)::numeric as unidades
-         from ventas v
-     left join (select venta_id, sum(cantidad) as cantidad from ventas_items group by venta_id) vi on vi.venta_id = v.id
-         where v.fecha >= $1
-         group by 1`,
-        [desdeEvolucion]
-      ),
-    ]);
+    const { rows: evolGastoRows } = await pool.query(
+      `select to_char(date_trunc('month', fecha), 'YYYY-MM') as mes,
+              coalesce(sum(total),0)::numeric as total, count(*)::int as cantidad
+       from facturas_compra where ${condEvolGasto.join(' and ')}
+       group by 1`,
+      paramsEvolGasto
+    );
     const evolGastoMap = new Map(evolGastoRows.map((f) => [f.mes, f]));
-    const evolVentaMap = new Map(evolVentaRows.map((f) => [f.mes, f]));
     const evolucionMensual = [];
     for (let i = 11; i >= 0; i--) {
       const clave = primerDiaMesesAtras(hoy, i).slice(0, 7);
       const g = evolGastoMap.get(clave);
-      const v = evolVentaMap.get(clave);
-      const totalGasto = g ? Number(g.total) : 0;
-      const totalVenta = v ? Number(v.total) : 0;
-      evolucionMensual.push({
-        mes: clave,
-        gasto: totalGasto,
-        cantidadGasto: g ? g.cantidad : 0,
-        venta: totalVenta,
-        cantidadVenta: v ? v.cantidad : 0,
-        unidadesVenta: v ? Number(v.unidades) : 0,
-        resultado: totalVenta - totalGasto,
+      evolucionMensual.push({ mes: clave, gasto: g ? Number(g.total) : 0, cantidad: g ? g.cantidad : 0 });
+    }
+    evolucionMensual.forEach((m, i) => {
+      m.variacionMensual = i === 0 ? null : variacion(m.gasto, evolucionMensual[i - 1].gasto);
+    });
+
+    // --- Oportunidades de ahorro ---
+    //
+    // Las dos consultas de acá abajo trabajan sobre los RENGLONES de cada
+    // factura (facturas_compra_items), no sobre el total de la factura,
+    // porque lo que interesa comparar es el precio unitario de un mismo
+    // concepto — no el total de una factura, que mezcla cosas distintas.
+    // El "concepto" se arma normalizando la descripción cargada a mano
+    // (minúsculas, sin espacios de sobra): si dos renglones se
+    // escribieron distinto para lo mismo (p.ej. "flete mensual" vs
+    // "Flete Mensual "), hoy no se agrupan juntos — no hay forma de saber
+    // que son lo mismo sin un catálogo de conceptos, y estas categorías
+    // son justamente de texto libre, sin vínculo con el catálogo de
+    // artículos. Para que esto rinda al máximo, conviene cargar la
+    // descripción siempre de la misma forma en los gastos que se repiten
+    // mes a mes (mismo proveedor, mismo concepto).
+    const condConcepto = [`f.categoria not in ('mercaderia','flete_mercaderia')`, `fi.descripcion is not null`, `f.fecha::date >= $1`, `f.fecha::date <= $2`];
+    const paramsConcepto = [desde, hasta];
+    if (categoria) { paramsConcepto.push(categoria); condConcepto.push(`f.categoria = $${paramsConcepto.length}`); }
+    if (subtipo) { paramsConcepto.push(subtipo); condConcepto.push(`f.subtipo = $${paramsConcepto.length}`); }
+    const { rows: filasConcepto } = await pool.query(
+      `select f.categoria, f.subtipo, lower(trim(fi.descripcion)) as concepto,
+              p.nombre as proveedor_nombre,
+              sum(fi.cantidad)::numeric as cantidad_total,
+              sum(fi.cantidad * fi.precio_unitario)::numeric as monto_total
+       from facturas_compra_items fi
+       join facturas_compra f on f.id = fi.factura_id
+       join proveedores p on p.id = f.proveedor_id
+       where ${condConcepto.join(' and ')}
+       group by f.categoria, f.subtipo, concepto, p.id, p.nombre`,
+      paramsConcepto
+    );
+    const conceptoProveedorMap = new Map();
+    for (const fila of filasConcepto) {
+      const clave = `${fila.categoria}|${fila.subtipo || ''}|${fila.concepto}`;
+      if (!conceptoProveedorMap.has(clave)) {
+        conceptoProveedorMap.set(clave, {
+          categoriaEtiqueta: (categoriaPorClave(fila.categoria) || {}).etiqueta || fila.categoria,
+          subtipo: fila.subtipo,
+          concepto: fila.concepto,
+          proveedores: [],
+        });
+      }
+      const cantidad = Number(fila.cantidad_total);
+      const monto = Number(fila.monto_total);
+      conceptoProveedorMap.get(clave).proveedores.push({
+        nombre: fila.proveedor_nombre,
+        precioPromedio: cantidad ? monto / cantidad : 0,
       });
     }
+    // Solo interesan los conceptos que aparecen con 2+ proveedores
+    // distintos en el período (si no, no hay con qué comparar) y donde
+    // la diferencia es real (5% o más) — menos que eso suele ser solo
+    // redondeo o una diferencia puntual de IVA, no algo para actuar.
+    const comparativaProveedores = [...conceptoProveedorMap.values()]
+      .filter((c) => c.proveedores.length >= 2)
+      .map((c) => {
+        const proveedores = [...c.proveedores].sort((a, b) => a.precioPromedio - b.precioPromedio);
+        const masBarato = proveedores[0];
+        const masCaro = proveedores[proveedores.length - 1];
+        const ahorroPct = masCaro.precioPromedio ? ((masCaro.precioPromedio - masBarato.precioPromedio) / masCaro.precioPromedio) * 100 : 0;
+        return { ...c, proveedores, masBarato, masCaro, ahorroPct };
+      })
+      .filter((c) => c.ahorroPct >= 5)
+      .sort((a, b) => b.ahorroPct - a.ahorroPct)
+      .slice(0, 8);
 
-    // Por día de la semana, dentro del período elegido — para ver si hay
-    // días que concentran más gasto o más venta.
-    const [{ rows: dowGastoRows }, { rows: dowVentaRows }] = await Promise.all([
+    // Evolución de precio por concepto — últimos 12 meses, NO sujeto al
+    // filtro de fecha de arriba (para ver una tendencia hace falta más
+    // historia que un período corto). Mismo criterio de "concepto" que
+    // la comparación de proveedores, pero acá comparado contra sí mismo
+    // mes a mes, para detectar qué viene subiendo más rápido.
+    const condEvolConcepto = [`f.categoria not in ('mercaderia','flete_mercaderia')`, `fi.descripcion is not null`, `f.fecha >= $1`];
+    const paramsEvolConcepto = [desdeEvolucion];
+    if (categoria) { paramsEvolConcepto.push(categoria); condEvolConcepto.push(`f.categoria = $${paramsEvolConcepto.length}`); }
+    if (subtipo) { paramsEvolConcepto.push(subtipo); condEvolConcepto.push(`f.subtipo = $${paramsEvolConcepto.length}`); }
+    const { rows: filasEvolConcepto } = await pool.query(
+      `select f.categoria, f.subtipo, lower(trim(fi.descripcion)) as concepto,
+              p.nombre as proveedor_nombre,
+              to_char(date_trunc('month', f.fecha), 'YYYY-MM') as mes,
+              sum(fi.cantidad)::numeric as cantidad_total,
+              sum(fi.cantidad * fi.precio_unitario)::numeric as monto_total
+       from facturas_compra_items fi
+       join facturas_compra f on f.id = fi.factura_id
+       join proveedores p on p.id = f.proveedor_id
+       where ${condEvolConcepto.join(' and ')}
+       group by f.categoria, f.subtipo, concepto, p.nombre, mes
+       order by mes`,
+      paramsEvolConcepto
+    );
+    const evolConceptoMap = new Map();
+    for (const fila of filasEvolConcepto) {
+      const clave = `${fila.categoria}|${fila.subtipo || ''}|${fila.concepto}|${fila.proveedor_nombre}`;
+      if (!evolConceptoMap.has(clave)) {
+        evolConceptoMap.set(clave, {
+          categoriaEtiqueta: (categoriaPorClave(fila.categoria) || {}).etiqueta || fila.categoria,
+          subtipo: fila.subtipo,
+          concepto: fila.concepto,
+          proveedorNombre: fila.proveedor_nombre,
+          puntos: [],
+        });
+      }
+      const cantidad = Number(fila.cantidad_total);
+      const monto = Number(fila.monto_total);
+      evolConceptoMap.get(clave).puntos.push({ mes: fila.mes, precio: cantidad ? monto / cantidad : 0 });
+    }
+    const evolucionPrecioConcepto = [...evolConceptoMap.values()]
+      .filter((c) => c.puntos.length >= 2)
+      .map((c) => {
+        const primero = c.puntos[0];
+        const ultimo = c.puntos[c.puntos.length - 1];
+        return { ...c, primero, ultimo, variacion: variacion(ultimo.precio, primero.precio) };
+      })
+      // Acá solo interesa lo que subió — para eso es esta sección (ver
+      // "Proveedores" arriba para dónde ya se paga distinto por lo mismo).
+      .filter((c) => c.variacion !== null && c.variacion > 0)
+      .sort((a, b) => b.variacion - a.variacion)
+      .slice(0, 8);
+
+    // Por día de la semana y por semana del mes, dentro del período
+    // elegido — para ver si hay días o semanas que concentran más gasto.
+    const [{ rows: dowGastoRows }, { rows: semGastoRows }] = await Promise.all([
       pool.query(
         `select extract(isodow from fecha)::int as dow,
                 coalesce(sum(total),0)::numeric as total, count(*)::int as cantidad
@@ -247,66 +379,22 @@ router.get('/gastos', async (req, res, next) => {
         paramsCat
       ),
       pool.query(
-        `select extract(isodow from v.fecha)::int as dow,
-                coalesce(sum(v.total),0)::numeric as total, count(distinct v.id)::int as cantidad,
-                coalesce(sum(vi.cantidad),0)::numeric as unidades
-         from ventas v
-     left join (select venta_id, sum(cantidad) as cantidad from ventas_items group by venta_id) vi on vi.venta_id = v.id
-         where v.fecha::date >= $1 and v.fecha::date <= $2
-         group by 1`,
-        [desde, hasta]
-      ),
-    ]);
-    const dowGastoMap = new Map(dowGastoRows.map((f) => [f.dow, f]));
-    const dowVentaMap = new Map(dowVentaRows.map((f) => [f.dow, f]));
-    const porDiaSemana = NOMBRES_DIA.map((nombre, idx) => {
-      const dow = idx + 1;
-      const g = dowGastoMap.get(dow);
-      const v = dowVentaMap.get(dow);
-      return {
-        nombre,
-        gasto: g ? Number(g.total) : 0,
-        cantidadGasto: g ? g.cantidad : 0,
-        venta: v ? Number(v.total) : 0,
-        cantidadVenta: v ? v.cantidad : 0,
-        unidadesVenta: v ? Number(v.unidades) : 0,
-      };
-    });
-
-    // Por semana del mes (1ª a 5ª semana, según el día del mes en que
-    // cae cada fecha), dentro del período elegido.
-    const [{ rows: semGastoRows }, { rows: semVentaRows }] = await Promise.all([
-      pool.query(
         `select ceil(extract(day from fecha)/7.0)::int as semana,
                 coalesce(sum(total),0)::numeric as total, count(*)::int as cantidad
          from facturas_compra where ${condCat.join(' and ')}
          group by 1`,
         paramsCat
       ),
-      pool.query(
-        `select ceil(extract(day from v.fecha)/7.0)::int as semana,
-                coalesce(sum(v.total),0)::numeric as total, count(distinct v.id)::int as cantidad,
-                coalesce(sum(vi.cantidad),0)::numeric as unidades
-         from ventas v
-     left join (select venta_id, sum(cantidad) as cantidad from ventas_items group by venta_id) vi on vi.venta_id = v.id
-         where v.fecha::date >= $1 and v.fecha::date <= $2
-         group by 1`,
-        [desde, hasta]
-      ),
     ]);
+    const dowGastoMap = new Map(dowGastoRows.map((f) => [f.dow, f]));
+    const porDiaSemana = NOMBRES_DIA.map((nombre, idx) => {
+      const g = dowGastoMap.get(idx + 1);
+      return { nombre, gasto: g ? Number(g.total) : 0, cantidad: g ? g.cantidad : 0 };
+    });
     const semGastoMap = new Map(semGastoRows.map((f) => [f.semana, f]));
-    const semVentaMap = new Map(semVentaRows.map((f) => [f.semana, f]));
     const porSemanaMes = [1, 2, 3, 4, 5].map((semana) => {
       const g = semGastoMap.get(semana);
-      const v = semVentaMap.get(semana);
-      return {
-        semana,
-        gasto: g ? Number(g.total) : 0,
-        cantidadGasto: g ? g.cantidad : 0,
-        venta: v ? Number(v.total) : 0,
-        cantidadVenta: v ? v.cantidad : 0,
-        unidadesVenta: v ? Number(v.unidades) : 0,
-      };
+      return { semana, gasto: g ? Number(g.total) : 0, cantidad: g ? g.cantidad : 0 };
     });
 
     res.render('informes/gastos', {
@@ -315,7 +403,12 @@ router.get('/gastos', async (req, res, next) => {
       categorias: CATEGORIAS_GASTO,
       resumen,
       porCategoria,
+      categoriaTop,
+      maxCategoria,
+      comparativaCategorias,
       evolucionMensual,
+      comparativaProveedores,
+      evolucionPrecioConcepto,
       porDiaSemana,
       porSemanaMes,
       hoy,
