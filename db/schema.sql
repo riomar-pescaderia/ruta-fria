@@ -234,6 +234,15 @@ begin
   end if;
 end $$;
 
+-- Quién registró cada visita — hace falta para poder dejar que un
+-- vendedor borre una visita que cargó él mismo, pero no las de otro
+-- (ver /prospectos/:id/visitas/:visitaId/eliminar). "on delete set null"
+-- en vez de "cascade": si se borra el usuario, la visita en sí sigue
+-- siendo parte del historial, solo que sin dueño (a partir de ahí ya no
+-- la puede borrar nadie salvo un administrador). Null en las visitas
+-- cargadas antes de esta actualización, por la misma razón.
+alter table prospectos_visitas add column if not exists usuario_id integer references usuarios(id) on delete set null;
+
 -- Si el prospecto ya compró y está cargado en Clientes, se vincula acá —
 -- así el mapa puede distinguir de un vistazo quién ya es cliente de quién
 -- todavía es solo una visita. Null mientras siga siendo solo un prospecto.

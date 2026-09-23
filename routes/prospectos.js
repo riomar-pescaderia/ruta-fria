@@ -10,6 +10,7 @@ const { geocodificarDireccion, buscarDirecciones } = require('../lib/geocode');
 const { listarConVisitas } = require('../lib/prospectosCompartido');
 const { buscarClienteCoincidente, buscarSugerenciasCliente } = require('../lib/vinculacion');
 const { inputAFecha, fechaHoraInput } = require('../lib/fechas');
+const { requireAdmin } = require('../lib/auth');
 
 function redondearCoord(n) {
   return n === null || n === undefined || n === '' ? null : Number(n);
@@ -149,7 +150,13 @@ router.post('/geocodificar', async (req, res) => {
   res.json({ opciones });
 });
 
-router.get('/:id/editar', async (req, res, next) => {
+// Editar y eliminar (tanto el prospecto como una visita ya cargada) queda
+// solo para administradores — un vendedor puede registrar prospectos y
+// visitas nuevas, pero no tocar lo que ya quedó guardado, para que el
+// historial de visitas sea confiable. Los botones también se ocultan del
+// lado de la vista (ver views/prospectos/detalle.ejs), esto es el
+// resguardo real por si alguien entra directo a la URL.
+router.get('/:id/editar', requireAdmin, async (req, res, next) => {
   try {
     const { rows } = await pool.query('select * from prospectos where id = $1', [req.params.id]);
     if (!rows[0]) return res.redirect('/prospectos');
@@ -158,7 +165,7 @@ router.get('/:id/editar', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/:id', async (req, res, next) => {
+router.post('/:id', requireAdmin, async (req, res, next) => {
   const { nombre, direccion, notas, cuit_dni } = req.body;
   const contactos = leerContactos(req.body);
   let lat = redondearCoord(req.body.lat);
@@ -262,22 +269,41 @@ router.post('/:id/desvincular', async (req, res, next) => {
 router.post('/:id/visitas', async (req, res, next) => {
   try {
     const { fecha, nota } = req.body;
+    // Queda registrado quién la cargó — es lo que después decide quién la
+    // puede borrar (ver /:id/visitas/:visitaId/eliminar más abajo).
     await pool.query(
-      'insert into prospectos_visitas (prospecto_id, fecha, nota) values ($1, $2, $3)',
-      [req.params.id, inputAFecha(fecha) || new Date(), nota || null]
+      'insert into prospectos_visitas (prospecto_id, fecha, nota, usuario_id) values ($1, $2, $3, $4)',
+      [req.params.id, inputAFecha(fecha) || new Date(), nota || null, req.session.usuario.id]
     );
     res.redirect(`/prospectos/${req.params.id}`);
   } catch (err) { next(err); }
 });
 
+// Eliminar una visita ya cargada: un administrador puede borrar cualquiera;
+// un vendedor solo la que registró él mismo (nunca la editan, en ningún
+// caso — eso sigue siendo solo de administradores, ver /:id/editar más
+// abajo). El chequeo se hace acá, contra la base, no alcanza con ocultar
+// el botón en la vista — por si alguien manda el pedido directo a la URL.
 router.post('/:id/visitas/:visitaId/eliminar', async (req, res, next) => {
   try {
+    const usuarioSesion = req.session.usuario;
+    const { rows } = await pool.query(
+      'select usuario_id from prospectos_visitas where id = $1 and prospecto_id = $2',
+      [req.params.visitaId, req.params.id]
+    );
+    if (!rows[0]) return res.redirect(`/prospectos/${req.params.id}`); // ya no existe — nada que hacer
+    const esDueño = rows[0].usuario_id !== null && String(rows[0].usuario_id) === String(usuarioSesion.id);
+    if (!usuarioSesion.esAdmin && !esDueño) {
+      return res.status(403).render('403', {
+        motivo: 'Solo podés eliminar visitas que registraste vos mismo. Pedile a un administrador si hace falta borrar esta.',
+      });
+    }
     await pool.query('delete from prospectos_visitas where id = $1 and prospecto_id = $2', [req.params.visitaId, req.params.id]);
     res.redirect(`/prospectos/${req.params.id}`);
   } catch (err) { next(err); }
 });
 
-router.post('/:id/eliminar', async (req, res, next) => {
+router.post('/:id/eliminar', requireAdmin, async (req, res, next) => {
   try {
     // No se borra de verdad — se marca inactivo, para no perder el
     // historial de visitas si se cargó por error o el prospecto ya no

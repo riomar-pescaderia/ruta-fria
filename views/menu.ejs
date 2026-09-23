@@ -1,0 +1,77 @@
+<%- include('partials/head') %>
+
+<% const acc = (typeof usuario !== 'undefined' && usuario) ? (usuario.esAdmin ? { clientes:true, articulos:true, prospectos:true, ventas:true, cuenta_corriente:true, compras:true, informes:true, stock:true } : (usuario.accesos || {})) : {}; %>
+
+<h1>Menú</h1>
+<p style="color:var(--ink-soft); font-size:.9rem; margin-top:-10px;">Elegí una sección para entrar. Para volver acá, andá para atrás con el botón del celular.</p>
+
+<div class="menu-grid">
+  <% if (acc.clientes) { %>
+  <a class="menu-tile" href="/clientes">
+    <span class="menu-tile-icono tile-clientes"><svg width="28" height="28" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="2.6"/><path d="M3.5 15c0-3 2.5-5.5 5.5-5.5s5.5 2.5 5.5 5.5"/></svg></span>
+    <span class="menu-tile-nombre">Clientes</span>
+  </a>
+  <% } %>
+  <% if (acc.articulos) { %>
+  <a class="menu-tile" href="/articulos">
+    <span class="menu-tile-icono tile-articulos"><svg width="28" height="28" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 9 2.7 15.5 6 9 9.3 2.5 6Z"/><path d="M2.5 6v6.5L9 16v-6.5"/><path d="M15.5 6v6.5L9 16"/></svg></span>
+    <span class="menu-tile-nombre">Artículos</span>
+  </a>
+  <% } %>
+  <% if (acc.prospectos) { %>
+  <a class="menu-tile" href="/prospectos">
+    <span class="menu-tile-icono tile-prospectos"><svg width="28" height="28" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 16s5.2-5 5.2-8.8A5.2 5.2 0 0 0 3.8 7.2C3.8 11 9 16 9 16Z"/><circle cx="9" cy="7" r="1.9"/></svg></span>
+    <span class="menu-tile-nombre">Historial visitas</span>
+  </a>
+  <% } %>
+  <% if (acc.ventas) { %>
+  <a class="menu-tile" href="/ventas">
+    <span class="menu-tile-icono tile-ventas"><svg width="28" height="28" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="10" height="14" rx="1.2"/><line x1="6.5" y1="6" x2="12" y2="6"/><line x1="6.5" y1="9" x2="12" y2="9"/><line x1="6.5" y1="12" x2="10" y2="12"/></svg></span>
+    <span class="menu-tile-nombre">Venta / remito</span>
+  </a>
+  <% } %>
+  <% if (acc.cuenta_corriente) { %>
+  <a class="menu-tile" href="/cuenta-corriente">
+    <span class="menu-tile-icono tile-cuenta-corriente"><svg width="28" height="28" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="9" rx="2"/><path d="M2 7.5h14"/><circle cx="12.5" cy="10.5" r="1.1" fill="currentColor" stroke="none"/></svg></span>
+    <span class="menu-tile-nombre">Cuenta corriente</span>
+  </a>
+  <% } %>
+  <% if (acc.compras) { %>
+  <a class="menu-tile" href="/compras">
+    <span class="menu-tile-icono tile-compras"><svg width="28" height="28" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3h1.6l1.6 9a1.7 1.7 0 0 0 1.7 1.4h6a1.7 1.7 0 0 0 1.7-1.4l1.1-6.2H5"/><circle cx="7.3" cy="16" r="1.1" fill="currentColor" stroke="none"/><circle cx="13" cy="16" r="1.1" fill="currentColor" stroke="none"/></svg></span>
+    <span class="menu-tile-nombre">Compras</span>
+  </a>
+  <% } %>
+  <% if (acc.compras) { %>
+  <a class="menu-tile" href="/proveedores">
+    <span class="menu-tile-icono tile-proveedores"><svg width="28" height="28" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="6" height="11"/><rect x="9.5" y="7.5" width="6" height="7.5"/><circle cx="5" cy="7" r=".6" fill="currentColor" stroke="none"/><circle cx="5" cy="10.5" r=".6" fill="currentColor" stroke="none"/><circle cx="12.5" cy="10.5" r=".6" fill="currentColor" stroke="none"/></svg></span>
+    <span class="menu-tile-nombre">Proveedores</span>
+  </a>
+  <% } %>
+  <% if (acc.informes) { %>
+  <a class="menu-tile" href="/informes">
+    <span class="menu-tile-icono tile-informes"><svg width="28" height="28" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15V9"/><path d="M9 15V4"/><path d="M15 15V8"/><path d="M2 15h14"/></svg></span>
+    <span class="menu-tile-nombre">Informes</span>
+  </a>
+  <% } %>
+  <% if (acc.stock) { %>
+  <a class="menu-tile" href="/stock">
+    <span class="menu-tile-icono tile-stock"><svg width="28" height="28" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.3 15.5 6 9 9.7 2.5 6 9 2.3Z"/><path d="M2.5 9l6.5 3.4L15.5 9"/><path d="M2.5 12.2l6.5 3.4 6.5-3.4"/></svg></span>
+    <span class="menu-tile-nombre">Stock</span>
+  </a>
+  <% } %>
+  <% if (typeof usuario !== 'undefined' && usuario && usuario.esAdmin) { %>
+  <a class="menu-tile" href="/usuarios">
+    <span class="menu-tile-icono tile-usuarios"><svg width="28" height="28" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.5 14.5 4.5v4c0 4-2.5 6.5-5.5 8-3-1.5-5.5-4-5.5-8v-4L9 2.5Z"/><path d="M6.5 9.3 8.2 11 11.5 7.3"/></svg></span>
+    <span class="menu-tile-nombre">Usuarios</span>
+  </a>
+  <% } %>
+  <% if (typeof usuario !== 'undefined' && usuario && usuario.esAdmin) { %>
+  <a class="menu-tile" href="/vendedores/ubicacion">
+    <span class="menu-tile-icono tile-ubicacion"><svg width="28" height="28" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 16s5.2-5.6 5.2-9.4A5.2 5.2 0 0 0 3.8 6.6C3.8 10.4 9 16 9 16Z"/><circle cx="9" cy="6.8" r="1.9"/></svg></span>
+    <span class="menu-tile-nombre">Ubicación</span>
+  </a>
+  <% } %>
+</div>
+
+<%- include('partials/foot') %>

@@ -5,10 +5,12 @@
 <div class="toolbar">
   <h1><%= prospecto.nombre %></h1>
   <div style="display:flex; gap:8px; flex-wrap:wrap;">
-    <a class="btn secondary" href="/prospectos/<%= prospecto.id %>/editar">Editar</a>
-    <form method="post" action="/prospectos/<%= prospecto.id %>/eliminar" style="display:inline;" onsubmit="return confirm('¿Eliminar este prospecto? Se deja de mostrar en el mapa y la lista, pero no se pierde el historial de visitas.');">
-      <button type="submit" class="btn secondary" style="color:#a33;">Eliminar</button>
-    </form>
+    <% if (usuario && usuario.esAdmin) { %>
+      <a class="btn secondary" href="/prospectos/<%= prospecto.id %>/editar">Editar</a>
+      <form method="post" action="/prospectos/<%= prospecto.id %>/eliminar" style="display:inline;" onsubmit="return confirm('¿Eliminar este prospecto? Se deja de mostrar en el mapa y la lista, pero no se pierde el historial de visitas.');">
+        <button type="submit" class="btn secondary" style="color:#a33;">Eliminar</button>
+      </form>
+    <% } %>
     <a class="btn secondary" href="/prospectos">← Volver</a>
   </div>
 </div>
@@ -140,14 +142,23 @@
     </tr>
   </thead>
   <tbody>
-    <% visitas.forEach(v => { %>
+    <% visitas.forEach(v => {
+         // Un administrador borra cualquier visita; un vendedor, solo la
+         // que registró él mismo (v.usuario_id queda null en las que se
+         // cargaron antes de este cambio, así que esas las borra nomás
+         // un administrador). Editarlas no lo puede hacer nadie salvo
+         // administrador, y de hecho no hay forma de editar una visita
+         // ya cargada desde ningún lado.
+         const puedeQuitar = usuario && (usuario.esAdmin || (v.usuario_id !== null && String(v.usuario_id) === String(usuario.id))); %>
     <tr>
       <td data-label="Fecha" class="mono"><%= formatearFechaHora(v.fecha) %></td>
       <td data-label="Nota"><%= v.nota || '—' %></td>
       <td data-label="">
+        <% if (puedeQuitar) { %>
         <form method="post" action="/prospectos/<%= prospecto.id %>/visitas/<%= v.id %>/eliminar" style="margin:0;" onsubmit="return confirm('¿Eliminar esta visita del historial?');">
           <button type="submit" class="btn secondary" style="color:#a33; font-size:.8rem;">Quitar</button>
         </form>
+        <% } %>
       </td>
     </tr>
     <% }) %>
@@ -158,8 +169,10 @@
 <h2 style="font-size:1.1rem;">Ubicación</h2>
 <% if (prospecto.lat !== null && prospecto.lng !== null) { %>
   <div id="mapa" style="height:280px; border:1px solid var(--line); border-radius:10px; margin-bottom:20px;"></div>
-<% } else { %>
+<% } else if (usuario && usuario.esAdmin) { %>
   <p class="pendiente" style="padding:14px 20px;">Este prospecto todavía no tiene ubicación en el mapa — <a href="/prospectos/<%= prospecto.id %>/editar">editalo</a> para buscarle la dirección.</p>
+<% } else { %>
+  <p class="pendiente" style="padding:14px 20px;">Este prospecto todavía no tiene ubicación en el mapa — pedile a un administrador que le busque la dirección.</p>
 <% } %>
 
 <% if (!prospecto.cliente_id) { %>

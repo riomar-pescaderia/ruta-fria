@@ -73,7 +73,24 @@ app.use('/api/app', appApiRouter);
 app.use(requireAuth);
 app.use(refrescarSesion);
 
-app.get('/', (req, res) => res.redirect('/clientes'));
+// GET /menu — pantalla de inicio con un ícono grande por sección (solo
+// las que el usuario logueado puede ver), pensada para el celular: se
+// entra a una sección tocando su ícono, y se vuelve acá con el botón de
+// "atrás" del teléfono (es una página real, no un menú superpuesto con
+// JS, así que el historial del navegador funciona solo).
+app.get('/menu', (req, res) => res.render('menu'));
+
+// La pantalla principal depende del dispositivo: en el celular se
+// entra al menú de arriba; en la computadora se sigue yendo directo a
+// Clientes, como siempre, porque ahí el menú de la izquierda ya queda
+// visible todo el tiempo y no hace falta una pantalla intermedia.
+// "Mobi" aparece en el user-agent de prácticamente cualquier navegador
+// de celular (Android, iPhone) — mismo criterio simple que usan
+// Bootstrap y otras librerías para esta detección.
+app.get('/', (req, res) => {
+  const esCelular = /Mobi/i.test(req.get('user-agent') || '');
+  res.redirect(esCelular ? '/menu' : '/clientes');
+});
 
 app.use('/clientes', requireAcceso('clientes'), clientesRouter);
 app.use('/articulos', requireAcceso('articulos'), articulosRouter);
