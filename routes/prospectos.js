@@ -85,6 +85,14 @@ router.get('/nuevo', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Submenú de "Visitas" para el celular: agrupa "Historial visitas" y
+// "Nueva visita" bajo una sola cuadrícula de /menu (ver views/menu.ejs),
+// en vez de ocupar dos lugares ahí — en la computadora esos dos siguen
+// siendo dos links directos en la barra lateral, sin pasar por acá (ver
+// partials/head.ejs). Va antes de "/:id" para que Express no confunda
+// "menu" con un id de prospecto.
+router.get('/menu', (req, res) => res.render('prospectos/menu'));
+
 // El mapa vive acá adentro (no en una sección aparte): es otra forma de
 // ver el mismo historial de visitas, con el mismo permiso de acceso.
 router.get('/mapa', async (req, res, next) => {
