@@ -13,10 +13,14 @@
   <% const acc = (typeof usuario !== 'undefined' && usuario) ? (usuario.esAdmin ? { clientes:true, articulos:true, prospectos:true, ventas:true, cuenta_corriente:true, compras:true, informes:true, stock:true } : (usuario.accesos || {})) : {}; %>
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="brand">
+      <!-- Tocar el nombre/logo lleva a /menu (la pantalla de inicio con
+           todas las secciones en cuadrícula) — así, en el celular sin la
+           tira de íconos de arriba, siempre hay una forma directa de
+           volver al menú principal desde cualquier sección. -->
+      <a class="brand" href="/menu">
         <img src="/img/logo-riomar.png" alt="Riomar Pescadería" class="brand-logo">
         <span class="brand-text">Ruta Fría</span>
-      </div>
+      </a>
       <nav class="app">
         <% if (acc.clientes) { %><a href="/clientes" class="<%= path && path.startsWith('/clientes') ? 'active' : '' %>"><span class="nav-icon"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="2.6"/><path d="M3.5 15c0-3 2.5-5.5 5.5-5.5s5.5 2.5 5.5 5.5"/></svg></span><span class="nav-label">Clientes</span></a><% } %>
         <% if (acc.articulos) { %><a href="/articulos" class="<%= path && path.startsWith('/articulos') ? 'active' : '' %>"><span class="nav-icon"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6 9 2.7 15.5 6 9 9.3 2.5 6Z"/><path d="M2.5 6v6.5L9 16v-6.5"/><path d="M15.5 6v6.5L9 16"/></svg></span><span class="nav-label">Artículos</span></a><% } %>

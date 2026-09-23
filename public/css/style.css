@@ -75,7 +75,13 @@ h1 { font-size: 2rem; margin: 0 0 18px; color: var(--navy); }
   padding: 0 20px 20px;
   margin-bottom: 8px;
   border-bottom: 1px solid rgba(255,255,255,.12);
+  /* Es un link a /menu (ver partials/head.ejs) — se le sacan los
+     estilos por defecto de link para que se siga viendo igual que
+     antes, cuando era un div sin ningún comportamiento. */
+  text-decoration: none;
+  cursor: pointer;
 }
+.sidebar .brand:hover .brand-text { text-decoration: underline; }
 
 .brand-logo { width: 34px; height: auto; display: block; flex-shrink: 0; }
 
@@ -439,11 +445,12 @@ tr.fila-cambio td:nth-child(4) { color: #8a5a12; }
   .sidebar .brand { border-bottom: none; padding: 0; margin: 0 8px 0 0; }
   .brand-logo { width: 26px; }
   .brand-text { font-size: 1.1rem; }
-  nav.app { flex-direction: row; flex-wrap: wrap; padding: 0; flex: 1; }
-  nav.app a { padding: 6px 9px; }
-  .nav-icon { width: 24px; height: 24px; }
-  .nav-label { display: none; }
-  .sidebar-user { margin-top: 0; border-top: none; padding: 0; }
+  /* La tira de íconos ya no hace falta en el celular: ahora se navega
+     desde /menu (la pantalla de inicio con las cuadrículas) y, para
+     volver ahí desde cualquier sección, tocando el nombre "Ruta Fría"
+     de acá arriba (ver el link en partials/head.ejs). */
+  nav.app { display: none; }
+  .sidebar-user { margin-top: 0; border-top: none; padding: 0; margin-left: auto; }
   .user-name { display: none; }
   main { padding: 20px 16px 48px; }
 }
