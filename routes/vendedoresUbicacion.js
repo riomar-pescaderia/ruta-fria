@@ -28,6 +28,40 @@ function distanciaKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Helpers de fecha para los rangos rápidos del histórico de recorrido —
+// mismo criterio que ya usa el Panel de Informes (routes/informes.js):
+// se arman a partir de "hoy" en hora de Argentina, con new Date() en
+// horario de pared (sin componente de hora) para no depender de en qué
+// huso horario esté corriendo el server.
+function aFechaISO(d) {
+  return d.toLocaleDateString('en-CA');
+}
+function primerDiaMes(fechaISO) {
+  const d = new Date(fechaISO + 'T00:00:00');
+  return aFechaISO(new Date(d.getFullYear(), d.getMonth(), 1));
+}
+function primerDiaMesAnterior(fechaISO) {
+  const d = new Date(fechaISO + 'T00:00:00');
+  return aFechaISO(new Date(d.getFullYear(), d.getMonth() - 1, 1));
+}
+function ultimoDiaMesAnterior(fechaISO) {
+  const d = new Date(fechaISO + 'T00:00:00');
+  return aFechaISO(new Date(d.getFullYear(), d.getMonth(), 0)); // día "0" de este mes = último día del anterior
+}
+// "2000-01-01" como piso fijo para "Todo el período" — más simple que
+// consultar la fecha real del primer punto guardado, y da lo mismo (no
+// hay datos de antes de que existiera el seguimiento).
+const DESDE_TODO_EL_PERIODO = '2000-01-01';
+
+function armarRangosRapidosHistorico(hoy) {
+  return [
+    { etiqueta: 'Mes actual', desde: primerDiaMes(hoy), hasta: hoy },
+    { etiqueta: 'Mes anterior', desde: primerDiaMesAnterior(hoy), hasta: ultimoDiaMesAnterior(hoy) },
+    { etiqueta: 'Este año', desde: hoy.slice(0, 4) + '-01-01', hasta: hoy },
+    { etiqueta: 'Todo el período', desde: DESDE_TODO_EL_PERIODO, hasta: hoy },
+  ];
+}
+
 const CONSULTA_VENDEDORES = `
   select u.id, u.nombre, u.username,
     exists(select 1 from app_dispositivos d where d.usuario_id = u.id) as tiene_app,
@@ -83,51 +117,132 @@ router.post('/:usuarioId/solicitar', async (req, res) => {
   }
 });
 
-// GET /vendedores/ubicacion/horario — pantalla para definir entre qué
-// horas del día la app tiene permitido mandar ubicación sola. Fuera de
-// ese rango la app no manda nada por su cuenta (sigue respondiendo a
+// Días de la semana en el orden en que se muestran en la pantalla
+// (semana laboral primero) — dia_semana adentro de cada uno es el mismo
+// número que usa la tabla tracking_horarios (0=domingo … 6=sábado, igual
+// que extract(dow from ...) de Postgres).
+const DIAS_SEMANA = [
+  { diaSemana: 1, etiqueta: 'Lunes' },
+  { diaSemana: 2, etiqueta: 'Martes' },
+  { diaSemana: 3, etiqueta: 'Miércoles' },
+  { diaSemana: 4, etiqueta: 'Jueves' },
+  { diaSemana: 5, etiqueta: 'Viernes' },
+  { diaSemana: 6, etiqueta: 'Sábado' },
+  { diaSemana: 0, etiqueta: 'Domingo' },
+];
+
+function minAHora(min) {
+  const h = Math.floor(min / 60).toString().padStart(2, '0');
+  const m = (min % 60).toString().padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+// Convierte "HH:MM" a minutos desde la medianoche, o null si no es una
+// hora válida — mismo criterio que ya usaba el horario único viejo.
+function aMinutos(valor) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(valor || ''));
+  if (!m) return null;
+  const horas = Number(m[1]);
+  const minutos = Number(m[2]);
+  if (horas < 0 || horas > 23 || minutos < 0 || minutos > 59) return null;
+  return horas * 60 + minutos;
+}
+
+// GET /vendedores/ubicacion/horario — pantalla para definir, día por día
+// de la semana, entre qué horas la app tiene permitido mandar ubicación
+// sola. Cada día puede tener varias franjas (por ejemplo 9 a 13 y 17 a
+// 22) o ninguna (seguimiento apagado ese día). Fuera de las franjas
+// cargadas la app no manda nada por su cuenta (sigue respondiendo a
 // "Localizar ahora" a cualquier hora, eso es aparte).
 router.get('/horario', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `select clave, valor from config where clave in ('tracking_hora_inicio_min', 'tracking_hora_fin_min')`
+      'select dia_semana, hora_inicio_min, hora_fin_min from tracking_horarios order by dia_semana, hora_inicio_min'
     );
-    const porClave = {};
-    rows.forEach((r) => { porClave[r.clave] = Number(r.valor); });
-    const minAHora = (min) => {
-      const h = Math.floor(min / 60).toString().padStart(2, '0');
-      const m = (min % 60).toString().padStart(2, '0');
-      return `${h}:${m}`;
-    };
+    const franjasPorDia = {};
+    rows.forEach((r) => {
+      if (!franjasPorDia[r.dia_semana]) franjasPorDia[r.dia_semana] = [];
+      franjasPorDia[r.dia_semana].push({ inicio: minAHora(r.hora_inicio_min), fin: minAHora(r.hora_fin_min) });
+    });
+    const dias = DIAS_SEMANA.map((d) => ({
+      ...d,
+      activo: !!franjasPorDia[d.diaSemana],
+      // Un día activo sin franjas no debería pasar nunca (se guarda como
+      // inactivo), pero por las dudas se arranca con una franja en blanco
+      // para que el formulario tenga algo para mostrar.
+      franjas: franjasPorDia[d.diaSemana] || [{ inicio: '', fin: '' }],
+    }));
     res.render('vendedores/horario', {
-      horaInicio: minAHora(porClave.tracking_hora_inicio_min ?? 480),
-      horaFin: minAHora(porClave.tracking_hora_fin_min ?? 1140),
+      dias,
       guardado: req.query.guardado === '1',
+      error: req.query.error || null,
     });
   } catch (err) { next(err); }
 });
 
 router.post('/horario', async (req, res, next) => {
   try {
-    const { hora_inicio, hora_fin } = req.body || {};
-    const aMinutos = (valor) => {
-      const m = /^(\d{1,2}):(\d{2})$/.exec(String(valor || ''));
-      if (!m) return null;
-      const horas = Number(m[1]);
-      const minutos = Number(m[2]);
-      if (horas < 0 || horas > 23 || minutos < 0 || minutos > 59) return null;
-      return horas * 60 + minutos;
-    };
-    const inicioMin = aMinutos(hora_inicio);
-    const finMin = aMinutos(hora_fin);
-    if (inicioMin === null || finMin === null || inicioMin >= finMin) {
-      return res.status(400).send('Horario inválido — la hora de inicio tiene que ser antes que la de fin.');
+    const diasBody = (req.body && req.body.dias) || {};
+    // Filas a insertar, ya validadas — y en paralelo, un texto de error
+    // legible si algo no cierra, para poder avisar en qué día está el
+    // problema en vez de un genérico "horario inválido".
+    const filas = [];
+    for (const { diaSemana, etiqueta } of DIAS_SEMANA) {
+      const diaBody = diasBody[String(diaSemana)];
+      if (!diaBody || diaBody.activo !== 'on') continue; // día apagado: no se guarda ninguna franja
+
+      const franjasBody = Array.isArray(diaBody.franjas)
+        ? diaBody.franjas
+        : Object.values(diaBody.franjas || {});
+      const franjasDia = [];
+      for (const f of franjasBody) {
+        const inicioTexto = f && f.inicio;
+        const finTexto = f && f.fin;
+        if (!inicioTexto && !finTexto) continue; // fila en blanco (se agregó y no se completó) — se ignora sola
+        const inicioMin = aMinutos(inicioTexto);
+        const finMin = aMinutos(finTexto);
+        if (inicioMin === null || finMin === null || inicioMin >= finMin) {
+          return res.redirect(
+            '/vendedores/ubicacion/horario?error=' +
+            encodeURIComponent(`${etiqueta}: cada franja necesita una hora de inicio anterior a la de fin.`)
+          );
+        }
+        franjasDia.push({ inicioMin, finMin });
+      }
+      if (franjasDia.length === 0) continue; // día tildado como activo pero sin ninguna franja cargada: queda apagado igual
+
+      // Dos franjas del mismo día no pueden superponerse (por ejemplo 9 a
+      // 14 y 13 a 18) — se ordenan por inicio y se compara cada una con
+      // la siguiente.
+      franjasDia.sort((a, b) => a.inicioMin - b.inicioMin);
+      for (let i = 1; i < franjasDia.length; i++) {
+        if (franjasDia[i].inicioMin < franjasDia[i - 1].finMin) {
+          return res.redirect(
+            '/vendedores/ubicacion/horario?error=' +
+            encodeURIComponent(`${etiqueta}: hay dos franjas que se superponen.`)
+          );
+        }
+      }
+      franjasDia.forEach((f) => filas.push({ diaSemana, ...f }));
     }
-    await pool.query(
-      `insert into config (clave, valor) values ('tracking_hora_inicio_min', $1), ('tracking_hora_fin_min', $2)
-       on conflict (clave) do update set valor = excluded.valor`,
-      [inicioMin, finMin]
-    );
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('delete from tracking_horarios');
+      for (const f of filas) {
+        await client.query(
+          'insert into tracking_horarios (dia_semana, hora_inicio_min, hora_fin_min) values ($1,$2,$3)',
+          [f.diaSemana, f.inicioMin, f.finMin]
+        );
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
     res.redirect('/vendedores/ubicacion/horario?guardado=1');
   } catch (err) { next(err); }
 });
@@ -140,9 +255,15 @@ router.get('/:usuarioId/historial', async (req, res, next) => {
     const usuarioId = req.params.usuarioId;
     const { rows } = await pool.query('select id, nombre, username from usuarios where id = $1', [usuarioId]);
     if (!rows[0]) return res.status(404).render('404');
+    const hoy = hoyAr();
     res.render('vendedores/historial', {
       vendedor: rows[0],
-      fechaInicial: hoyAr(),
+      fechaInicial: hoy,
+      rangosRapidosHistorico: armarRangosRapidosHistorico(hoy),
+      // El histórico de abajo arranca mostrando el mes actual — el mapa
+      // de arriba sigue arrancando en el día de hoy (fechaInicial), son
+      // dos cosas independientes.
+      filtroHistoricoInicial: { desde: primerDiaMes(hoy), hasta: hoy },
     });
   } catch (err) { next(err); }
 });
@@ -174,6 +295,70 @@ router.get('/:usuarioId/historial/datos', async (req, res, next) => {
         capturado_en: r.capturado_en,
       })),
       km: Math.round(km * 10) / 10,
+    });
+  } catch (err) { next(err); }
+});
+
+// JSON con el histórico día por día (fecha, hora de inicio y fin, y km
+// recorridos) para un vendedor en un rango de fechas — lo que llena la
+// tabla debajo del mapa en /historial. Trabaja agrupado por día
+// directamente en SQL (en vez de traer cada punto y sumar en JS, como
+// hace /historial/datos para un solo día) para que "Todo el período"
+// ande liviano aunque haya meses de puntos acumulados.
+router.get('/:usuarioId/historial/resumen', async (req, res, next) => {
+  try {
+    const usuarioId = req.params.usuarioId;
+    const hoy = hoyAr();
+    const desde = /^\d{4}-\d{2}-\d{2}$/.test(req.query.desde || '') ? req.query.desde : primerDiaMes(hoy);
+    const hasta = /^\d{4}-\d{2}-\d{2}$/.test(req.query.hasta || '') ? req.query.hasta : hoy;
+    const { rows } = await pool.query(
+      `with puntos as (
+         select
+           (capturado_en at time zone 'America/Argentina/Buenos_Aires')::date as fecha,
+           capturado_en, latitud, longitud,
+           lag(latitud) over (partition by (capturado_en at time zone 'America/Argentina/Buenos_Aires')::date order by capturado_en) as lat_prev,
+           lag(longitud) over (partition by (capturado_en at time zone 'America/Argentina/Buenos_Aires')::date order by capturado_en) as lng_prev
+         from ubicaciones_historial
+         where usuario_id = $1
+           and (capturado_en at time zone 'America/Argentina/Buenos_Aires')::date >= $2::date
+           and (capturado_en at time zone 'America/Argentina/Buenos_Aires')::date <= $3::date
+       )
+       select
+         to_char(fecha, 'YYYY-MM-DD') as fecha,
+         to_char(min(capturado_en) at time zone 'America/Argentina/Buenos_Aires', 'HH24:MI') as hora_inicio,
+         to_char(max(capturado_en) at time zone 'America/Argentina/Buenos_Aires', 'HH24:MI') as hora_fin,
+         count(*)::int as cantidad,
+         -- Misma fórmula de Haversine que distanciaKm() de acá arriba,
+         -- pero calculada en SQL (con lag()) para no traer cada punto —
+         -- el "least(1, ...)" es solo para cubrirse de un redondeo de
+         -- punto flotante que deje el argumento de asin() en 1.0000001,
+         -- lo que rompería la cuenta con un NaN.
+         coalesce(sum(
+           case when lat_prev is null then 0 else
+             6371 * 2 * asin(least(1, sqrt(
+               sin(radians(latitud - lat_prev)/2)^2 +
+               cos(radians(lat_prev)) * cos(radians(latitud)) * sin(radians(longitud - lng_prev)/2)^2
+             )))
+           end
+         ), 0)::numeric as km
+       from puntos
+       group by fecha
+       order by fecha desc`,
+      [usuarioId, desde, hasta]
+    );
+    const dias = rows.map((r) => ({
+      fecha: r.fecha,
+      horaInicio: r.hora_inicio,
+      horaFin: r.hora_fin,
+      cantidad: r.cantidad,
+      km: Math.round(Number(r.km) * 10) / 10,
+    }));
+    res.json({
+      desde,
+      hasta,
+      dias,
+      totalKm: Math.round(dias.reduce((acc, d) => acc + d.km, 0) * 10) / 10,
+      totalDias: dias.length,
     });
   } catch (err) { next(err); }
 });

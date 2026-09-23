@@ -5,28 +5,114 @@
   <a class="btn secondary" href="/vendedores/ubicacion">&larr; Volver a Ubicación</a>
 </div>
 
-<p style="color:var(--ink-soft); font-size:.9rem; margin-top:-8px;">
-  Entre estas horas, la app de cada vendedor manda su posición sola cada
-  cinco minutos (así se arma el historial de recorrido). Fuera de este
-  horario la app no manda nada por su cuenta — "Localizar ahora" sigue
+<p style="color:var(--ink-soft); font-size:.9rem; margin-top:-10px; max-width:640px;">
+  Durante las franjas horarias cargadas acá, la app de cada vendedor manda
+  su posición sola cada cinco minutos (así se arma el historial de
+  recorrido). Cada día de la semana es independiente: se puede cargar más
+  de una franja por día (por ejemplo 9 a 13 y 17 a 22), o desmarcar un día
+  entero para que ese día no haga seguimiento. Fuera de las franjas
+  cargadas la app no manda nada por su cuenta — "Localizar ahora" sigue
   funcionando a cualquier hora, eso es aparte.
 </p>
 
-<form class="card" method="post" action="/vendedores/ubicacion/horario" style="max-width:420px;">
-  <% if (guardado) { %>
-    <p style="color:#1e7a34; margin-top:0;">Horario guardado.</p>
-  <% } %>
-  <div>
-    <label for="hora_inicio">Desde</label>
-    <input type="time" id="hora_inicio" name="hora_inicio" value="<%= horaInicio %>" required>
+<% if (guardado) { %>
+  <div class="pendiente" style="border-color:#bfe3c6; color:#1e7a34; margin-bottom:16px; padding:12px 20px; max-width:640px;">
+    <p style="margin:0;">Horario guardado.</p>
   </div>
-  <div>
-    <label for="hora_fin">Hasta</label>
-    <input type="time" id="hora_fin" name="hora_fin" value="<%= horaFin %>" required>
+<% } %>
+<% if (error) { %>
+  <div class="pendiente" style="border-color:#e3b8b8; color:#7a2b2b; margin-bottom:16px; padding:12px 20px; max-width:640px;">
+    <p style="margin:0;"><%= error %></p>
   </div>
-  <div>
+<% } %>
+
+<form method="post" action="/vendedores/ubicacion/horario" style="max-width:640px;">
+  <% dias.forEach((d) => { %>
+  <div class="dia-horario" data-dia="<%= d.diaSemana %>" style="margin-bottom:12px;">
+    <label class="check-row" style="font-weight:600; font-size:.98rem;">
+      <input type="checkbox" class="dia-activo" name="dias[<%= d.diaSemana %>][activo]" <%= d.activo ? 'checked' : '' %>>
+      <span><%= d.etiqueta %></span>
+    </label>
+
+    <div class="franjas-dia" style="<%= d.activo ? '' : 'display:none;' %> margin-top:10px;">
+      <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr><th style="width:35%;">Desde</th><th style="width:35%;">Hasta</th><th></th></tr>
+        </thead>
+        <tbody class="filas-franjas">
+          <% d.franjas.forEach((f, i) => { %>
+          <tr>
+            <td data-label="Desde"><input type="time" data-campo="inicio" name="dias[<%= d.diaSemana %>][franjas][<%= i %>][inicio]" value="<%= f.inicio %>"></td>
+            <td data-label="Hasta"><input type="time" data-campo="fin" name="dias[<%= d.diaSemana %>][franjas][<%= i %>][fin]" value="<%= f.fin %>"></td>
+            <td><button type="button" class="btn secondary quitar-franja">Quitar</button></td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
+      </div>
+      <button type="button" class="btn secondary agregar-franja" style="margin-top:8px;">+ Agregar franja</button>
+    </div>
+  </div>
+  <% }) %>
+
+  <div style="margin-top:6px;">
     <button class="btn" type="submit">Guardar</button>
   </div>
 </form>
+
+<script>
+(function () {
+  // Cada día se maneja por separado (buscando adentro de su propia
+  // tarjeta .dia-horario), así agregar/quitar una franja en un día no
+  // toca los índices de los demás.
+  document.querySelectorAll('.dia-horario').forEach(function (tarjeta) {
+    var franjasDiv = tarjeta.querySelector('.franjas-dia');
+    var tbody = tarjeta.querySelector('.filas-franjas');
+    var checkbox = tarjeta.querySelector('.dia-activo');
+    var dia = tarjeta.dataset.dia;
+
+    function reindexar() {
+      tbody.querySelectorAll('tr').forEach(function (tr, i) {
+        tr.querySelectorAll('[data-campo]').forEach(function (el) {
+          el.name = 'dias[' + dia + '][franjas][' + i + '][' + el.dataset.campo + ']';
+        });
+      });
+    }
+
+    function crearFila() {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td data-label="Desde"><input type="time" data-campo="inicio"></td>' +
+        '<td data-label="Hasta"><input type="time" data-campo="fin"></td>' +
+        '<td><button type="button" class="btn secondary quitar-franja">Quitar</button></td>';
+      return tr;
+    }
+
+    checkbox.addEventListener('change', function () {
+      franjasDiv.style.display = checkbox.checked ? '' : 'none';
+      // Al activar un día que quedó sin ninguna franja cargada (por
+      // ejemplo, se habían quitado todas antes de destildarlo), se le
+      // pone una en blanco para que haya algo para completar.
+      if (checkbox.checked && tbody.querySelectorAll('tr').length === 0) {
+        tbody.appendChild(crearFila());
+        reindexar();
+      }
+    });
+
+    tarjeta.querySelector('.agregar-franja').addEventListener('click', function () {
+      tbody.appendChild(crearFila());
+      reindexar();
+    });
+
+    tbody.addEventListener('click', function (e) {
+      if (e.target.classList.contains('quitar-franja')) {
+        e.target.closest('tr').remove();
+        reindexar();
+      }
+    });
+  });
+})();
+</script>
 
 <%- include('../partials/foot') %>

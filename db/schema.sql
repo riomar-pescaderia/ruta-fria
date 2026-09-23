@@ -770,10 +770,44 @@ create index if not exists idx_ubicaciones_historial_usuario_fecha
 
 -- Horario laboral en el que la app tiene permitido mandar ubicación sola
 -- (además de "Localizar ahora", que sigue funcionando a cualquier hora).
--- Se guarda como minutos desde la medianoche (480 = 08:00, 1140 = 19:00)
--- para poder reusar la tabla "config" (clave/valor numérico) que ya
--- existe, editable desde /vendedores/ubicacion/horario.
+-- Estas dos claves de "config" fueron el horario único original (un solo
+-- Desde/Hasta para los 7 días) — quedan solo como valor de arranque para
+-- la migración de más abajo, ya no las lee ningún código nuevo.
 insert into config (clave, valor) values
   ('tracking_hora_inicio_min', 480),
   ('tracking_hora_fin_min', 1140)
 on conflict (clave) do nothing;
+
+-- Horario de seguimiento, versión con franjas múltiples por día y
+-- días independientes entre sí (reemplaza el horario único de arriba):
+-- cada franja es "el vendedor X manda ubicación sola entre estos dos
+-- horarios, este día de la semana". Un día sin ninguna franja cargada
+-- significa seguimiento apagado ese día. dia_semana usa la misma
+-- convención que extract(dow from ...) de Postgres y que
+-- Calendar.DAY_OF_WEEK-1 del lado de la app: 0=domingo … 6=sábado.
+create table if not exists tracking_horarios (
+  id serial primary key,
+  dia_semana integer not null check (dia_semana between 0 and 6),
+  hora_inicio_min integer not null check (hora_inicio_min >= 0 and hora_inicio_min < 1440),
+  hora_fin_min integer not null check (hora_fin_min > 0 and hora_fin_min <= 1440),
+  check (hora_fin_min > hora_inicio_min)
+);
+create index if not exists idx_tracking_horarios_dia on tracking_horarios (dia_semana);
+
+-- Migración de arranque, corre una sola vez (si la tabla nueva ya tiene
+-- algo cargado, no hace nada — es seguro dejarla acá para siempre, igual
+-- que el resto de este archivo): si había un horario único viejo
+-- guardado en "config", se lo replica como la misma franja en los 7 días
+-- para que ningún vendedor se quede sin seguimiento con esta actualización.
+-- Si es una base nueva (sin esas claves tampoco), usa 08:00–19:00 todos
+-- los días como valor de arranque razonable.
+do $$
+begin
+  if not exists (select 1 from tracking_horarios) then
+    insert into tracking_horarios (dia_semana, hora_inicio_min, hora_fin_min)
+    select dia,
+           coalesce((select valor from config where clave = 'tracking_hora_inicio_min'), 480)::integer,
+           coalesce((select valor from config where clave = 'tracking_hora_fin_min'), 1140)::integer
+    from generate_series(0, 6) as dia;
+  end if;
+end $$;

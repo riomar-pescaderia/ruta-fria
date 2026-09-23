@@ -221,6 +221,17 @@ form.card {
   box-shadow: 0 1px 3px rgba(22,35,47,.04);
 }
 
+/* Una tarjeta suelta (no necesariamente un <form>) con el mismo look que
+   form.card de arriba — usada, por ejemplo, para agrupar cada día en
+   /vendedores/ubicacion/horario. */
+.dia-horario {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 3px rgba(22,35,47,.04);
+}
+
 label { font-size: 0.85rem; color: var(--ink-soft); display: block; margin-bottom: 4px; }
 input[type=text], input[type=number], input[type=date], input[type=password], select, textarea {
   width: 100%;

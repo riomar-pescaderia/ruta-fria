@@ -137,17 +137,22 @@ router.post('/ubicacion', requireTokenApp, async (req, res) => {
 // GET /api/app/config — la app lo consulta al loguearse y cada vez que
 // arranca el seguimiento del día, para saber entre qué horas tiene
 // permitido mandar ubicación sola (lo configura un administrador desde
-// /vendedores/ubicacion/horario). Son minutos desde la medianoche.
+// /vendedores/ubicacion/horario). Devuelve todas las franjas cargadas,
+// de todos los días de la semana de una — es poco (como mucho un puñado
+// de filas) y así la app no tiene que volver a pedir nada al cambiar de
+// día. dia_semana: 0=domingo … 6=sábado (extract(dow from ...) de
+// Postgres); horas en minutos desde la medianoche.
 router.get('/config', requireTokenApp, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `select clave, valor from config where clave in ('tracking_hora_inicio_min', 'tracking_hora_fin_min')`
+      'select dia_semana, hora_inicio_min, hora_fin_min from tracking_horarios order by dia_semana, hora_inicio_min'
     );
-    const porClave = {};
-    rows.forEach((r) => { porClave[r.clave] = Number(r.valor); });
     res.json({
-      tracking_hora_inicio_min: porClave.tracking_hora_inicio_min ?? 480,
-      tracking_hora_fin_min: porClave.tracking_hora_fin_min ?? 1140,
+      horarios: rows.map((r) => ({
+        dia_semana: r.dia_semana,
+        hora_inicio_min: r.hora_inicio_min,
+        hora_fin_min: r.hora_fin_min,
+      })),
     });
   } catch (err) {
     console.error('[ruta-fria] error leyendo config de app:', err.message);

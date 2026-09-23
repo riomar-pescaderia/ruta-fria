@@ -19,6 +19,54 @@
 
 <div id="mapa" style="height:480px; border:1px solid var(--line); border-radius:10px;"></div>
 
+<div class="informe-seccion" style="margin-top:28px;">
+  <h2>Histórico</h2>
+  <p class="informe-nota">Recorrido día por día del período elegido. Hacé click en una fila para verla en el mapa de arriba.</p>
+
+  <div class="rangos-rapidos" id="rangos-rapidos-historico">
+    <% rangosRapidosHistorico.forEach(r => {
+         const activo = filtroHistoricoInicial.desde === r.desde && filtroHistoricoInicial.hasta === r.hasta; %>
+      <a href="#" class="<%= activo ? 'activo' : '' %>" data-desde="<%= r.desde %>" data-hasta="<%= r.hasta %>"><%= r.etiqueta %></a>
+    <% }) %>
+  </div>
+
+  <form class="filtros-informe" id="form-historico" style="margin-bottom:16px;">
+    <div>
+      <label for="historico-desde">Desde</label>
+      <input type="date" id="historico-desde" value="<%= filtroHistoricoInicial.desde %>">
+    </div>
+    <div>
+      <label for="historico-hasta">Hasta</label>
+      <input type="date" id="historico-hasta" value="<%= filtroHistoricoInicial.hasta %>">
+    </div>
+    <div>
+      <button class="btn" type="submit">Filtrar</button>
+    </div>
+  </form>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="kpi-etiqueta">Días con recorrido</div>
+      <div class="kpi-valor" id="historico-total-dias">—</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-etiqueta">Distancia total del período</div>
+      <div class="kpi-valor" id="historico-total-km">—</div>
+    </div>
+  </div>
+
+  <div style="overflow-x:auto;">
+  <table class="tabla-informe">
+    <thead>
+      <tr><th>Fecha</th><th>Desde</th><th>Hasta</th><th class="num">Distancia</th></tr>
+    </thead>
+    <tbody id="historico-tbody">
+      <tr><td colspan="4" class="empty">Cargando...</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 (function () {
@@ -81,6 +129,75 @@
   });
 
   cargar('<%= fechaInicial %>');
+
+  // --- Histórico: tabla día por día debajo del mapa, con sus propios
+  // filtros de rango (independientes del selector de "Día" de arriba,
+  // que solo maneja qué se ve en el mapa) ---
+  var campoDesde = document.getElementById('historico-desde');
+  var campoHasta = document.getElementById('historico-hasta');
+  var tbody = document.getElementById('historico-tbody');
+  var totalDiasEl = document.getElementById('historico-total-dias');
+  var totalKmEl = document.getElementById('historico-total-km');
+
+  function fechaDDMMYYYY(iso) {
+    var partes = iso.split('-');
+    return partes[2] + '/' + partes[1] + '/' + partes[0];
+  }
+
+  function cargarHistorico(desde, hasta) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">Cargando...</td></tr>';
+    totalDiasEl.textContent = '—';
+    totalKmEl.textContent = '—';
+    fetch('/vendedores/ubicacion/' + USUARIO_ID + '/historial/resumen?desde=' + desde + '&hasta=' + hasta)
+      .then(function (r) { return r.json(); })
+      .then(function (datos) {
+        totalDiasEl.textContent = datos.totalDias;
+        totalKmEl.textContent = datos.totalKm.toFixed(1).replace('.', ',') + ' km';
+        if (datos.dias.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="empty">No hay recorrido guardado en este período.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = '';
+        datos.dias.forEach(function (d) {
+          var fila = document.createElement('tr');
+          fila.style.cursor = 'pointer';
+          fila.title = 'Ver este día en el mapa de arriba';
+          fila.innerHTML =
+            '<td>' + fechaDDMMYYYY(d.fecha) + '</td>' +
+            '<td>' + d.horaInicio + '</td>' +
+            '<td>' + d.horaFin + '</td>' +
+            '<td class="num mono">' + d.km.toFixed(1).replace('.', ',') + ' km</td>';
+          fila.addEventListener('click', function () {
+            document.getElementById('fecha').value = d.fecha;
+            cargar(d.fecha);
+            document.getElementById('mapa').scrollIntoView({ behavior: 'smooth', block: 'center' });
+          });
+          tbody.appendChild(fila);
+        });
+      })
+      .catch(function () {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty">No se pudo cargar el histórico.</td></tr>';
+      });
+  }
+
+  document.querySelectorAll('#rangos-rapidos-historico a').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      document.querySelectorAll('#rangos-rapidos-historico a').forEach(function (x) { x.classList.remove('activo'); });
+      a.classList.add('activo');
+      campoDesde.value = a.dataset.desde;
+      campoHasta.value = a.dataset.hasta;
+      cargarHistorico(a.dataset.desde, a.dataset.hasta);
+    });
+  });
+
+  document.getElementById('form-historico').addEventListener('submit', function (e) {
+    e.preventDefault();
+    document.querySelectorAll('#rangos-rapidos-historico a').forEach(function (x) { x.classList.remove('activo'); });
+    cargarHistorico(campoDesde.value, campoHasta.value);
+  });
+
+  cargarHistorico(campoDesde.value, campoHasta.value);
 })();
 </script>
 
