@@ -148,17 +148,26 @@ function aMinutos(valor) {
   return horas * 60 + minutos;
 }
 
+// Límites razonables para "cada cuántos minutos" — 1 para no impedir el
+// caso que se pidió (lectura cada 1 minuto), 60 como techo por si alguien
+// carga un número muy grande sin querer (no tiene sentido "seguimiento"
+// con más de una hora entre puntos).
+const INTERVALO_MIN_MIN = 1;
+const INTERVALO_MIN_MAX = 60;
+
 // GET /vendedores/ubicacion/horario — pantalla para definir, día por día
 // de la semana, entre qué horas la app tiene permitido mandar ubicación
-// sola. Cada día puede tener varias franjas (por ejemplo 9 a 13 y 17 a
+// sola, y cada cuántos minutos lo hace mientras está en una franja
+// activa. Cada día puede tener varias franjas (por ejemplo 9 a 13 y 17 a
 // 22) o ninguna (seguimiento apagado ese día). Fuera de las franjas
 // cargadas la app no manda nada por su cuenta (sigue respondiendo a
 // "Localizar ahora" a cualquier hora, eso es aparte).
 router.get('/horario', async (req, res, next) => {
   try {
-    const { rows } = await pool.query(
-      'select dia_semana, hora_inicio_min, hora_fin_min from tracking_horarios order by dia_semana, hora_inicio_min'
-    );
+    const [{ rows }, { rows: configRows }] = await Promise.all([
+      pool.query('select dia_semana, hora_inicio_min, hora_fin_min from tracking_horarios order by dia_semana, hora_inicio_min'),
+      pool.query(`select valor from config where clave = 'tracking_intervalo_min'`),
+    ]);
     const franjasPorDia = {};
     rows.forEach((r) => {
       if (!franjasPorDia[r.dia_semana]) franjasPorDia[r.dia_semana] = [];
@@ -174,6 +183,9 @@ router.get('/horario', async (req, res, next) => {
     }));
     res.render('vendedores/horario', {
       dias,
+      intervaloMin: configRows[0] ? Number(configRows[0].valor) : 5,
+      intervaloMinMin: INTERVALO_MIN_MIN,
+      intervaloMinMax: INTERVALO_MIN_MAX,
       guardado: req.query.guardado === '1',
       error: req.query.error || null,
     });
@@ -182,6 +194,13 @@ router.get('/horario', async (req, res, next) => {
 
 router.post('/horario', async (req, res, next) => {
   try {
+    const intervaloMin = Number(req.body && req.body.intervalo_min);
+    if (!Number.isInteger(intervaloMin) || intervaloMin < INTERVALO_MIN_MIN || intervaloMin > INTERVALO_MIN_MAX) {
+      return res.redirect(
+        '/vendedores/ubicacion/horario?error=' +
+        encodeURIComponent(`La frecuencia tiene que ser un número entero entre ${INTERVALO_MIN_MIN} y ${INTERVALO_MIN_MAX} minutos.`)
+      );
+    }
     const diasBody = (req.body && req.body.dias) || {};
     // Filas a insertar, ya validadas — y en paralelo, un texto de error
     // legible si algo no cierra, para poder avisar en qué día está el
@@ -236,6 +255,11 @@ router.post('/horario', async (req, res, next) => {
           [f.diaSemana, f.inicioMin, f.finMin]
         );
       }
+      await client.query(
+        `insert into config (clave, valor) values ('tracking_intervalo_min', $1)
+         on conflict (clave) do update set valor = excluded.valor`,
+        [intervaloMin]
+      );
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});

@@ -811,3 +811,11 @@ begin
     from generate_series(0, 6) as dia;
   end if;
 end $$;
+
+-- Cada cuánto manda su posición la app mientras está en una franja activa
+-- (antes era un número fijo en el código de la app — TrackingService.kt —
+-- y había que recompilarla para cambiarlo; ahora es editable desde
+-- /vendedores/ubicacion/horario, reusando la tabla "config" porque es un
+-- solo valor global, no algo por día). Minutos enteros.
+insert into config (clave, valor) values ('tracking_intervalo_min', 1)
+on conflict (clave) do nothing;

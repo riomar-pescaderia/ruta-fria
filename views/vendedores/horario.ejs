@@ -7,12 +7,12 @@
 
 <p style="color:var(--ink-soft); font-size:.9rem; margin-top:-10px; max-width:640px;">
   Durante las franjas horarias cargadas acá, la app de cada vendedor manda
-  su posición sola cada cinco minutos (así se arma el historial de
-  recorrido). Cada día de la semana es independiente: se puede cargar más
-  de una franja por día (por ejemplo 9 a 13 y 17 a 22), o desmarcar un día
-  entero para que ese día no haga seguimiento. Fuera de las franjas
-  cargadas la app no manda nada por su cuenta — "Localizar ahora" sigue
-  funcionando a cualquier hora, eso es aparte.
+  su posición sola, con la frecuencia que definas más abajo (así se arma
+  el historial de recorrido). Cada día de la semana es independiente: se
+  puede cargar más de una franja por día (por ejemplo 9 a 13 y 17 a 22), o
+  desmarcar un día entero para que ese día no haga seguimiento. Fuera de
+  las franjas cargadas la app no manda nada por su cuenta — "Localizar
+  ahora" sigue funcionando a cualquier hora, eso es aparte.
 </p>
 
 <% if (guardado) { %>
@@ -27,6 +27,21 @@
 <% } %>
 
 <form method="post" action="/vendedores/ubicacion/horario" style="max-width:640px;">
+  <div class="dia-horario" style="margin-bottom:16px;">
+    <label for="intervalo_min" style="font-weight:600; font-size:.98rem; color:var(--ink); margin-bottom:8px;">Frecuencia de lectura</label>
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <span>Cada</span>
+      <input type="number" id="intervalo_min" name="intervalo_min" min="<%= intervaloMinMin %>" max="<%= intervaloMinMax %>" step="1" value="<%= intervaloMin %>" style="width:80px;" required>
+      <span>minutos, mientras esté dentro de una franja activa.</span>
+    </div>
+    <p style="color:var(--ink-soft); font-size:.82rem; margin:8px 0 0;">
+      Bajar este número muestra el recorrido con más detalle, pero consume
+      más batería del celular (cada lectura prende el GPS de nuevo). Entre
+      2 y 5 minutos suele ser un buen equilibrio; 1 minuto da el recorrido
+      más preciso a costa de la batería.
+    </p>
+  </div>
+
   <% dias.forEach((d) => { %>
   <div class="dia-horario" data-dia="<%= d.diaSemana %>" style="margin-bottom:12px;">
     <label class="check-row" style="font-weight:600; font-size:.98rem;">

@@ -136,23 +136,26 @@ router.post('/ubicacion', requireTokenApp, async (req, res) => {
 
 // GET /api/app/config — la app lo consulta al loguearse y cada vez que
 // arranca el seguimiento del día, para saber entre qué horas tiene
-// permitido mandar ubicación sola (lo configura un administrador desde
-// /vendedores/ubicacion/horario). Devuelve todas las franjas cargadas,
-// de todos los días de la semana de una — es poco (como mucho un puñado
-// de filas) y así la app no tiene que volver a pedir nada al cambiar de
-// día. dia_semana: 0=domingo … 6=sábado (extract(dow from ...) de
-// Postgres); horas en minutos desde la medianoche.
+// permitido mandar ubicación sola y cada cuántos minutos (lo configura un
+// administrador desde /vendedores/ubicacion/horario, los dos se editan
+// juntos ahí). Devuelve todas las franjas cargadas, de todos los días de
+// la semana de una — es poco (como mucho un puñado de filas) y así la
+// app no tiene que volver a pedir nada al cambiar de día. dia_semana:
+// 0=domingo … 6=sábado (extract(dow from ...) de Postgres); horas en
+// minutos desde la medianoche.
 router.get('/config', requireTokenApp, async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      'select dia_semana, hora_inicio_min, hora_fin_min from tracking_horarios order by dia_semana, hora_inicio_min'
-    );
+    const [{ rows }, { rows: configRows }] = await Promise.all([
+      pool.query('select dia_semana, hora_inicio_min, hora_fin_min from tracking_horarios order by dia_semana, hora_inicio_min'),
+      pool.query(`select valor from config where clave = 'tracking_intervalo_min'`),
+    ]);
     res.json({
       horarios: rows.map((r) => ({
         dia_semana: r.dia_semana,
         hora_inicio_min: r.hora_inicio_min,
         hora_fin_min: r.hora_fin_min,
       })),
+      tracking_intervalo_min: configRows[0] ? Number(configRows[0].valor) : 5,
     });
   } catch (err) {
     console.error('[ruta-fria] error leyendo config de app:', err.message);
