@@ -419,6 +419,7 @@ tr.fila-cambio td:nth-child(4) { color: #8a5a12; }
 .tile-clientes { background: var(--blue); }
 .tile-articulos { background: #2e9e8f; }
 .tile-prospectos { background: #8b5fbf; }
+.tile-nueva-visita { background: #6f4fa3; }
 .tile-ventas { background: var(--orange); }
 .tile-cuenta-corriente { background: #3f5c85; }
 .tile-compras { background: #e2604f; }

@@ -9,7 +9,7 @@ const pool = require('../db/pool');
 const { geocodificarDireccion, buscarDirecciones } = require('../lib/geocode');
 const { listarConVisitas } = require('../lib/prospectosCompartido');
 const { buscarClienteCoincidente, buscarSugerenciasCliente } = require('../lib/vinculacion');
-const { inputAFecha, fechaHoraInput } = require('../lib/fechas');
+const { inputAFecha, fechaHoraInput, hoyAr } = require('../lib/fechas');
 const { requireAdmin } = require('../lib/auth');
 
 function redondearCoord(n) {
@@ -70,6 +70,11 @@ async function traerContactos(prospectoId) {
 router.get('/', async (req, res, next) => {
   try {
     const prospectos = await listarConVisitas();
+    // "YYYY-MM-DD" en hora de Argentina — así el filtro de fecha del
+    // listado (que compara contra un <input type="date">, que manda el
+    // mismo formato) puede comparar strings directo, sin líos de huso
+    // horario cerca de la medianoche.
+    prospectos.forEach((p) => { p.ultimaVisitaIso = p.ultima_visita ? hoyAr(p.ultima_visita) : null; });
     res.render('prospectos/lista', { prospectos });
   } catch (err) { next(err); }
 });
@@ -94,6 +99,7 @@ router.post('/', async (req, res, next) => {
   const contactos = leerContactos(req.body);
   let lat = redondearCoord(req.body.lat);
   let lng = redondearCoord(req.body.lng);
+  let ciudad = (req.body.ciudad || '').trim() || null;
   try {
     if (!nombre || !nombre.trim()) throw new Error('Falta el nombre del negocio.');
     if (!direccion || !direccion.trim()) throw new Error('Falta la dirección.');
@@ -102,9 +108,16 @@ router.post('/', async (req, res, next) => {
     // pudo geocodificar, o el usuario no tocó "Buscar dirección"), se
     // intenta una vez más del lado del servidor antes de guardar sin
     // ubicación — así el prospecto casi nunca queda sin punto en el mapa.
+    // De paso, si tampoco llegó la ciudad (el campo se completa solo al
+    // elegir una opción en el buscador del navegador), se aprovecha este
+    // mismo resultado para completarla.
     if (lat === null || lng === null) {
       const geo = await geocodificarDireccion(direccion);
-      if (geo) { lat = geo.lat; lng = geo.lng; }
+      if (geo) {
+        lat = geo.lat;
+        lng = geo.lng;
+        if (!ciudad) ciudad = geo.ciudad || null;
+      }
     }
 
     // Se intenta reconocer solo si el negocio ya está cargado como
@@ -116,9 +129,9 @@ router.post('/', async (req, res, next) => {
     });
 
     const { rows } = await pool.query(
-      `insert into prospectos (nombre, direccion, notas, lat, lng, cuit_dni, cliente_id)
-       values ($1,$2,$3,$4,$5,$6,$7) returning id`,
-      [nombre.trim(), direccion.trim(), notas || null, lat, lng, cuit_dni || null, clienteCoincidente ? clienteCoincidente.id : null]
+      `insert into prospectos (nombre, direccion, notas, lat, lng, cuit_dni, ciudad, cliente_id)
+       values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
+      [nombre.trim(), direccion.trim(), notas || null, lat, lng, cuit_dni || null, ciudad, clienteCoincidente ? clienteCoincidente.id : null]
     );
     await guardarContactos(rows[0].id, contactos);
     // "recien_guardado=1" hace que, si el prospecto quedó sin vincular pero
@@ -128,7 +141,7 @@ router.post('/', async (req, res, next) => {
     res.redirect(`/prospectos/${rows[0].id}?recien_guardado=1`);
   } catch (err) {
     res.render('prospectos/form', {
-      prospecto: { nombre, direccion, notas, lat, lng, cuit_dni },
+      prospecto: { nombre, direccion, notas, lat, lng, ciudad, cuit_dni },
       contactos,
       error: err.message,
       accion: '/prospectos',
@@ -170,13 +183,18 @@ router.post('/:id', requireAdmin, async (req, res, next) => {
   const contactos = leerContactos(req.body);
   let lat = redondearCoord(req.body.lat);
   let lng = redondearCoord(req.body.lng);
+  let ciudad = (req.body.ciudad || '').trim() || null;
   try {
     if (!nombre || !nombre.trim()) throw new Error('Falta el nombre del negocio.');
     if (!direccion || !direccion.trim()) throw new Error('Falta la dirección.');
 
     if (lat === null || lng === null) {
       const geo = await geocodificarDireccion(direccion);
-      if (geo) { lat = geo.lat; lng = geo.lng; }
+      if (geo) {
+        lat = geo.lat;
+        lng = geo.lng;
+        if (!ciudad) ciudad = geo.ciudad || null;
+      }
     }
 
     const { rows: actualRows } = await pool.query('select cliente_id from prospectos where id = $1', [req.params.id]);
@@ -194,9 +212,9 @@ router.post('/:id', requireAdmin, async (req, res, next) => {
     }
 
     await pool.query(
-      `update prospectos set nombre=$1, direccion=$2, notas=$3, lat=$4, lng=$5, cuit_dni=$6, cliente_id=$7
-       where id = $8`,
-      [nombre.trim(), direccion.trim(), notas || null, lat, lng, cuit_dni || null, clienteId, req.params.id]
+      `update prospectos set nombre=$1, direccion=$2, notas=$3, lat=$4, lng=$5, cuit_dni=$6, ciudad=$7, cliente_id=$8
+       where id = $9`,
+      [nombre.trim(), direccion.trim(), notas || null, lat, lng, cuit_dni || null, ciudad, clienteId, req.params.id]
     );
     await guardarContactos(req.params.id, contactos);
     // Al editar (a diferencia de al crear) ya suele haber visitas
@@ -207,7 +225,7 @@ router.post('/:id', requireAdmin, async (req, res, next) => {
     res.redirect(`/prospectos/${req.params.id}?recien_guardado=1#historial-visitas`);
   } catch (err) {
     res.render('prospectos/form', {
-      prospecto: { id: req.params.id, nombre, direccion, notas, lat, lng, cuit_dni },
+      prospecto: { id: req.params.id, nombre, direccion, notas, lat, lng, ciudad, cuit_dni },
       contactos,
       error: err.message,
       accion: `/prospectos/${req.params.id}`,

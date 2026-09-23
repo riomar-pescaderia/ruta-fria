@@ -51,6 +51,7 @@
 
   <input type="hidden" id="lat" name="lat" value="<%= prospecto.lat != null ? prospecto.lat : '' %>">
   <input type="hidden" id="lng" name="lng" value="<%= prospecto.lng != null ? prospecto.lng : '' %>">
+  <input type="hidden" id="ciudad" name="ciudad" value="<%= prospecto.ciudad || '' %>">
 
   <div>
     <label for="notas">Notas (opcional)</label>
@@ -114,6 +115,19 @@
     listaOpciones.innerHTML = '';
   }
 
+  // Al elegir un resultado de la búsqueda (acá o en el caso de un solo
+  // resultado, más abajo) se reemplaza lo que se haya tipeado a mano por
+  // la dirección tal como la encontró el buscador — así el campo nunca
+  // queda con un texto que no coincide con el punto marcado en el mapa.
+  // Si no se pudo reconocer la calle (Nominatim no siempre tiene el
+  // callejero completo en esta zona) se deja el nombre completo del
+  // lugar antes que perder la referencia. La ciudad viaja aparte, en un
+  // campo oculto, para poder filtrarla después en "Historial visitas".
+  function fijarDireccionDesdeOpcion(op) {
+    document.getElementById('direccion').value = op.direccionCorta || op.etiqueta;
+    document.getElementById('ciudad').value = op.ciudad || '';
+  }
+
   function mostrarOpciones(opciones) {
     listaOpciones.innerHTML = '';
     opciones.forEach(function (op, i) {
@@ -125,7 +139,8 @@
         (i % 2 === 0 ? '#fff' : '#f5f7f4') + '; cursor:pointer; font-size:.85rem; border-bottom:1px solid var(--line);';
       boton.addEventListener('click', function () {
         ubicarMarcador(op.lat, op.lng, true);
-        estadoGeo.textContent = '📍 ' + op.etiqueta + ' — si no es exacto, arrastrá el marcador hasta el lugar correcto.';
+        fijarDireccionDesdeOpcion(op);
+        estadoGeo.textContent = '📍 ' + (op.direccionCorta || op.etiqueta) + ' — si no es exacto, arrastrá el marcador hasta el lugar correcto.';
         ocultarOpciones();
       });
       li.appendChild(boton);
@@ -190,7 +205,8 @@
           // Un solo resultado: se ubica directo, pero mostrando de dónde
           // es para poder corregir con un click en el mapa si no es así.
           ubicarMarcador(opciones[0].lat, opciones[0].lng, true);
-          estadoGeo.textContent = '📍 ' + opciones[0].etiqueta + ' — si no es exacto, arrastrá el marcador o hacé click en el mapa.';
+          fijarDireccionDesdeOpcion(opciones[0]);
+          estadoGeo.textContent = '📍 ' + (opciones[0].direccionCorta || opciones[0].etiqueta) + ' — si no es exacto, arrastrá el marcador o hacé click en el mapa.';
           // En celular, después de buscar conviene bajar la vista hasta el
           // mapa: el resultado quedó arriba, tapado por el teclado virtual
           // que Android/iOS no cierran solos al tocar un botón.

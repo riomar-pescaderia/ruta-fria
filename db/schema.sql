@@ -264,6 +264,14 @@ update prospectos set cliente_id = null where activo = false and cliente_id is n
 -- reconocerlo automáticamente si más adelante se carga como cliente.
 alter table prospectos add column if not exists cuit_dni text;
 
+-- Ciudad del prospecto, aparte de la dirección completa — así el listado
+-- de "Historial visitas" puede ofrecer un filtro por ciudad sin tener que
+-- adivinarla recortando el texto libre de "direccion". Se completa sola
+-- cuando se busca la dirección en el mapa (Nominatim la devuelve como
+-- parte del resultado, ver lib/geocode.js) — queda null en los prospectos
+-- ya cargados hasta que se les vuelva a buscar la dirección una vez.
+alter table prospectos add column if not exists ciudad text;
+
 -- Un prospecto puede tener más de una persona de contacto (dueño,
 -- encargado, etc.), cada una con su propio teléfono. Reemplaza a las
 -- columnas sueltas "contacto"/"telefono" de prospectos, que quedan nada

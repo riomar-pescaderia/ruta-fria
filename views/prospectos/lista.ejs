@@ -1,7 +1,7 @@
 <%- include('../partials/head') %>
 
 <div class="toolbar">
-  <h1>Historial de visitas</h1>
+  <h1>Historial visitas</h1>
   <div style="display:flex; gap:8px; flex-wrap:wrap;">
     <a class="btn secondary" href="/prospectos/mapa">Ver mapa de visitas</a>
     <a class="btn" href="/prospectos/nuevo">+ Nueva visita</a>
@@ -12,16 +12,50 @@
   <p class="empty">Todavía no cargaste ninguna visita. Empezá con "+ Nueva visita".</p>
 <% } else { %>
 
-<div style="max-width:340px; margin-bottom:14px;">
-  <input type="text" id="buscar-prospecto" placeholder="Buscar por nombre o dirección...">
+<%
+  // Ciudades disponibles para el filtro — solo las que ya están cargadas,
+  // ordenadas alfabéticamente. Un prospecto sin ciudad (todavía no se le
+  // buscó la dirección con el buscador del mapa, ver form.ejs) no
+  // desaparece del listado: queda afuera solo si se elige puntualmente
+  // "Sin ciudad cargada" para encontrar esos casos y completarlos.
+  const ciudades = [...new Set(prospectos.map(p => p.ciudad).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+  const hayConCiudadVacia = prospectos.some(p => !p.ciudad);
+%>
+
+<div class="filtros-informe">
+  <div style="flex:2; min-width:200px;">
+    <label for="buscar-prospecto">Buscar por nombre o dirección</label>
+    <input type="text" id="buscar-prospecto" placeholder="Escribí para filtrar...">
+  </div>
+  <div>
+    <label for="filtro-ciudad">Ciudad</label>
+    <select id="filtro-ciudad">
+      <option value="">Todas</option>
+      <% ciudades.forEach(c => { %><option value="<%= c %>"><%= c %></option><% }) %>
+      <% if (hayConCiudadVacia) { %><option value="__sin_ciudad__">Sin ciudad cargada</option><% } %>
+    </select>
+  </div>
+  <div>
+    <label for="filtro-desde">Última visita desde</label>
+    <input type="date" id="filtro-desde">
+  </div>
+  <div>
+    <label for="filtro-hasta">Última visita hasta</label>
+    <input type="date" id="filtro-hasta">
+  </div>
+  <div>
+    <button type="button" id="filtro-limpiar" class="btn secondary">Limpiar filtros</button>
+  </div>
 </div>
-<p id="sin-resultados-prospectos" class="empty" style="display:none;">No encontré ningún prospecto con ese nombre o dirección.</p>
+
+<p id="sin-resultados-prospectos" class="empty" style="display:none;">No encontré ningún prospecto con esos filtros.</p>
 <table id="tabla-prospectos">
   <thead>
     <tr>
       <th>Nombre del negocio</th>
       <th>Estado</th>
       <th>Dirección</th>
+      <th>Ciudad</th>
       <th>Teléfono</th>
       <th>Visitas</th>
       <th>Última visita</th>
@@ -29,12 +63,13 @@
   </thead>
   <tbody>
     <% prospectos.forEach(p => { %>
-    <tr data-buscar="<%= (p.nombre + ' ' + p.direccion).toLowerCase() %>" data-href="/prospectos/<%= p.id %>">
+    <tr data-buscar="<%= (p.nombre + ' ' + p.direccion).toLowerCase() %>" data-ciudad="<%= p.ciudad || '' %>" data-fecha="<%= p.ultimaVisitaIso || '' %>" data-href="/prospectos/<%= p.id %>">
       <td data-label="Nombre del negocio"><a href="/prospectos/<%= p.id %>"><%= p.nombre %></a></td>
       <td data-label="Estado">
         <% if (p.cliente_id) { %><span class="badge cliente">Cliente</span><% } else { %><span class="badge prospecto">Prospecto</span><% } %>
       </td>
       <td data-label="Dirección" class="col-mobile-oculta"><%= p.direccion %></td>
+      <td data-label="Ciudad" class="col-mobile-oculta"><%= p.ciudad || '—' %></td>
       <td data-label="Teléfono" class="col-mobile-oculta"><%= p.telefono_principal || '—' %></td>
       <td data-label="Visitas" class="mono"><%= p.cantidad_visitas %></td>
       <td data-label="Última visita" class="col-mobile-oculta"><%= p.ultima_visita ? formatearFecha(p.ultima_visita) : '—' %></td>
@@ -51,15 +86,59 @@
   if (!buscarInput) return;
   var filasProspectos = document.querySelectorAll('#tabla-prospectos tbody tr');
   var sinResultados = document.getElementById('sin-resultados-prospectos');
-  buscarInput.addEventListener('input', function () {
+  var filtroCiudad = document.getElementById('filtro-ciudad');
+  var filtroDesde = document.getElementById('filtro-desde');
+  var filtroHasta = document.getElementById('filtro-hasta');
+  var btnLimpiar = document.getElementById('filtro-limpiar');
+
+  // Los cuatro filtros se combinan (nombre/dirección Y ciudad Y rango de
+  // fecha) y se aplican solos apenas se tocan — ninguno necesita un botón
+  // de "Buscar" aparte.
+  function coincideFila(tr) {
     var texto = buscarInput.value.trim().toLowerCase();
+    if (texto && tr.dataset.buscar.indexOf(texto) === -1) return false;
+
+    var ciudad = filtroCiudad.value;
+    if (ciudad === '__sin_ciudad__') {
+      if (tr.dataset.ciudad) return false;
+    } else if (ciudad && tr.dataset.ciudad !== ciudad) {
+      return false;
+    }
+
+    var desde = filtroDesde.value;
+    var hasta = filtroHasta.value;
+    if (desde || hasta) {
+      // Un prospecto sin ninguna visita todavía no tiene fecha para
+      // comparar — se lo deja afuera en cuanto se elige un rango, igual
+      // que pasaría buscando "visitas entre tal y tal fecha".
+      if (!tr.dataset.fecha) return false;
+      if (desde && tr.dataset.fecha < desde) return false;
+      if (hasta && tr.dataset.fecha > hasta) return false;
+    }
+
+    return true;
+  }
+
+  function aplicarFiltros() {
     var visibles = 0;
     filasProspectos.forEach(function (tr) {
-      var coincide = !texto || tr.dataset.buscar.indexOf(texto) !== -1;
+      var coincide = coincideFila(tr);
       tr.hidden = !coincide;
       if (coincide) visibles++;
     });
     sinResultados.style.display = visibles === 0 ? 'block' : 'none';
+  }
+
+  buscarInput.addEventListener('input', aplicarFiltros);
+  filtroCiudad.addEventListener('change', aplicarFiltros);
+  filtroDesde.addEventListener('change', aplicarFiltros);
+  filtroHasta.addEventListener('change', aplicarFiltros);
+  btnLimpiar.addEventListener('click', function () {
+    buscarInput.value = '';
+    filtroCiudad.value = '';
+    filtroDesde.value = '';
+    filtroHasta.value = '';
+    aplicarFiltros();
   });
 })();
 </script>

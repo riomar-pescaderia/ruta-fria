@@ -168,7 +168,22 @@
 
 <h2 style="font-size:1.1rem;">Ubicación</h2>
 <% if (prospecto.lat !== null && prospecto.lng !== null) { %>
-  <div id="mapa" style="height:280px; border:1px solid var(--line); border-radius:10px; margin-bottom:20px;"></div>
+  <div style="position:relative; max-width:480px; margin-bottom:6px;">
+    <div id="mapa" style="height:280px; border:1px solid var(--line); border-radius:10px;"></div>
+    <%
+      // El mapa de acá abajo ya no se puede mover ni hacer zoom (queda
+      // fijo, como una foto del lugar) — es solo para orientarse de un
+      // vistazo. Encima va un link transparente que ocupa todo el
+      // recuadro: tocar el mapa en cualquier punto abre Google Maps con
+      // el camino ya armado hasta acá, para navegar de verdad.
+    %>
+    <a href="https://www.google.com/maps/dir/?api=1&destination=<%= prospecto.lat %>,<%= prospecto.lng %>"
+       target="_blank" rel="noopener"
+       style="position:absolute; inset:0; border-radius:10px; cursor:pointer;"
+       title="Tocar para ver cómo llegar — abre Google Maps"
+       aria-label="Ver cómo llegar en Google Maps"></a>
+  </div>
+  <p style="color:var(--ink-soft); font-size:.78rem; margin:0 0 20px;">📍 Tocá el mapa para ver cómo llegar — se abre Google Maps.</p>
 <% } else if (usuario && usuario.esAdmin) { %>
   <p class="pendiente" style="padding:14px 20px;">Este prospecto todavía no tiene ubicación en el mapa — <a href="/prospectos/<%= prospecto.id %>/editar">editalo</a> para buscarle la dirección.</p>
 <% } else { %>
@@ -265,12 +280,26 @@
 (function () {
   var lat = <%- JSON.stringify(Number(prospecto.lat)) %>;
   var lng = <%- JSON.stringify(Number(prospecto.lng)) %>;
-  var map = L.map('mapa').setView([lat, lng], 15);
+  // Todas las formas de mover o acercar el mapa quedan apagadas — es
+  // solo una vista fija del punto, no uno para navegar arriba (el link
+  // transparente que lo tapa, puesto en la vista, ya se encarga de
+  // mandar a Google Maps para eso). El marcador no lleva popup: nunca se
+  // podría abrir, porque ningún click llega a atravesar ese link.
+  var map = L.map('mapa', {
+    dragging: false,
+    scrollWheelZoom: false,
+    doubleClickZoom: false,
+    boxZoom: false,
+    keyboard: false,
+    tap: false,
+    touchZoom: false,
+    zoomControl: false,
+  }).setView([lat, lng], 15);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     maxZoom: 19,
   }).addTo(map);
-  L.marker([lat, lng]).addTo(map).bindPopup(<%- JSON.stringify(prospecto.nombre) %>);
+  L.marker([lat, lng]).addTo(map);
 })();
 </script>
 <% } %>
