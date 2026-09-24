@@ -312,7 +312,6 @@ create table if not exists ventas (
   fecha timestamptz not null default now(),
   forma_pago text not null,   -- efectivo / transferencia / cuenta_corriente
   estado text not null default 'emitido',  -- emitido / entregado / cobrado
-  origen text not null default 'deposito', -- deposito / calle (preventista) — para el seguimiento de fase 3
   total numeric not null default 0,
   created_at timestamptz not null default now()
 );
@@ -350,16 +349,24 @@ begin
   end if;
 end $$;
 
+-- "Origen" (depósito / calle) quedó reemplazado por "vendedor" — se
+-- eliminó la columna por completo (ver el drop guardado más abajo) en vez
+-- de dejarla sin usar, siguiendo el mismo criterio que se usó antes con
+-- facturas_compra.flete_factura_id.
 do $$
 begin
-  if not exists (
-    select 1 from pg_constraint where conname = 'chk_venta_origen'
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'ventas' and column_name = 'origen'
   ) then
-    alter table ventas
-      add constraint chk_venta_origen
-      check (origen in ('deposito', 'calle'));
+    alter table ventas drop column origen;
   end if;
 end $$;
+
+-- Quién cargó/realizó la venta. Se permite null (por eso "on delete set
+-- null" en vez de restringir el borrado de un usuario que ya no está) para
+-- no romper ventas viejas ni el borrado de usuarios dados de baja.
+alter table ventas add column if not exists vendedor_id integer references usuarios(id) on delete set null;
 
 -- Cómo se cobra realmente una venta — aparte de "forma_pago", que sigue
 -- siendo un solo valor y define nada más qué lista de precios se sugiere

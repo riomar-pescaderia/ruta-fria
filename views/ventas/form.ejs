@@ -24,7 +24,7 @@
   </div>
 
   <div style="display:flex; gap:12px; flex-wrap:wrap;">
-    <div style="flex:1; min-width:220px;">
+    <div style="flex:1; min-width:260px;">
       <label for="forma_pago">Forma de pago</label>
       <select id="forma_pago" name="forma_pago" required>
         <option value="">— elegir —</option>
@@ -33,13 +33,40 @@
         <option value="cuenta_corriente" <%= venta.forma_pago === 'cuenta_corriente' ? 'selected' : '' %>>Cuenta corriente</option>
       </select>
       <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Define qué precio se sugiere al elegir cada artículo: efectivo sugiere el precio en efectivo, transferencia y cuenta corriente sugieren el precio de lista.</p>
+
+      <% /* Por defecto la venta se cobra con un solo medio — el elegido
+            arriba, por el total — y esta parte queda escondida (ver el JS
+            más abajo): no hace falta tocar nada. Recién al tocar "+
+            Agregar medio de pago" aparecen las filas con su casilla de
+            monto, para repartir el cobro entre dos o más medios (por
+            ejemplo, una parte en efectivo y el resto por transferencia, o
+            el resto a cuenta corriente) — la suma tiene que coincidir con
+            el total para poder guardar. */ %>
+      <div id="filas-medios" style="margin-top:10px;">
+        <% medios.forEach((m, i) => { %>
+        <div class="fila-medio-pago" style="display:<%= medios.length <= 1 ? 'none' : 'flex' %>; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
+          <select class="f-medio" data-campo="medio_pago" name="medios[<%= i %>][medio_pago]" style="flex:1; min-width:140px;">
+            <option value="efectivo" <%= m.medio_pago === 'efectivo' ? 'selected' : '' %>>Efectivo</option>
+            <option value="transferencia" <%= m.medio_pago === 'transferencia' ? 'selected' : '' %>>Transferencia</option>
+            <option value="cuenta_corriente" <%= m.medio_pago === 'cuenta_corriente' ? 'selected' : '' %>>Cuenta corriente</option>
+          </select>
+          <input class="f-monto-medio" data-campo="monto" type="number" step="0.01" min="0" name="medios[<%= i %>][monto]" value="<%= m.monto || '' %>" placeholder="Monto" style="flex:1; min-width:110px;">
+          <button type="button" class="btn secondary quitar-medio">Quitar</button>
+        </div>
+        <% }) %>
+      </div>
+      <button type="button" id="agregar-medio" class="btn secondary">+ Agregar medio de pago</button>
+      <p id="medios-estado" style="margin:8px 0 0; font-size:.85rem; font-weight:600;"></p>
     </div>
     <div style="flex:1; min-width:200px;">
-      <label for="origen">Origen</label>
-      <select id="origen" name="origen">
-        <option value="deposito" <%= (venta.origen || 'deposito') === 'deposito' ? 'selected' : '' %>>Depósito</option>
-        <option value="calle" <%= venta.origen === 'calle' ? 'selected' : '' %>>Calle (preventista)</option>
+      <label for="vendedor_id">Vendedor</label>
+      <select id="vendedor_id" name="vendedor_id">
+        <option value="">— sin especificar —</option>
+        <% usuarios.forEach(u => { %>
+        <option value="<%= u.id %>" <%= String(venta.vendedor_id || '') === String(u.id) ? 'selected' : '' %>><%= u.nombre || u.username %></option>
+        <% }) %>
       </select>
+      <p style="color:var(--ink-soft); font-size:.8rem; margin:6px 0 0;">Quién cargó o realizó la venta.</p>
     </div>
   </div>
 
@@ -97,28 +124,6 @@
     <button type="button" id="agregar-fila" class="btn secondary">+ Agregar artículo</button>
   </div>
 
-  <div class="card" style="margin:4px 0 0; max-width:560px;">
-    <h2 style="font-size:1rem; margin:0 0 4px;">Medios de pago</h2>
-    <p style="color:var(--ink-soft); font-size:.82rem; margin:0 0 10px;">
-      Por defecto se carga un solo medio con el total de la venta. Si el cliente paga con más de uno — por ejemplo una parte en efectivo y el resto por transferencia, o el resto a cuenta corriente — agregá una fila por cada uno. La suma tiene que coincidir con el total para poder guardar.
-    </p>
-    <div id="filas-medios">
-      <% medios.forEach((m, i) => { %>
-      <div class="fila-medio-pago" style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
-        <select class="f-medio" data-campo="medio_pago" name="medios[<%= i %>][medio_pago]" style="flex:1; min-width:160px;">
-          <option value="efectivo" <%= m.medio_pago === 'efectivo' ? 'selected' : '' %>>Efectivo</option>
-          <option value="transferencia" <%= m.medio_pago === 'transferencia' ? 'selected' : '' %>>Transferencia</option>
-          <option value="cuenta_corriente" <%= m.medio_pago === 'cuenta_corriente' ? 'selected' : '' %>>Cuenta corriente</option>
-        </select>
-        <input class="f-monto-medio" data-campo="monto" type="number" step="0.01" min="0" name="medios[<%= i %>][monto]" value="<%= m.monto || '' %>" placeholder="Monto" style="flex:1; min-width:120px;">
-        <button type="button" class="btn secondary quitar-medio">Quitar</button>
-      </div>
-      <% }) %>
-    </div>
-    <button type="button" id="agregar-medio" class="btn secondary">+ Agregar medio de pago</button>
-    <p id="medios-estado" style="margin:10px 0 0; font-size:.85rem; font-weight:600;"></p>
-  </div>
-
   <div>
     <label for="notas">Notas</label>
     <textarea id="notas" name="notas" rows="2"><%= venta.notas || '' %></textarea>
@@ -154,21 +159,30 @@
     });
   }
 
-  // Mientras haya un solo medio de pago cargado, su monto se mantiene
-  // sincronizado solo con el total de arriba — no tiene sentido pedir que
-  // se escriba a mano si total y monto tienen que ser lo mismo. Recién al
-  // agregar un segundo medio para repartir el cobro hace falta completar
-  // los montos de cada uno a mano (acá deja de tocarlos).
+  // Mientras haya un solo medio de pago, la fila queda escondida y se
+  // mantiene sincronizada sola con la forma de pago y el total de
+  // arriba — no hace falta ni elegirlo ni escribir el monto a mano, ya
+  // que los dos tienen que ser necesariamente los mismos. Recién al
+  // agregar un segundo medio para repartir el cobro se muestran todas
+  // las filas con sus casillas, y ahí sí hay que completar cada monto a
+  // mano (acá deja de tocarlos).
   function actualizarEstadoMedios() {
     var filas = filasMedios.querySelectorAll('.fila-medio-pago');
     var total = totalVentaNumero();
-    var soloUnMedio = filas.length === 1;
+    var soloUnMedio = filas.length <= 1;
+
+    filas.forEach(function (fila) { fila.style.display = soloUnMedio ? 'none' : 'flex'; });
+
     if (soloUnMedio) {
-      filas[0].querySelector('.f-monto-medio').value = total ? total.toFixed(2) : '';
+      if (filas.length === 1) {
+        filas[0].querySelector('.f-medio').value = formaPagoSelect.value;
+        filas[0].querySelector('.f-monto-medio').value = total ? total.toFixed(2) : '';
+      }
+      mediosEstado.style.display = 'none';
+      return;
     }
-    filas.forEach(function (fila) {
-      fila.querySelector('.f-monto-medio').readOnly = soloUnMedio;
-    });
+
+    mediosEstado.style.display = 'block';
     var suma = 0;
     filas.forEach(function (fila) {
       suma += parseFloat(fila.querySelector('.f-monto-medio').value) || 0;
@@ -188,6 +202,12 @@
 
   btnAgregarMedio.addEventListener('click', function () {
     var filas = filasMedios.querySelectorAll('.fila-medio-pago');
+    if (filas.length === 1) {
+      // Al pasar de uno a dos medios, el primero arranca con el total
+      // entero cargado (así la suma ya da bien apenas se agrega el
+      // segundo) — de ahí en más se reparte a mano entre los dos.
+      filas[0].querySelector('.f-monto-medio').value = totalVentaNumero().toFixed(2);
+    }
     var nueva = filas[filas.length - 1].cloneNode(true);
     nueva.querySelector('.f-monto-medio').value = '';
     filasMedios.appendChild(nueva);
@@ -207,18 +227,6 @@
 
   filasMedios.addEventListener('input', actualizarEstadoMedios);
   filasMedios.addEventListener('change', actualizarEstadoMedios);
-
-  // Además, mientras haya un solo medio cargado, cambiar la "Forma de
-  // pago" de arriba también actualiza a cuál medio corresponde ese único
-  // renglón — mismo criterio que ya existe para el precio de los
-  // renglones de artículos (ver el listener de "forma_pago" más abajo).
-  // Si se quiere un medio distinto de la forma de pago elegida, se lo
-  // cambia a mano después — ese cambio no se vuelve a tocar solo, salvo
-  // que se elija otra forma de pago de nuevo.
-  function sincronizarMedioUnicoConFormaPago() {
-    var filas = filasMedios.querySelectorAll('.fila-medio-pago');
-    if (filas.length === 1) filas[0].querySelector('.f-medio').value = formaPagoSelect.value;
-  }
 
   // Datos de artículos para el buscador de la columna "Artículo" y para
   // sugerir el precio según la forma de pago vigente en el momento en que
@@ -429,7 +437,6 @@
       var articulo = articulosPorId[tr.querySelector('.f-articulo-id').value];
       if (articulo) tr.querySelector('.f-precio').value = precioSugerido(articulo);
     });
-    sincronizarMedioUnicoConFormaPago();
     actualizarTotales();
   });
 

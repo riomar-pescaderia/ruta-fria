@@ -35,23 +35,26 @@ router.use('/presupuestos', presupuestosRouter);
 const FORMAS_PAGO = ['efectivo', 'transferencia', 'cuenta_corriente'];
 const MEDIOS_PAGO = FORMAS_PAGO; // mismas opciones — ver ventas_pagos en db/schema.sql
 const ESTADOS = ['emitido', 'entregado', 'cobrado'];
-const ORIGENES = ['deposito', 'calle'];
 
 function redondear2(n) {
   return Math.round(n * 100) / 100;
 }
 
 async function datosFormulario() {
-  const [{ rows: clientes }, { rows: articulosRaw }, config] = await Promise.all([
+  const [{ rows: clientes }, { rows: articulosRaw }, config, { rows: usuarios }] = await Promise.all([
     pool.query('select * from clientes order by razon_social'),
     pool.query(`select * from articulos where activo = true order by
       case when codigo ~ '^[0-9]+$' then 0 else 1 end,
       case when codigo ~ '^[0-9]+$' then codigo::numeric end,
       codigo`),
     getConfig(),
+    // Solo usuarios activos, para elegir quién realizó la venta — igual
+    // que con clientes/artículos, no tiene sentido ofrecer para elegir a
+    // alguien dado de baja.
+    pool.query('select id, nombre, username from usuarios where activo = true order by nombre, username'),
   ]);
   const articulos = articulosRaw.map((a) => ({ ...a, ...calcularPrecios(a, config) }));
-  return { clientes, articulos };
+  return { clientes, articulos, usuarios };
 }
 
 // Lee los renglones que vienen del formulario (items[0][...], items[1][...]),
@@ -143,13 +146,16 @@ router.get('/', async (req, res, next) => {
 
 router.get('/nueva', async (req, res, next) => {
   try {
-    const { clientes, articulos } = await datosFormulario();
+    const { clientes, articulos, usuarios } = await datosFormulario();
     res.render('ventas/form', {
-      venta: { fecha: fechaHoraInput(), forma_pago: 'efectivo', origen: 'deposito' },
+      // Por defecto el vendedor es quien está cargando la venta — se puede
+      // cambiar igual, por si alguien carga a nombre de otro.
+      venta: { fecha: fechaHoraInput(), forma_pago: 'efectivo', vendedor_id: req.session.usuario.id },
       items: [{}],
       medios: [{ medio_pago: 'efectivo', monto: '' }],
       clientes,
       articulos,
+      usuarios,
       error: null,
       accion: '/ventas',
     });
@@ -161,19 +167,20 @@ router.post('/', async (req, res, next) => {
   const clienteTexto = (req.body.cliente_texto || '').trim();
   let cliente_id = req.body.cliente_id || null;
   const forma_pago = FORMAS_PAGO.includes(req.body.forma_pago) ? req.body.forma_pago : null;
-  const origen = ORIGENES.includes(req.body.origen) ? req.body.origen : 'deposito';
+  const vendedor_id = req.body.vendedor_id ? Number(req.body.vendedor_id) || null : null;
   const items = leerItems(req.body);
   const medios = leerMedios(req.body);
 
   if ((!cliente_id && !clienteTexto) || !forma_pago || items.length === 0) {
     try {
-      const { clientes, articulos } = await datosFormulario();
+      const { clientes, articulos, usuarios } = await datosFormulario();
       return res.render('ventas/form', {
-        venta: { cliente_id, cliente_texto: clienteTexto, fecha, forma_pago: req.body.forma_pago, origen, notas },
+        venta: { cliente_id, cliente_texto: clienteTexto, fecha, forma_pago: req.body.forma_pago, vendedor_id, notas },
         items: items.length ? items : [{}],
         medios: medios.length ? medios : [{ medio_pago: req.body.forma_pago || 'efectivo', monto: '' }],
         clientes,
         articulos,
+        usuarios,
         error: (!cliente_id && !clienteTexto)
           ? 'Elegí un cliente o escribí su nombre.'
           : !forma_pago
@@ -191,13 +198,14 @@ router.post('/', async (req, res, next) => {
   const errMedios = errorMedios(medios, total);
   if (errMedios) {
     try {
-      const { clientes, articulos } = await datosFormulario();
+      const { clientes, articulos, usuarios } = await datosFormulario();
       return res.render('ventas/form', {
-        venta: { cliente_id, cliente_texto: clienteTexto, fecha, forma_pago, origen, notas },
+        venta: { cliente_id, cliente_texto: clienteTexto, fecha, forma_pago, vendedor_id, notas },
         items,
         medios: medios.length ? medios : [{ medio_pago: forma_pago, monto: total }],
         clientes,
         articulos,
+        usuarios,
         error: errMedios,
         accion: '/ventas',
       });
@@ -214,9 +222,9 @@ router.post('/', async (req, res, next) => {
     const cfgStock = await obtenerConfigStock(client);
     const fechaVenta = inputAFecha(fecha) || new Date();
     const { rows } = await client.query(
-      `insert into ventas (cliente_id, fecha, forma_pago, origen, notas, total)
+      `insert into ventas (cliente_id, fecha, forma_pago, vendedor_id, notas, total)
        values ($1,$2,$3,$4,$5,$6) returning id, numero_remito`,
-      [cliente_id, fechaVenta, forma_pago, origen, notas || null, total]
+      [cliente_id, fechaVenta, forma_pago, vendedor_id, notas || null, total]
     );
     const ventaId = rows[0].id;
     for (const it of items) {
@@ -274,7 +282,7 @@ router.get('/:id/editar', async (req, res, next) => {
       pool.query('select * from ventas_items where venta_id = $1 order by id', [venta.id]),
       pool.query('select * from ventas_pagos where venta_id = $1 order by orden, id', [venta.id]),
     ]);
-    const { clientes, articulos } = await datosFormulario();
+    const { clientes, articulos, usuarios } = await datosFormulario();
     res.render('ventas/form', {
       venta: { ...venta, fecha: fechaHoraInput(venta.fecha) },
       items,
@@ -285,6 +293,7 @@ router.get('/:id/editar', async (req, res, next) => {
       medios: medios.length ? medios : [{ medio_pago: venta.forma_pago, monto: venta.total }],
       clientes,
       articulos,
+      usuarios,
       error: null,
       accion: `/ventas/${venta.id}`,
     });
@@ -296,7 +305,7 @@ router.post('/:id', async (req, res, next) => {
   const clienteTexto = (req.body.cliente_texto || '').trim();
   let cliente_id = req.body.cliente_id || null;
   const forma_pago = FORMAS_PAGO.includes(req.body.forma_pago) ? req.body.forma_pago : null;
-  const origen = ORIGENES.includes(req.body.origen) ? req.body.origen : 'deposito';
+  const vendedor_id = req.body.vendedor_id ? Number(req.body.vendedor_id) || null : null;
   const items = leerItems(req.body);
   const medios = leerMedios(req.body);
 
@@ -306,13 +315,14 @@ router.post('/:id', async (req, res, next) => {
     if (!venta) return res.redirect('/ventas');
 
     if ((!cliente_id && !clienteTexto) || !forma_pago || items.length === 0) {
-      const { clientes, articulos } = await datosFormulario();
+      const { clientes, articulos, usuarios } = await datosFormulario();
       return res.render('ventas/form', {
-        venta: { id: venta.id, cliente_id, cliente_texto: clienteTexto, fecha, forma_pago: req.body.forma_pago, origen, notas },
+        venta: { id: venta.id, cliente_id, cliente_texto: clienteTexto, fecha, forma_pago: req.body.forma_pago, vendedor_id, notas },
         items: items.length ? items : [{}],
         medios: medios.length ? medios : [{ medio_pago: req.body.forma_pago || 'efectivo', monto: '' }],
         clientes,
         articulos,
+        usuarios,
         error: (!cliente_id && !clienteTexto)
           ? 'Elegí un cliente o escribí su nombre.'
           : !forma_pago
@@ -326,13 +336,14 @@ router.post('/:id', async (req, res, next) => {
 
     const errMedios = errorMedios(medios, total);
     if (errMedios) {
-      const { clientes, articulos } = await datosFormulario();
+      const { clientes, articulos, usuarios } = await datosFormulario();
       return res.render('ventas/form', {
-        venta: { id: venta.id, cliente_id, cliente_texto: clienteTexto, fecha, forma_pago, origen, notas },
+        venta: { id: venta.id, cliente_id, cliente_texto: clienteTexto, fecha, forma_pago, vendedor_id, notas },
         items,
         medios: medios.length ? medios : [{ medio_pago: forma_pago, monto: total }],
         clientes,
         articulos,
+        usuarios,
         error: errMedios,
         accion: `/ventas/${venta.id}`,
       });
@@ -346,8 +357,8 @@ router.post('/:id', async (req, res, next) => {
       await client.query('BEGIN');
       const cfgStock = await obtenerConfigStock(client);
       await client.query(
-        'update ventas set cliente_id=$1, fecha=$2, forma_pago=$3, origen=$4, notas=$5, total=$6 where id=$7',
-        [cliente_id, fechaVenta, forma_pago, origen, notas || null, total, venta.id]
+        'update ventas set cliente_id=$1, fecha=$2, forma_pago=$3, vendedor_id=$4, notas=$5, total=$6 where id=$7',
+        [cliente_id, fechaVenta, forma_pago, vendedor_id, notas || null, total, venta.id]
       );
       const { rows: itemsViejos } = await client.query(
         'select articulo_id, cantidad from ventas_items where venta_id = $1',
@@ -415,8 +426,10 @@ router.get('/:id', async (req, res, next) => {
     const { rows } = await pool.query(
       `select v.*, c.razon_social as cliente_nombre, c.direccion as cliente_direccion,
               c.telefono as cliente_telefono, c.cuit_dni as cliente_cuit_dni,
-              c.condicion_iva as cliente_condicion_iva
+              c.condicion_iva as cliente_condicion_iva,
+              coalesce(u.nombre, u.username) as vendedor_nombre
        from ventas v join clientes c on c.id = v.cliente_id
+       left join usuarios u on u.id = v.vendedor_id
        where v.id = $1`,
       [req.params.id]
     );

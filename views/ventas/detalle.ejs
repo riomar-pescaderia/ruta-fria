@@ -13,7 +13,6 @@
 </div>
 
 <% const ETIQUETAS_FORMA_PAGO = { efectivo: 'Efectivo', transferencia: 'Transferencia', cuenta_corriente: 'Cuenta corriente' };
-   const ETIQUETAS_ORIGEN = { deposito: 'Depósito', calle: 'Calle (preventista)' };
    const ETIQUETAS_ESTADO = { emitido: 'Emitido', entregado: 'Entregado', cobrado: 'Cobrado' }; %>
 <p style="color:var(--ink-soft);">
   <span class="badge <%= venta.estado %>"><%= ETIQUETAS_ESTADO[venta.estado] || venta.estado %></span>
@@ -21,7 +20,7 @@
   (<a href="/clientes/<%= venta.cliente_id %>/editar">completar datos del cliente</a>)
   · Fecha: <%= formatearFechaHora(venta.fecha) %>
   · Precio: <%= ETIQUETAS_FORMA_PAGO[venta.forma_pago] || venta.forma_pago %>
-  · <%= ETIQUETAS_ORIGEN[venta.origen] || venta.origen %>
+  <% if (venta.vendedor_nombre) { %>· Vendedor: <%= venta.vendedor_nombre %><% } %>
 </p>
 <p style="color:var(--ink-soft); margin-top:-8px;">
   <strong style="color:var(--ink);">Medios de pago:</strong>
