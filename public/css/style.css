@@ -254,6 +254,10 @@ input:focus, select:focus, textarea:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 3px var(--blue-soft);
 }
+/* El monto de un único medio de pago (ver views/ventas/form.ejs) se
+   completa solo con el total de la venta — queda gris para que se note
+   que no hace falta (ni conviene) tocarlo a mano en ese caso. */
+input:read-only { background: var(--bg); color: var(--ink-soft); }
 .check-row { display: flex; align-items: center; gap: 8px; }
 .check-row input { width: auto; }
 

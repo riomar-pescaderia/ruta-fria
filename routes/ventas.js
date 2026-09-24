@@ -9,6 +9,13 @@
 // descontar el de los nuevos, y al borrarla se devuelve el de todos sus
 // renglones. El estado (emitido / entregado / cobrado) se cambia a mano
 // desde el detalle, para hacer seguimiento del reparto y del cobro.
+//
+// Aparte de la forma de pago (que solo define el precio sugerido) queda
+// registrado CÓMO se cobra de verdad, en ventas_pagos: uno o más medios,
+// cada uno con su monto, que entre todos tienen que sumar el total de la
+// venta — así se puede anotar, por ejemplo, una parte en efectivo y el
+// resto por transferencia (o el resto directo a cuenta corriente). Ver
+// leerMedios/errorMedios más abajo, y ventas_pagos en db/schema.sql.
 const express = require('express');
 const pool = require('../db/pool');
 const { getConfig } = require('../lib/config');
@@ -26,6 +33,7 @@ const router = express.Router();
 router.use('/presupuestos', presupuestosRouter);
 
 const FORMAS_PAGO = ['efectivo', 'transferencia', 'cuenta_corriente'];
+const MEDIOS_PAGO = FORMAS_PAGO; // mismas opciones — ver ventas_pagos en db/schema.sql
 const ESTADOS = ['emitido', 'entregado', 'cobrado'];
 const ORIGENES = ['deposito', 'calle'];
 
@@ -66,6 +74,36 @@ function leerItems(body) {
       };
     })
     .filter((it) => it.cantidad > 0 && it.precio_unitario > 0);
+}
+
+// Lee los medios de pago del formulario (medios[0][...], medios[1][...])
+// — mismo patrón que leerItems. Descarta filas sin medio elegido o con
+// monto en 0 o menos (una fila que se agregó de más y se dejó vacía, por
+// ejemplo). La suma de lo que queda se valida contra el total de la
+// venta más abajo, antes de guardar nada.
+function leerMedios(body) {
+  const raw = body.medios;
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : Object.values(raw);
+  return arr
+    .filter((m) => m && m.medio_pago)
+    .map((m) => ({
+      medio_pago: MEDIOS_PAGO.includes(m.medio_pago) ? m.medio_pago : null,
+      monto: redondear2(Number(m.monto) || 0),
+    }))
+    .filter((m) => m.medio_pago && m.monto > 0);
+}
+
+// La suma de los medios de pago tiene que coincidir con el total de la
+// venta (con un margen mínimo por redondeo de centavos) — si no, no se
+// deja guardar. Devuelve el mensaje de error, o null si está todo bien.
+function errorMedios(medios, total) {
+  if (medios.length === 0) return 'Agregá al menos un medio de pago.';
+  const suma = redondear2(medios.reduce((acc, m) => acc + m.monto, 0));
+  if (Math.abs(suma - total) > 0.005) {
+    return `Los medios de pago suman $${suma.toFixed(2)}, pero el total de la venta es $${total.toFixed(2)}. Ajustá los montos para que coincidan.`;
+  }
+  return null;
 }
 
 // Si vino un cliente_id (elegido del buscador) se usa tal cual. Si no,
@@ -109,6 +147,7 @@ router.get('/nueva', async (req, res, next) => {
     res.render('ventas/form', {
       venta: { fecha: fechaHoraInput(), forma_pago: 'efectivo', origen: 'deposito' },
       items: [{}],
+      medios: [{ medio_pago: 'efectivo', monto: '' }],
       clientes,
       articulos,
       error: null,
@@ -124,6 +163,7 @@ router.post('/', async (req, res, next) => {
   const forma_pago = FORMAS_PAGO.includes(req.body.forma_pago) ? req.body.forma_pago : null;
   const origen = ORIGENES.includes(req.body.origen) ? req.body.origen : 'deposito';
   const items = leerItems(req.body);
+  const medios = leerMedios(req.body);
 
   if ((!cliente_id && !clienteTexto) || !forma_pago || items.length === 0) {
     try {
@@ -131,6 +171,7 @@ router.post('/', async (req, res, next) => {
       return res.render('ventas/form', {
         venta: { cliente_id, cliente_texto: clienteTexto, fecha, forma_pago: req.body.forma_pago, origen, notas },
         items: items.length ? items : [{}],
+        medios: medios.length ? medios : [{ medio_pago: req.body.forma_pago || 'efectivo', monto: '' }],
         clientes,
         articulos,
         error: (!cliente_id && !clienteTexto)
@@ -143,11 +184,30 @@ router.post('/', async (req, res, next) => {
     } catch (err) { return next(err); }
   }
 
+  const total = redondear2(items.reduce((acc, it) => acc + it.subtotal, 0));
+
+  // La suma de los medios de pago tiene que coincidir con el total de la
+  // venta — si no, se corta acá, antes de tocar el cliente o la base.
+  const errMedios = errorMedios(medios, total);
+  if (errMedios) {
+    try {
+      const { clientes, articulos } = await datosFormulario();
+      return res.render('ventas/form', {
+        venta: { cliente_id, cliente_texto: clienteTexto, fecha, forma_pago, origen, notas },
+        items,
+        medios: medios.length ? medios : [{ medio_pago: forma_pago, monto: total }],
+        clientes,
+        articulos,
+        error: errMedios,
+        accion: '/ventas',
+      });
+    } catch (err) { return next(err); }
+  }
+
   try {
     cliente_id = await resolverClienteId(cliente_id, clienteTexto);
   } catch (err) { return next(err); }
 
-  const total = redondear2(items.reduce((acc, it) => acc + it.subtotal, 0));
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -178,13 +238,22 @@ router.post('/', async (req, res, next) => {
         });
       }
     }
+    for (let i = 0; i < medios.length; i++) {
+      await client.query(
+        `insert into ventas_pagos (venta_id, medio_pago, monto, orden) values ($1,$2,$3,$4)`,
+        [ventaId, medios[i].medio_pago, medios[i].monto, i]
+      );
+    }
+    const montoCuentaCorriente = redondear2(
+      medios.filter((m) => m.medio_pago === 'cuenta_corriente').reduce((acc, m) => acc + m.monto, 0)
+    );
     await sincronizarMovimientoVenta(client, {
       id: ventaId,
       cliente_id,
       fecha: fechaVenta,
-      forma_pago,
       total,
       numero_remito: rows[0].numero_remito,
+      montoCuentaCorriente,
     });
     await client.query('COMMIT');
     res.redirect(`/ventas/${ventaId}`);
@@ -201,11 +270,19 @@ router.get('/:id/editar', async (req, res, next) => {
     const { rows } = await pool.query('select * from ventas where id = $1', [req.params.id]);
     const venta = rows[0];
     if (!venta) return res.redirect('/ventas');
-    const { rows: items } = await pool.query('select * from ventas_items where venta_id = $1 order by id', [venta.id]);
+    const [{ rows: items }, { rows: medios }] = await Promise.all([
+      pool.query('select * from ventas_items where venta_id = $1 order by id', [venta.id]),
+      pool.query('select * from ventas_pagos where venta_id = $1 order by orden, id', [venta.id]),
+    ]);
     const { clientes, articulos } = await datosFormulario();
     res.render('ventas/form', {
       venta: { ...venta, fecha: fechaHoraInput(venta.fecha) },
       items,
+      // Por si una venta muy vieja quedara sin ningún medio cargado (no
+      // debería pasar — la migración de db/schema.sql le arma uno a cada
+      // venta ya existente) se arranca igual con un medio por defecto, en
+      // vez de dejar el formulario sin ninguna fila.
+      medios: medios.length ? medios : [{ medio_pago: venta.forma_pago, monto: venta.total }],
       clientes,
       articulos,
       error: null,
@@ -221,6 +298,7 @@ router.post('/:id', async (req, res, next) => {
   const forma_pago = FORMAS_PAGO.includes(req.body.forma_pago) ? req.body.forma_pago : null;
   const origen = ORIGENES.includes(req.body.origen) ? req.body.origen : 'deposito';
   const items = leerItems(req.body);
+  const medios = leerMedios(req.body);
 
   try {
     const { rows } = await pool.query('select * from ventas where id = $1', [req.params.id]);
@@ -232,6 +310,7 @@ router.post('/:id', async (req, res, next) => {
       return res.render('ventas/form', {
         venta: { id: venta.id, cliente_id, cliente_texto: clienteTexto, fecha, forma_pago: req.body.forma_pago, origen, notas },
         items: items.length ? items : [{}],
+        medios: medios.length ? medios : [{ medio_pago: req.body.forma_pago || 'efectivo', monto: '' }],
         clientes,
         articulos,
         error: (!cliente_id && !clienteTexto)
@@ -243,9 +322,24 @@ router.post('/:id', async (req, res, next) => {
       });
     }
 
+    const total = redondear2(items.reduce((acc, it) => acc + it.subtotal, 0));
+
+    const errMedios = errorMedios(medios, total);
+    if (errMedios) {
+      const { clientes, articulos } = await datosFormulario();
+      return res.render('ventas/form', {
+        venta: { id: venta.id, cliente_id, cliente_texto: clienteTexto, fecha, forma_pago, origen, notas },
+        items,
+        medios: medios.length ? medios : [{ medio_pago: forma_pago, monto: total }],
+        clientes,
+        articulos,
+        error: errMedios,
+        accion: `/ventas/${venta.id}`,
+      });
+    }
+
     cliente_id = await resolverClienteId(cliente_id, clienteTexto);
 
-    const total = redondear2(items.reduce((acc, it) => acc + it.subtotal, 0));
     const fechaVenta = inputAFecha(fecha) || venta.fecha;
     const client = await pool.connect();
     try {
@@ -287,13 +381,23 @@ router.post('/:id', async (req, res, next) => {
           });
         }
       }
+      await client.query('delete from ventas_pagos where venta_id = $1', [venta.id]);
+      for (let i = 0; i < medios.length; i++) {
+        await client.query(
+          `insert into ventas_pagos (venta_id, medio_pago, monto, orden) values ($1,$2,$3,$4)`,
+          [venta.id, medios[i].medio_pago, medios[i].monto, i]
+        );
+      }
+      const montoCuentaCorriente = redondear2(
+        medios.filter((m) => m.medio_pago === 'cuenta_corriente').reduce((acc, m) => acc + m.monto, 0)
+      );
       await sincronizarMovimientoVenta(client, {
         id: venta.id,
         cliente_id,
         fecha: fechaVenta,
-        forma_pago,
         total,
         numero_remito: venta.numero_remito,
+        montoCuentaCorriente,
       });
       await client.query('COMMIT');
       res.redirect(`/ventas/${venta.id}`);
@@ -318,14 +422,17 @@ router.get('/:id', async (req, res, next) => {
     );
     const venta = rows[0];
     if (!venta) return res.redirect('/ventas');
-    const { rows: items } = await pool.query(
-      `select i.*, a.codigo, a.nombre
-       from ventas_items i join articulos a on a.id = i.articulo_id
-       where i.venta_id = $1
-       order by i.id`,
-      [venta.id]
-    );
-    res.render('ventas/detalle', { venta, items });
+    const [{ rows: items }, { rows: pagos }] = await Promise.all([
+      pool.query(
+        `select i.*, a.codigo, a.nombre
+         from ventas_items i join articulos a on a.id = i.articulo_id
+         where i.venta_id = $1
+         order by i.id`,
+        [venta.id]
+      ),
+      pool.query('select * from ventas_pagos where venta_id = $1 order by orden, id', [venta.id]),
+    ]);
+    res.render('ventas/detalle', { venta, items, pagos });
   } catch (err) { next(err); }
 });
 

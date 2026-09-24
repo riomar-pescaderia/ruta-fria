@@ -97,6 +97,28 @@
     <button type="button" id="agregar-fila" class="btn secondary">+ Agregar artículo</button>
   </div>
 
+  <div class="card" style="margin:4px 0 0; max-width:560px;">
+    <h2 style="font-size:1rem; margin:0 0 4px;">Medios de pago</h2>
+    <p style="color:var(--ink-soft); font-size:.82rem; margin:0 0 10px;">
+      Por defecto se carga un solo medio con el total de la venta. Si el cliente paga con más de uno — por ejemplo una parte en efectivo y el resto por transferencia, o el resto a cuenta corriente — agregá una fila por cada uno. La suma tiene que coincidir con el total para poder guardar.
+    </p>
+    <div id="filas-medios">
+      <% medios.forEach((m, i) => { %>
+      <div class="fila-medio-pago" style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
+        <select class="f-medio" data-campo="medio_pago" name="medios[<%= i %>][medio_pago]" style="flex:1; min-width:160px;">
+          <option value="efectivo" <%= m.medio_pago === 'efectivo' ? 'selected' : '' %>>Efectivo</option>
+          <option value="transferencia" <%= m.medio_pago === 'transferencia' ? 'selected' : '' %>>Transferencia</option>
+          <option value="cuenta_corriente" <%= m.medio_pago === 'cuenta_corriente' ? 'selected' : '' %>>Cuenta corriente</option>
+        </select>
+        <input class="f-monto-medio" data-campo="monto" type="number" step="0.01" min="0" name="medios[<%= i %>][monto]" value="<%= m.monto || '' %>" placeholder="Monto" style="flex:1; min-width:120px;">
+        <button type="button" class="btn secondary quitar-medio">Quitar</button>
+      </div>
+      <% }) %>
+    </div>
+    <button type="button" id="agregar-medio" class="btn secondary">+ Agregar medio de pago</button>
+    <p id="medios-estado" style="margin:10px 0 0; font-size:.85rem; font-weight:600;"></p>
+  </div>
+
   <div>
     <label for="notas">Notas</label>
     <textarea id="notas" name="notas" rows="2"><%= venta.notas || '' %></textarea>
@@ -112,6 +134,91 @@
 (function () {
   var tbody = document.getElementById('filas-items');
   var formaPagoSelect = document.getElementById('forma_pago');
+
+  // --- Medios de pago: uno o más, con su monto, que tienen que sumar el
+  // total de la venta (ver más abajo, junto a actualizarTotales) ---
+  var filasMedios = document.getElementById('filas-medios');
+  var btnAgregarMedio = document.getElementById('agregar-medio');
+  var mediosEstado = document.getElementById('medios-estado');
+
+  function totalVentaNumero() {
+    var texto = document.getElementById('total-venta').textContent.replace('$', '');
+    return parseFloat(texto) || 0;
+  }
+
+  function reindexarMedios() {
+    filasMedios.querySelectorAll('.fila-medio-pago').forEach(function (fila, i) {
+      fila.querySelectorAll('[data-campo]').forEach(function (el) {
+        el.name = 'medios[' + i + '][' + el.dataset.campo + ']';
+      });
+    });
+  }
+
+  // Mientras haya un solo medio de pago cargado, su monto se mantiene
+  // sincronizado solo con el total de arriba — no tiene sentido pedir que
+  // se escriba a mano si total y monto tienen que ser lo mismo. Recién al
+  // agregar un segundo medio para repartir el cobro hace falta completar
+  // los montos de cada uno a mano (acá deja de tocarlos).
+  function actualizarEstadoMedios() {
+    var filas = filasMedios.querySelectorAll('.fila-medio-pago');
+    var total = totalVentaNumero();
+    var soloUnMedio = filas.length === 1;
+    if (soloUnMedio) {
+      filas[0].querySelector('.f-monto-medio').value = total ? total.toFixed(2) : '';
+    }
+    filas.forEach(function (fila) {
+      fila.querySelector('.f-monto-medio').readOnly = soloUnMedio;
+    });
+    var suma = 0;
+    filas.forEach(function (fila) {
+      suma += parseFloat(fila.querySelector('.f-monto-medio').value) || 0;
+    });
+    var diferencia = Math.round((total - suma) * 100) / 100;
+    if (Math.abs(diferencia) < 0.005) {
+      mediosEstado.textContent = 'Los medios de pago cubren el total. ✓';
+      mediosEstado.style.color = '#1e7a34';
+    } else if (diferencia > 0) {
+      mediosEstado.textContent = 'Falta cubrir $' + diferencia.toFixed(2) + ' del total.';
+      mediosEstado.style.color = '#a33';
+    } else {
+      mediosEstado.textContent = 'Te pasaste por $' + Math.abs(diferencia).toFixed(2) + ' del total.';
+      mediosEstado.style.color = '#a33';
+    }
+  }
+
+  btnAgregarMedio.addEventListener('click', function () {
+    var filas = filasMedios.querySelectorAll('.fila-medio-pago');
+    var nueva = filas[filas.length - 1].cloneNode(true);
+    nueva.querySelector('.f-monto-medio').value = '';
+    filasMedios.appendChild(nueva);
+    reindexarMedios();
+    actualizarEstadoMedios();
+  });
+
+  filasMedios.addEventListener('click', function (e) {
+    if (e.target.classList.contains('quitar-medio')) {
+      if (filasMedios.querySelectorAll('.fila-medio-pago').length > 1) {
+        e.target.closest('.fila-medio-pago').remove();
+        reindexarMedios();
+        actualizarEstadoMedios();
+      }
+    }
+  });
+
+  filasMedios.addEventListener('input', actualizarEstadoMedios);
+  filasMedios.addEventListener('change', actualizarEstadoMedios);
+
+  // Además, mientras haya un solo medio cargado, cambiar la "Forma de
+  // pago" de arriba también actualiza a cuál medio corresponde ese único
+  // renglón — mismo criterio que ya existe para el precio de los
+  // renglones de artículos (ver el listener de "forma_pago" más abajo).
+  // Si se quiere un medio distinto de la forma de pago elegida, se lo
+  // cambia a mano después — ese cambio no se vuelve a tocar solo, salvo
+  // que se elija otra forma de pago de nuevo.
+  function sincronizarMedioUnicoConFormaPago() {
+    var filas = filasMedios.querySelectorAll('.fila-medio-pago');
+    if (filas.length === 1) filas[0].querySelector('.f-medio').value = formaPagoSelect.value;
+  }
 
   // Datos de artículos para el buscador de la columna "Artículo" y para
   // sugerir el precio según la forma de pago vigente en el momento en que
@@ -229,6 +336,7 @@
       actualizarAvisoStock(tr);
     });
     document.getElementById('total-venta').textContent = '$' + total.toFixed(2);
+    actualizarEstadoMedios();
   }
 
   function reindexar() {
@@ -321,6 +429,7 @@
       var articulo = articulosPorId[tr.querySelector('.f-articulo-id').value];
       if (articulo) tr.querySelector('.f-precio').value = precioSugerido(articulo);
     });
+    sincronizarMedioUnicoConFormaPago();
     actualizarTotales();
   });
 
@@ -415,6 +524,20 @@
       e.preventDefault();
       alert('No se puede guardar la venta: alguna cantidad supera el stock disponible. Revisá el renglón marcado en rojo.');
       primeraFilaConProblema.querySelector('.f-cantidad').focus();
+      return;
+    }
+
+    // Mismo chequeo que hace el servidor al guardar (ver errorMedios en
+    // routes/ventas.js) — se repite acá para avisar antes de mandar el
+    // formulario, sin esperar la vuelta del servidor.
+    var sumaMedios = 0;
+    filasMedios.querySelectorAll('.f-monto-medio').forEach(function (input) {
+      sumaMedios += parseFloat(input.value) || 0;
+    });
+    var totalActual = totalVentaNumero();
+    if (Math.abs(Math.round((totalActual - sumaMedios) * 100) / 100) > 0.005) {
+      e.preventDefault();
+      alert('No se puede guardar: los medios de pago suman $' + sumaMedios.toFixed(2) + ', pero el total de la venta es $' + totalActual.toFixed(2) + '. Ajustá los montos para que coincidan.');
     }
   });
 

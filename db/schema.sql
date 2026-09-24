@@ -361,6 +361,48 @@ begin
   end if;
 end $$;
 
+-- Cómo se cobra realmente una venta — aparte de "forma_pago", que sigue
+-- siendo un solo valor y define nada más qué lista de precios se sugiere
+-- al cargar los renglones (ver el comentario arriba de routes/ventas.js).
+-- Una venta puede cobrarse con más de un medio a la vez (por ejemplo,
+-- parte en efectivo y el resto por transferencia, o parte en efectivo y
+-- el resto a cuenta corriente) — cada fila de acá es un medio con su
+-- monto, y entre todas tienen que sumar el total de la venta (se valida
+-- en routes/ventas.js antes de guardar). Reemplaza por completo sus filas
+-- cada vez que se guarda la venta, igual que ventas_items.
+create table if not exists ventas_pagos (
+  id serial primary key,
+  venta_id integer not null references ventas(id) on delete cascade,
+  medio_pago text not null,
+  monto numeric not null,
+  orden integer not null default 0
+);
+create index if not exists idx_ventas_pagos_venta on ventas_pagos(venta_id);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'chk_venta_pago_medio'
+  ) then
+    alter table ventas_pagos
+      add constraint chk_venta_pago_medio
+      check (medio_pago in ('efectivo', 'transferencia', 'cuenta_corriente'));
+  end if;
+end $$;
+
+-- Migración de una sola vez: a cada venta ya cargada (de antes de que
+-- existiera esta tabla) se le arma un único medio de pago, con toda su
+-- forma_pago y su total — así queda con el mismo resultado que tenía
+-- hasta ahora, sin que el dueño tenga que volver a cargar nada. Corre
+-- una sola vez porque después ya no encuentra la tabla vacía.
+do $$
+begin
+  if not exists (select 1 from ventas_pagos limit 1) then
+    insert into ventas_pagos (venta_id, medio_pago, monto, orden)
+    select id, forma_pago, total, 0 from ventas;
+  end if;
+end $$;
+
 -- Presupuestos: misma idea que una venta (cliente + renglones de
 -- artículos + forma de pago), pero es solo una cotización para mostrarle
 -- un precio al cliente — no genera ningún movimiento de stock ni de

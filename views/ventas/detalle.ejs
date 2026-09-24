@@ -20,8 +20,12 @@
   · Cliente: <strong style="color:var(--ink);"><%= venta.cliente_nombre %></strong>
   (<a href="/clientes/<%= venta.cliente_id %>/editar">completar datos del cliente</a>)
   · Fecha: <%= formatearFechaHora(venta.fecha) %>
-  · <%= ETIQUETAS_FORMA_PAGO[venta.forma_pago] || venta.forma_pago %>
+  · Precio: <%= ETIQUETAS_FORMA_PAGO[venta.forma_pago] || venta.forma_pago %>
   · <%= ETIQUETAS_ORIGEN[venta.origen] || venta.origen %>
+</p>
+<p style="color:var(--ink-soft); margin-top:-8px;">
+  <strong style="color:var(--ink);">Medios de pago:</strong>
+  <% pagos.forEach((p, i) => { %><%= i > 0 ? ' · ' : ' ' %><%= ETIQUETAS_FORMA_PAGO[p.medio_pago] || p.medio_pago %>: $<%= Number(p.monto).toFixed(2) %><% }) %>
 </p>
 
 <form method="post" action="/ventas/<%= venta.id %>/estado" style="max-width:260px; margin-bottom:18px;">
@@ -90,6 +94,9 @@
       };
     }),
     total: Number(venta.total),
+    pagos: pagos.map(function (p) {
+      return { medio: ETIQUETAS_FORMA_PAGO[p.medio_pago] || p.medio_pago, monto: Number(p.monto) };
+    }),
   }) %>;
 
   var boton = document.getElementById('generar-remito');
@@ -125,6 +132,14 @@
     doc.setTextColor(110);
     doc.text('Fecha: ' + new Date(VENTA.fecha).toLocaleDateString('es-AR'), margenIzq, y);
     doc.text('Forma de pago: ' + VENTA.formaPago, anchoPagina - margenDer, y, { align: 'right' });
+    // Si se cobró con un solo medio, con el renglón de arriba alcanza
+    // (dice lo mismo). Si se dividió el cobro, se suma una línea con el
+    // detalle — por ejemplo "Pago: Efectivo $600.00, Transferencia $400.00".
+    if (VENTA.pagos.length > 1) {
+      y += 5;
+      var detallePagos = 'Pago: ' + VENTA.pagos.map(function (p) { return p.medio + ' $' + p.monto.toFixed(2); }).join(', ');
+      doc.text(detallePagos, anchoPagina - margenDer, y, { align: 'right' });
+    }
     doc.setTextColor(0);
     y += 9;
 
