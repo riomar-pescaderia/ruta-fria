@@ -91,6 +91,7 @@
     nombre: a.nombre,
     precioEfectivo: a.precioEfectivo,
     precioLista: a.precioLista,
+    precioSugerido: a.precioSugerido,
     prioridad: a.prioridad_listado || null,
     activo: a.activo !== false,
     stock: (a.stock === null || a.stock === undefined) ? null : Number(a.stock),
@@ -133,8 +134,9 @@
     var altoPagina = doc.internal.pageSize.getHeight();
     var xCodigo = margenIzq;
     var xProducto = margenIzq + 24;
-    var xEfectivo = anchoPagina - margenDer - 28;
-    var xLista = anchoPagina - margenDer;
+    var xSugerido = anchoPagina - margenDer;
+    var xLista = xSugerido - 28;
+    var xEfectivo = xLista - 28;
     var y = 20;
 
     function dibujarTitulo() {
@@ -157,6 +159,7 @@
       doc.text('Producto', xProducto, y);
       doc.text('Efectivo', xEfectivo, y, { align: 'right' });
       doc.text('Lista', xLista, y, { align: 'right' });
+      doc.text('Sugerido', xSugerido, y, { align: 'right' });
       y += 2;
       doc.setDrawColor(180);
       doc.setLineWidth(0.2);
@@ -177,7 +180,9 @@
       }
       doc.setFontSize(9.5);
       doc.text(String(a.codigo), xCodigo, y);
-      var nombreTexto = a.nombre.length > 48 ? a.nombre.slice(0, 47) + '…' : a.nombre;
+      // El nombre tiene menos lugar disponible ahora que hay tres columnas
+      // de precio en vez de dos (antes entraban hasta 48 caracteres).
+      var nombreTexto = a.nombre.length > 36 ? a.nombre.slice(0, 35) + '…' : a.nombre;
       doc.text(nombreTexto, xProducto, y);
       // "Sin stock" se decide por el stock real (apartado Stock), no por
       // el precio: por debajo del umbral se muestra así en vez del
@@ -189,10 +194,11 @@
       if (a.stock === null || a.stock >= UMBRAL_SIN_STOCK) {
         doc.text('$' + Math.round(a.precioEfectivo), xEfectivo, y, { align: 'right' });
         doc.text('$' + Math.round(a.precioLista), xLista, y, { align: 'right' });
+        doc.text('$' + Math.round(a.precioSugerido), xSugerido, y, { align: 'right' });
       } else {
         doc.setFont('helvetica', 'italic');
         doc.setTextColor(150);
-        doc.text('Sin stock', xLista, y, { align: 'right' });
+        doc.text('Sin stock', xSugerido, y, { align: 'right' });
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(0);
       }
