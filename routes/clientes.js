@@ -27,8 +27,74 @@ function listarConY(items) {
   return items.slice(0, -1).join(', ') + ' y ' + items[items.length - 1];
 }
 
-router.get('/nuevo', (req, res) => {
-  res.render('clientes/form', { cliente: {}, accion: '/clientes' });
+// Listado para "Traer desde visitas": todos los prospectos de Historial
+// de visitas que todavía no están vinculados a ningún cliente (a los que
+// ya lo están no tendría sentido volver a cargarlos). Trae también el
+// teléfono principal y el resumen de visitas, para ayudar a reconocer el
+// negocio correcto en el buscador — mismo criterio que Historial de
+// visitas (ver lib/prospectosCompartido.js), pero filtrado a los que
+// sirven para esta pantalla en particular.
+router.get('/desde-visitas', async (req, res, next) => {
+  try {
+    const { rows: prospectos } = await pool.query(`
+      select p.*,
+             (select ct.telefono from prospectos_contactos ct
+               where ct.prospecto_id = p.id and ct.telefono is not null
+               order by ct.orden, ct.id limit 1) as telefono_principal,
+             count(distinct v.id)::int as cantidad_visitas,
+             max(v.fecha) as ultima_visita
+      from prospectos p
+      left join prospectos_visitas v on v.prospecto_id = p.id
+      where p.activo = true and p.cliente_id is null
+      group by p.id
+      order by p.nombre
+    `);
+    res.render('clientes/desde-visitas', { prospectos });
+  } catch (err) { next(err); }
+});
+
+// Con "?desde_prospecto=<id>" (llega desde /clientes/desde-visitas), el
+// formulario arranca precargado con los datos de ese prospecto — así se
+// completa a mano solo lo que falta (condición de IVA, condición de pago,
+// etc.) en vez de volver a tipear todo. Sin ese parámetro, funciona igual
+// que siempre: formulario en blanco.
+router.get('/nuevo', async (req, res, next) => {
+  try {
+    const prospectoId = req.query.desde_prospecto;
+    if (!prospectoId) {
+      return res.render('clientes/form', { cliente: {}, accion: '/clientes', prospectoOrigen: null });
+    }
+
+    const { rows } = await pool.query(
+      'select * from prospectos where id = $1 and activo = true and cliente_id is null',
+      [prospectoId]
+    );
+    const prospecto = rows[0];
+    if (!prospecto) {
+      // Puede pasar que entre tanto ya se haya vinculado a otro cliente,
+      // se haya borrado, o el link haya quedado viejo — se sigue igual,
+      // con el formulario en blanco, en vez de trabar la carga.
+      return res.render('clientes/form', { cliente: {}, accion: '/clientes', prospectoOrigen: null });
+    }
+
+    const { rows: contactoRows } = await pool.query(
+      'select nombre, telefono from prospectos_contactos where prospecto_id = $1 order by orden, id limit 1',
+      [prospecto.id]
+    );
+    const contacto = contactoRows[0] || {};
+
+    const cliente = {
+      razon_social: prospecto.nombre,
+      nombre_contacto: contacto.nombre || '',
+      telefono: contacto.telefono || '',
+      direccion: prospecto.direccion || '',
+      cuit_dni: prospecto.cuit_dni || '',
+      notas: prospecto.notas || '',
+      lat: prospecto.lat,
+      lng: prospecto.lng,
+    };
+    res.render('clientes/form', { cliente, accion: '/clientes', prospectoOrigen: prospecto });
+  } catch (err) { next(err); }
 });
 
 router.post('/', async (req, res, next) => {
@@ -49,6 +115,17 @@ router.post('/', async (req, res, next) => {
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
       [c.razon_social, c.nombre_contacto, c.telefono, c.direccion, c.condicion_iva, c.cuit_dni, c.condicion_pago, c.notas, lat, lng]
     );
+    // Si el alta vino de "Traer desde visitas" (ver /clientes/desde-visitas
+    // y el campo oculto "prospecto_id" en clientes/form.ejs), el prospecto
+    // elegido se vincula directo — ya se sabe con certeza que es el mismo
+    // negocio, porque lo eligió la persona a mano, sin depender de que
+    // coincidan CUIT/DNI o teléfono como en el resto de los casos.
+    if (c.prospecto_id) {
+      await pool.query(
+        'update prospectos set cliente_id = $1 where id = $2 and activo = true and cliente_id is null',
+        [rows[0].id, c.prospecto_id]
+      );
+    }
     // Si este negocio ya estaba cargado como prospecto en Historial de
     // visitas (mismo CUIT/DNI o mismo teléfono), se vincula solo — ver
     // lib/vinculacion.js. Una coincidencia por domicilio no es tan segura
@@ -76,7 +153,7 @@ router.get('/:id/editar', async (req, res, next) => {
   try {
     const { rows } = await pool.query('select * from clientes where id = $1', [req.params.id]);
     if (!rows[0]) return res.redirect('/clientes');
-    res.render('clientes/form', { cliente: rows[0], accion: `/clientes/${req.params.id}` });
+    res.render('clientes/form', { cliente: rows[0], accion: `/clientes/${req.params.id}`, prospectoOrigen: null });
   } catch (err) { next(err); }
 });
 

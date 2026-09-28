@@ -27,13 +27,25 @@
 <table id="tabla-articulos">
   <thead>
     <tr>
-      <th>Código</th>
-      <th>Nombre</th>
-      <th>Unidad</th>
-      <th>Costo</th>
-      <th>Precio efectivo</th>
-      <th>Precio de lista</th>
-      <th>Orden en listado PDF</th>
+      <%
+        // Cada encabezado es un botón que abre el panel de "ordenar y
+        // filtrar" (ver el script más abajo) — mismo estilo Excel: ordenar
+        // ascendente/descendente, o tildar/destildar valores puntuales
+        // para mostrar solo esos renglones. "data-col" tiene que coincidir
+        // con la "clave" de COLUMNAS_FILTRO en el script.
+        const columnasEncabezado = [
+          { clave: 'codigo', texto: 'Código' },
+          { clave: 'nombre', texto: 'Nombre' },
+          { clave: 'unidad', texto: 'Unidad' },
+          { clave: 'costo', texto: 'Costo' },
+          { clave: 'precioEfectivo', texto: 'Precio efectivo' },
+          { clave: 'precioLista', texto: 'Precio de lista' },
+          { clave: 'prioridad', texto: 'Orden en listado PDF' },
+        ];
+      %>
+      <% columnasEncabezado.forEach(col => { %>
+      <th><button type="button" class="th-filtro-btn" data-col="<%= col.clave %>"><%= col.texto %> <span class="th-filtro-icono">▾</span></button></th>
+      <% }) %>
     </tr>
   </thead>
   <tbody>
@@ -41,10 +53,10 @@
     <tr data-buscar="<%= (a.codigo + ' ' + a.nombre).toLowerCase() %>" data-href="/articulos/<%= a.id %>/editar">
       <td data-label="Código" class="mono"><%= a.codigo %></td>
       <td data-label="Nombre"><%= a.nombre %></td>
-      <td data-label="Unidad" class="col-mobile-oculta"><%= a.unidad %></td>
-      <td data-label="Costo" class="mono col-mobile-oculta"<% if (Number(a.unidad) !== 1) { %> title="$<%= Number(a.costo).toFixed(2) %>/kg ÷ <%= a.unidad %>"<% } %>>$<%= a.costoPorUnidad.toFixed(2) %></td>
-      <td data-label="Precio efectivo" data-corto="Efvo" class="mono">$<%= a.precioEfectivo.toFixed(0) %></td>
-      <td data-label="Precio de lista" data-corto="Lista" class="mono">$<%= a.precioLista.toFixed(0) %></td>
+      <td data-label="Unidad" class="col-mobile-oculta" data-valor="<%= a.unidad %>"><%= a.unidad %></td>
+      <td data-label="Costo" class="mono col-mobile-oculta" data-valor="<%= a.costoPorUnidad %>"<% if (Number(a.unidad) !== 1) { %> title="$<%= Number(a.costo).toFixed(2) %>/kg ÷ <%= a.unidad %>"<% } %>>$<%= a.costoPorUnidad.toFixed(2) %></td>
+      <td data-label="Precio efectivo" data-corto="Efvo" class="mono" data-valor="<%= a.precioEfectivo %>">$<%= a.precioEfectivo.toFixed(0) %></td>
+      <td data-label="Precio de lista" data-corto="Lista" class="mono" data-valor="<%= a.precioLista %>">$<%= a.precioLista.toFixed(0) %></td>
       <td data-label="Orden en listado PDF" class="col-mobile-oculta">
         <form method="post" action="/articulos/<%= a.id %>/prioridad" style="margin:0;">
           <select name="prioridad_listado" onchange="this.form.submit()" class="select-prioridad<%= a.prioridad_listado ? ' prioridad-' + a.prioridad_listado : '' %>" style="max-width:150px;">
@@ -63,19 +75,308 @@
 
 <script>
 (function () {
-  var input = document.getElementById('buscar-articulo');
-  if (!input) return;
-  var filas = document.querySelectorAll('#tabla-articulos tbody tr');
+  // Buscador de texto libre + filtro/orden estilo Excel en cada
+  // encabezado. Todo vive en un solo módulo porque comparten el mismo
+  // "aplicarFiltros()": el texto tipeado arriba de la tabla y los tildes
+  // de cada columna se combinan (AND) para decidir qué filas quedan
+  // visibles.
+  var tabla = document.getElementById('tabla-articulos');
+  if (!tabla) return;
+  var tbody = tabla.querySelector('tbody');
+  var filas = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+  var inputBuscar = document.getElementById('buscar-articulo');
   var sinResultados = document.getElementById('sin-resultados-articulos');
-  input.addEventListener('input', function () {
-    var texto = input.value.trim().toLowerCase();
+
+  // Cada columna sabe sacar, de un <tr>: "valor" (para comparar/filtrar,
+  // siempre termina convertido a string), "etiqueta" (lo que se muestra
+  // en la lista de tildes — si no está definida, se usa el valor tal
+  // cual) y "numero" (si corresponde, para ordenar de forma numérica en
+  // vez de alfabética). Los precios y el costo usan los "data-valor" que
+  // se agregaron a esos <td> para no tener que volver a parsear el texto
+  // formateado con "$". La columna de prioridad no tiene data-valor —
+  // ahí vive un <select>, así que se lee directo de él.
+  function celda(tr, etiqueta) { return tr.querySelector('td[data-label="' + etiqueta + '"]'); }
+  function selectPrioridad(tr) { return tr.querySelector('select[name="prioridad_listado"]'); }
+
+  var COLUMNAS_FILTRO = {
+    codigo: {
+      tipo: 'texto',
+      valor: function (tr) { return celda(tr, 'Código').textContent.trim(); },
+    },
+    nombre: {
+      tipo: 'texto',
+      valor: function (tr) { return celda(tr, 'Nombre').textContent.trim(); },
+    },
+    unidad: {
+      tipo: 'numero',
+      valor: function (tr) { return celda(tr, 'Unidad').dataset.valor; },
+      numero: function (tr) { return Number(celda(tr, 'Unidad').dataset.valor); },
+    },
+    costo: {
+      tipo: 'numero',
+      valor: function (tr) { return celda(tr, 'Costo').dataset.valor; },
+      numero: function (tr) { return Number(celda(tr, 'Costo').dataset.valor); },
+      etiqueta: function (tr) { return '$' + Number(celda(tr, 'Costo').dataset.valor).toFixed(2); },
+    },
+    precioEfectivo: {
+      tipo: 'numero',
+      valor: function (tr) { return celda(tr, 'Precio efectivo').dataset.valor; },
+      numero: function (tr) { return Number(celda(tr, 'Precio efectivo').dataset.valor); },
+      etiqueta: function (tr) { return '$' + Math.round(Number(celda(tr, 'Precio efectivo').dataset.valor)); },
+    },
+    precioLista: {
+      tipo: 'numero',
+      valor: function (tr) { return celda(tr, 'Precio de lista').dataset.valor; },
+      numero: function (tr) { return Number(celda(tr, 'Precio de lista').dataset.valor); },
+      etiqueta: function (tr) { return '$' + Math.round(Number(celda(tr, 'Precio de lista').dataset.valor)); },
+    },
+    prioridad: {
+      tipo: 'numero',
+      valor: function (tr) { var s = selectPrioridad(tr); return s ? s.value : ''; },
+      etiqueta: function (tr) {
+        var s = selectPrioridad(tr);
+        return s ? s.options[s.selectedIndex].text : 'Sin prioridad';
+      },
+      numero: function (tr) { var s = selectPrioridad(tr); return s && s.value ? Number(s.value) : 99; },
+    },
+  };
+
+  // filtrosActivos[clave] = Set con los valores (string) tildados para esa
+  // columna. Si una columna no tiene entrada acá, no tiene filtro propio
+  // (se muestran todos sus valores) — así arranca la pantalla, sin tocar
+  // nada.
+  var filtrosActivos = {};
+
+  function aplicarFiltros() {
+    var texto = inputBuscar ? inputBuscar.value.trim().toLowerCase() : '';
     var visibles = 0;
     filas.forEach(function (tr) {
-      var coincide = !texto || tr.dataset.buscar.indexOf(texto) !== -1;
+      var coincideTexto = !texto || tr.dataset.buscar.indexOf(texto) !== -1;
+      var coincideFiltros = true;
+      for (var clave in filtrosActivos) {
+        var valor = String(COLUMNAS_FILTRO[clave].valor(tr));
+        if (!filtrosActivos[clave].has(valor)) { coincideFiltros = false; break; }
+      }
+      var coincide = coincideTexto && coincideFiltros;
       tr.hidden = !coincide;
       if (coincide) visibles++;
     });
-    sinResultados.style.display = visibles === 0 ? 'block' : 'none';
+    if (sinResultados) sinResultados.style.display = visibles === 0 ? 'block' : 'none';
+  }
+
+  if (inputBuscar) inputBuscar.addEventListener('input', aplicarFiltros);
+
+  function marcarActivo(clave) {
+    var boton = tabla.querySelector('.th-filtro-btn[data-col="' + clave + '"]');
+    if (boton) boton.classList.toggle('th-filtro-activo', !!filtrosActivos[clave]);
+  }
+
+  // El orden se aplica moviendo los <tr> de verdad dentro del <tbody> (con
+  // appendChild, que reubica en vez de duplicar) — así todo lo que ya
+  // tenían las filas (el data-href para editar, el <select> de prioridad
+  // con su propio listener) sigue funcionando sin tocar nada más.
+  function ordenarPor(clave, direccion) {
+    var def = COLUMNAS_FILTRO[clave];
+    var copia = filas.slice();
+    copia.sort(function (a, b) {
+      var res;
+      if (def.tipo === 'numero' && def.numero) {
+        res = def.numero(a) - def.numero(b);
+      } else {
+        res = String(def.valor(a)).localeCompare(String(def.valor(b)), 'es', { numeric: true, sensitivity: 'base' });
+      }
+      return direccion === 'desc' ? -res : res;
+    });
+    copia.forEach(function (tr) { tbody.appendChild(tr); });
+  }
+
+  // ---- Panel flotante de "ordenar y filtrar" — uno solo, reutilizado
+  // para cualquier columna que se abra (mismo criterio que el resto de
+  // los buscadores flotantes de la app: .buscador-flotante). ----
+  var panel = null;
+  var colAbierta = null;
+
+  function cerrarPanel() {
+    if (panel) { panel.remove(); panel = null; }
+    colAbierta = null;
+    document.removeEventListener('click', clickAfuera, true);
+    window.removeEventListener('scroll', cerrarPanel, true);
+    window.removeEventListener('resize', cerrarPanel);
+  }
+
+  function clickAfuera(e) {
+    if (panel && !panel.contains(e.target) && !e.target.closest('.th-filtro-btn')) cerrarPanel();
+  }
+
+  function valoresUnicos(clave) {
+    var def = COLUMNAS_FILTRO[clave];
+    var vistos = {};
+    var lista = [];
+    filas.forEach(function (tr) {
+      var valor = String(def.valor(tr));
+      if (vistos[valor]) return;
+      vistos[valor] = true;
+      lista.push({
+        valor: valor,
+        etiqueta: def.etiqueta ? def.etiqueta(tr) : valor,
+        numero: def.numero ? def.numero(tr) : null,
+      });
+    });
+    lista.sort(function (a, b) {
+      if (def.tipo === 'numero') return (a.numero || 0) - (b.numero || 0);
+      return a.etiqueta.localeCompare(b.etiqueta, 'es', { numeric: true, sensitivity: 'base' });
+    });
+    return lista;
+  }
+
+  function abrirPanel(boton, clave) {
+    if (colAbierta === clave) { cerrarPanel(); return; }
+    cerrarPanel();
+    colAbierta = clave;
+    var def = COLUMNAS_FILTRO[clave];
+    var opciones = valoresUnicos(clave);
+    var seleccionActual = filtrosActivos[clave] || null; // null = sin filtro, todo tildado
+
+    panel = document.createElement('div');
+    panel.className = 'th-filtro-panel';
+
+    var bloqueOrden = document.createElement('div');
+    bloqueOrden.className = 'th-filtro-ordenar';
+    var textoAsc = def.tipo === 'numero' ? 'Menor a mayor' : 'A → Z';
+    var textoDesc = def.tipo === 'numero' ? 'Mayor a menor' : 'Z → A';
+    var botonAsc = document.createElement('button');
+    botonAsc.type = 'button';
+    botonAsc.textContent = '↑ ' + textoAsc;
+    botonAsc.addEventListener('click', function () { ordenarPor(clave, 'asc'); cerrarPanel(); });
+    var botonDesc = document.createElement('button');
+    botonDesc.type = 'button';
+    botonDesc.textContent = '↓ ' + textoDesc;
+    botonDesc.addEventListener('click', function () { ordenarPor(clave, 'desc'); cerrarPanel(); });
+    bloqueOrden.appendChild(botonAsc);
+    bloqueOrden.appendChild(botonDesc);
+    panel.appendChild(bloqueOrden);
+
+    var buscarInterno = document.createElement('input');
+    buscarInterno.type = 'text';
+    buscarInterno.className = 'th-filtro-buscar';
+    buscarInterno.placeholder = 'Buscar valor...';
+    panel.appendChild(buscarInterno);
+
+    var filaTodos = document.createElement('label');
+    filaTodos.className = 'th-filtro-todos';
+    var checkTodos = document.createElement('input');
+    checkTodos.type = 'checkbox';
+    filaTodos.appendChild(checkTodos);
+    filaTodos.appendChild(document.createTextNode('Seleccionar todo'));
+    panel.appendChild(filaTodos);
+
+    var listaDiv = document.createElement('div');
+    listaDiv.className = 'th-filtro-lista';
+    var checks = [];
+    if (opciones.length === 0) {
+      var vacio = document.createElement('p');
+      vacio.className = 'th-filtro-sin-opciones';
+      vacio.textContent = 'No hay valores para mostrar.';
+      listaDiv.appendChild(vacio);
+    }
+    opciones.forEach(function (op) {
+      var label = document.createElement('label');
+      var check = document.createElement('input');
+      check.type = 'checkbox';
+      check.value = op.valor;
+      check.checked = !seleccionActual || seleccionActual.has(op.valor);
+      // Al tildar/destildar uno a mano, "Seleccionar todo" tiene que
+      // reflejarlo — pero solo mirando los que están visibles en ese
+      // momento (el buscador interno puede haber ocultado el resto).
+      check.addEventListener('change', function () { actualizarCheckTodos(); });
+      label.dataset.etiquetaBusqueda = op.etiqueta.toLowerCase();
+      label.appendChild(check);
+      label.appendChild(document.createTextNode(op.etiqueta));
+      listaDiv.appendChild(label);
+      checks.push(check);
+    });
+    panel.appendChild(listaDiv);
+
+    function actualizarCheckTodos() {
+      var visibles = checks.filter(function (c) { return !c.parentElement.hidden; });
+      checkTodos.checked = visibles.length > 0 && visibles.every(function (c) { return c.checked; });
+    }
+    checkTodos.checked = checks.length > 0 && checks.every(function (c) { return c.checked; });
+    checkTodos.addEventListener('change', function () {
+      checks.forEach(function (c) { if (!c.parentElement.hidden) c.checked = checkTodos.checked; });
+    });
+
+    // El buscador interno solo oculta/muestra los renglones de la lista —
+    // nunca crea ni destruye checkboxes, así que lo que ya se tildó no se
+    // pierde al tipear y borrar en este buscador.
+    buscarInterno.addEventListener('input', function () {
+      var texto = buscarInterno.value.trim().toLowerCase();
+      listaDiv.querySelectorAll('label').forEach(function (label) {
+        if (!label.dataset.etiquetaBusqueda) return;
+        label.hidden = texto !== '' && label.dataset.etiquetaBusqueda.indexOf(texto) === -1;
+      });
+      actualizarCheckTodos();
+    });
+
+    var acciones = document.createElement('div');
+    acciones.className = 'th-filtro-acciones';
+    var botonAplicar = document.createElement('button');
+    botonAplicar.type = 'button';
+    botonAplicar.className = 'btn';
+    botonAplicar.textContent = 'Aplicar';
+    botonAplicar.addEventListener('click', function () {
+      var tildados = checks.filter(function (c) { return c.checked; }).map(function (c) { return c.value; });
+      if (checks.length === 0 || tildados.length === checks.length) {
+        delete filtrosActivos[clave];
+      } else {
+        filtrosActivos[clave] = new Set(tildados);
+      }
+      marcarActivo(clave);
+      aplicarFiltros();
+      cerrarPanel();
+    });
+    var botonBorrar = document.createElement('button');
+    botonBorrar.type = 'button';
+    botonBorrar.className = 'btn secondary';
+    botonBorrar.textContent = 'Borrar filtro';
+    botonBorrar.addEventListener('click', function () {
+      delete filtrosActivos[clave];
+      marcarActivo(clave);
+      aplicarFiltros();
+      cerrarPanel();
+    });
+    acciones.appendChild(botonAplicar);
+    acciones.appendChild(botonBorrar);
+    panel.appendChild(acciones);
+
+    document.body.appendChild(panel);
+
+    // Se posiciona debajo del botón que se apretó — si no entra a la
+    // derecha (columnas del final de la tabla), se pega al borde derecho
+    // de la ventana en vez de salirse de la pantalla.
+    var rect = boton.getBoundingClientRect();
+    var left = rect.left;
+    var anchoPanel = panel.offsetWidth;
+    if (left + anchoPanel > window.innerWidth - 10) left = window.innerWidth - anchoPanel - 10;
+    panel.style.top = (rect.bottom + 4) + 'px';
+    panel.style.left = Math.max(10, left) + 'px';
+
+    setTimeout(function () {
+      document.addEventListener('click', clickAfuera, true);
+      window.addEventListener('scroll', cerrarPanel, true);
+      window.addEventListener('resize', cerrarPanel);
+    }, 0);
+  }
+
+  tabla.querySelectorAll('.th-filtro-btn').forEach(function (boton) {
+    boton.addEventListener('click', function (e) {
+      e.stopPropagation();
+      abrirPanel(boton, boton.dataset.col);
+    });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') cerrarPanel();
   });
 })();
 </script>

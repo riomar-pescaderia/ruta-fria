@@ -1,0 +1,68 @@
+<%- include('../partials/head') %>
+
+<div class="toolbar">
+  <h1>Traer cliente desde Visitas</h1>
+  <a class="btn secondary" href="/clientes">← Volver a Clientes</a>
+</div>
+
+<p style="color:var(--ink-soft); font-size:.9rem; margin-top:-10px;">
+  Elegí el prospecto que ya visitaste — se abre un cliente nuevo con sus datos ya cargados, listo para completar lo que falte y guardar.
+</p>
+
+<% if (prospectos.length === 0) { %>
+  <p class="empty">No hay ningún prospecto de Historial de visitas pendiente de cargar como cliente — o todavía no cargaste ninguna visita, o todas las que hay ya están vinculadas a un cliente.</p>
+<% } else { %>
+
+<div style="max-width:340px; margin-bottom:14px;">
+  <input type="text" id="buscar-prospecto-traer" placeholder="Buscar por nombre, dirección o ciudad...">
+</div>
+<p id="sin-resultados-desde-visitas" class="empty" style="display:none;">No encontré ninguna visita con ese nombre, dirección o ciudad.</p>
+<table id="tabla-desde-visitas">
+  <thead>
+    <tr>
+      <th>Nombre del negocio</th>
+      <th>Dirección</th>
+      <th>Ciudad</th>
+      <th>Teléfono</th>
+      <th>Visitas</th>
+      <th>Última visita</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <% prospectos.forEach(p => { %>
+    <tr data-buscar="<%= (p.nombre + ' ' + p.direccion + ' ' + (p.ciudad || '')).toLowerCase() %>" data-href="/clientes/nuevo?desde_prospecto=<%= p.id %>">
+      <td data-label="Nombre del negocio"><%= p.nombre %></td>
+      <td data-label="Dirección" class="col-mobile-oculta"><%= p.direccion %></td>
+      <td data-label="Ciudad" class="col-mobile-oculta"><%= p.ciudad || '—' %></td>
+      <td data-label="Teléfono" class="col-mobile-oculta"><%= p.telefono_principal || '—' %></td>
+      <td data-label="Visitas" class="mono"><%= p.cantidad_visitas %></td>
+      <td data-label="Última visita" class="col-mobile-oculta"><%= p.ultima_visita ? formatearFecha(p.ultima_visita) : '—' %></td>
+      <td><a class="btn secondary" href="/clientes/nuevo?desde_prospecto=<%= p.id %>">Cargar como cliente</a></td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+
+<% } %>
+
+<script>
+(function () {
+  var buscarInput = document.getElementById('buscar-prospecto-traer');
+  if (!buscarInput) return;
+  var filas = document.querySelectorAll('#tabla-desde-visitas tbody tr');
+  var sinResultados = document.getElementById('sin-resultados-desde-visitas');
+  buscarInput.addEventListener('input', function () {
+    var texto = buscarInput.value.trim().toLowerCase();
+    var visibles = 0;
+    filas.forEach(function (tr) {
+      var coincide = !texto || tr.dataset.buscar.indexOf(texto) !== -1;
+      tr.hidden = !coincide;
+      if (coincide) visibles++;
+    });
+    sinResultados.style.display = visibles === 0 ? 'block' : 'none';
+  });
+})();
+</script>
+
+<%- include('../partials/foot') %>

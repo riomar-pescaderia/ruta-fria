@@ -2,7 +2,10 @@
 
 <div class="toolbar">
   <h1>Clientes</h1>
-  <a class="btn" href="/clientes/nuevo">+ Nuevo cliente</a>
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <a class="btn secondary" href="/clientes/desde-visitas">Traer desde visitas</a>
+    <a class="btn" href="/clientes/nuevo">+ Nuevo cliente</a>
+  </div>
 </div>
 
 <% if (error) { %>

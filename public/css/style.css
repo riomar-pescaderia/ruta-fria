@@ -338,6 +338,90 @@ tr[hidden] { display: none !important; }
 .buscador-flotante button:last-child { border-bottom: none; }
 .buscador-flotante button:hover, .buscador-flotante button:focus { background: var(--bg); }
 
+/* ---------- Filtro/orden estilo Excel en encabezados de tabla (Artículos) ---------- */
+.th-filtro-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.th-filtro-btn:hover, .th-filtro-btn:focus { color: var(--navy, var(--ink)); }
+.th-filtro-icono { font-size: .7em; color: var(--ink-soft); }
+.th-filtro-btn.th-filtro-activo .th-filtro-icono { color: var(--navy, var(--ink)); font-weight: 700; }
+
+.th-filtro-panel {
+  position: fixed;
+  z-index: 1000;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(16, 30, 46, 0.16);
+  width: 230px;
+  padding: 10px;
+  font-size: .85rem;
+}
+.th-filtro-ordenar { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.th-filtro-ordenar button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: .85rem;
+  color: var(--ink);
+}
+.th-filtro-ordenar button:hover, .th-filtro-ordenar button:focus { background: var(--bg); }
+.th-filtro-buscar {
+  width: 100%;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: .82rem;
+  box-sizing: border-box;
+}
+.th-filtro-todos {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 600;
+  font-size: .82rem;
+}
+.th-filtro-lista {
+  max-height: 160px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.th-filtro-lista label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 2px;
+  font-size: .82rem;
+  cursor: pointer;
+  font-weight: 400;
+}
+.th-filtro-lista .th-filtro-sin-opciones { color: var(--ink-soft); padding: 4px 2px; }
+.th-filtro-acciones { display: flex; gap: 6px; }
+.th-filtro-acciones button { flex: 1; padding: 6px 8px; font-size: .82rem; }
+
 .modal-overlay {
   position: fixed;
   inset: 0;
