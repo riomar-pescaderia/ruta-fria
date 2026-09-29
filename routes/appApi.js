@@ -8,6 +8,7 @@ const express = require('express');
 const crypto = require('crypto');
 const pool = require('../db/pool');
 const { buscarPorUsername, verificarPassword } = require('../lib/auth');
+const { estaBloqueado, registrarFallo, registrarExito } = require('../lib/limiteIntentos');
 
 const router = express.Router();
 
@@ -28,10 +29,25 @@ router.post('/login', async (req, res) => {
     if (!username || !password) {
       return res.status(400).json({ error: 'Falta usuario o contraseña.' });
     }
+
+    // Mismo freno de fuerza bruta que en el login de la web, pero
+    // contado aparte (ver lib/limiteIntentos.js) — así un bloqueo por
+    // muchos intentos fallidos desde la app no afecta a la web ni
+    // viceversa.
+    const claveLimite = 'app:' + req.ip;
+    const minutosBloqueada = estaBloqueado(claveLimite);
+    if (minutosBloqueada) {
+      return res.status(429).json({
+        error: `Demasiados intentos fallidos. Probá de nuevo en ${minutosBloqueada} minuto${minutosBloqueada === 1 ? '' : 's'}.`,
+      });
+    }
+
     const usuario = await buscarPorUsername(username);
     if (!usuario || !(await verificarPassword(usuario, password))) {
+      registrarFallo(claveLimite);
       return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
     }
+    registrarExito(claveLimite);
     const token = generarToken();
     const { rows } = await pool.query(
       'insert into app_dispositivos (usuario_id, token_sesion_hash, modelo) values ($1,$2,$3) returning id',

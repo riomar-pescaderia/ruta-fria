@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { contarUsuarios, buscarPorUsername, crearUsuario, verificarPassword, datosSesion } = require('../lib/auth');
+const { estaBloqueado, registrarFallo, registrarExito } = require('../lib/limiteIntentos');
 
 router.get('/login', async (req, res) => {
   if (req.session.usuario) return res.redirect('/');
@@ -15,13 +16,26 @@ router.get('/login', async (req, res) => {
 });
 
 router.post('/login', async (req, res) => {
+  // Freno de fuerza bruta: por IP, independiente del de la app (ver
+  // lib/limiteIntentos.js). Se chequea antes de tocar la base para no
+  // gastar una consulta en un pedido que ya se sabe que va a fallar.
+  const claveLimite = 'web:' + req.ip;
+  const minutosBloqueada = estaBloqueado(claveLimite);
+  if (minutosBloqueada) {
+    return res.render('auth/login', {
+      error: `Demasiados intentos fallidos. Probá de nuevo en ${minutosBloqueada} minuto${minutosBloqueada === 1 ? '' : 's'}.`,
+    });
+  }
+
   const { username, password } = req.body;
   try {
     const usuario = await buscarPorUsername(String(username || '').trim());
     const ok = usuario && (await verificarPassword(usuario, password));
     if (!ok) {
+      registrarFallo(claveLimite);
       return res.render('auth/login', { error: 'Usuario o contraseña incorrectos.' });
     }
+    registrarExito(claveLimite);
     req.session.usuario = datosSesion(usuario);
     res.redirect('/');
   } catch (err) {
