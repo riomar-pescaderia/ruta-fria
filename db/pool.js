@@ -20,4 +20,20 @@ const pool = new Pool({
   options: '-c TimeZone=America/Argentina/Buenos_Aires',
 });
 
+// Sin este listener, el sistema se cae entero (y no se levanta solo) ante
+// cualquier corte de conexión con la base — es un comportamiento
+// documentado de la librería "pg": cuando una conexión que estaba
+// esperando ociosa en el pool se corta sola (por ejemplo, si Render
+// reinicia la base, o hay un corte de red momentáneo), esa conexión
+// emite un evento "error" sobre el pool. Si nadie escucha ese evento,
+// Node lo trata como una excepción no atrapada y tira abajo todo el
+// proceso, en vez de simplemente descartar esa conexión y abrir una
+// nueva la próxima vez que haga falta (que es lo que el pool ya hace
+// solo, siempre que este error no lo mate antes). Con este listener, el
+// corte queda solo en el log — el sistema sigue de pie y la conexión
+// siguiente se reestablece sola.
+pool.on('error', (err) => {
+  console.error('[ruta-fria] error de conexión con la base de datos (conexión ociosa cortada, se reestablece sola):', err.message);
+});
+
 module.exports = pool;
