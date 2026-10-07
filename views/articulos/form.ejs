@@ -79,6 +79,10 @@
       <option value="50x80">50 × 80 mm</option>
     </select>
   </div>
+  <div style="margin-bottom:12px;">
+    <label for="cantidad-copias">Copias</label>
+    <input type="number" id="cantidad-copias" value="1" min="1" max="50" step="1" inputmode="numeric" style="max-width:90px;">
+  </div>
   <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
     <button type="button" id="descargar-ticket" class="btn secondary">Descargar ticket (PDF)</button>
     <button type="button" id="imprimir-ticket-directo" class="btn secondary">Imprimir directo (Bluetooth)</button>
@@ -128,6 +132,17 @@
     var select = document.getElementById('formato-ticket');
     var valor = select ? select.value : '70x50';
     return FORMATOS[valor] || FORMATOS['70x50'];
+  }
+
+  // Entre 1 y 50 — si el campo queda vacío o con cualquier cosa, 1.
+  var MAX_COPIAS = 50;
+  function obtenerCopias() {
+    var campo = document.getElementById('cantidad-copias');
+    var n = campo ? parseInt(campo.value, 10) : 1;
+    if (!(n >= 1)) n = 1;
+    n = Math.min(MAX_COPIAS, n);
+    if (campo) campo.value = n;
+    return n;
   }
 
   // DD/MM/AAAA, igual al formato que se usa en el resto del sistema.
@@ -425,9 +440,14 @@
       var hoy = new Date();
       var vencimiento = sumarMeses(hoy, 6);
 
+      // Una página del PDF por copia.
+      var copias = obtenerCopias();
       logoListo.then(function () {
-        dibujarTicket(pintorPdf(doc, escala), escala, ANCHO_MM / escala, ALTO_MM / escala,
-          ARTICULO.nombre, formatearFechaCorta(hoy), formatearFechaCorta(vencimiento));
+        for (var i = 0; i < copias; i++) {
+          if (i > 0) doc.addPage([ANCHO_MM, ALTO_MM], orientacion);
+          dibujarTicket(pintorPdf(doc, escala), escala, ANCHO_MM / escala, ALTO_MM / escala,
+            ARTICULO.nombre, formatearFechaCorta(hoy), formatearFechaCorta(vencimiento));
+        }
         doc.save('ticket-' + ARTICULO.codigo + '-' + ANCHO_MM + 'x' + ALTO_MM + '.pdf');
       });
     });
@@ -744,7 +764,10 @@
     return paquetesCrudos.map(function (p) { return paqueteAImagenBytes(p, bytesPorTercio); });
   }
 
-  function imprimirDirecto(anchoMm, altoMm, nombreArticulo, actualizarEstado) {
+  // copias: la impresora las repite sola (va en PRINT_START como total de
+  // páginas y en SET_PAGE_SIZE como cantidad), así que la imagen se manda
+  // una sola vez.
+  function imprimirDirecto(anchoMm, altoMm, nombreArticulo, copias, actualizarEstado) {
     if (!navigator.bluetooth) {
       return Promise.reject(new Error('Este navegador no soporta impresión por Bluetooth — probá con Chrome o Edge en la computadora, o Chrome en Android.'));
     }
@@ -774,17 +797,19 @@
       // cambiar.
       .then(function () { return cliente.enviarYEsperar(CMD.SET_LABEL_TYPE, new Uint8Array([1]), CMD.IN_SET_LABEL_TYPE, 1500); })
       .then(function () {
-        // 7 bytes: cantidad de páginas (1) + 4 bytes en 0 + color de página (0 = un solo color).
-        var datosInicio = new Uint8Array([0, 1, 0, 0, 0, 0, 0]);
+        // 7 bytes: cantidad total de páginas (= copias) + 4 bytes en 0 + color de página (0 = un solo color).
+        var total = u16be(copias);
+        var datosInicio = new Uint8Array([total[0], total[1], 0, 0, 0, 0, 0]);
         return cliente.enviarYEsperar(CMD.PRINT_START, datosInicio, CMD.IN_PRINT_START, 1500);
       })
       .then(function () { return cliente.enviarYEsperar(CMD.PAGE_START, new Uint8Array(0), CMD.IN_PAGE_START, 1500); })
       .then(function () {
-        // 6 bytes: alto en renglones + ancho en puntos + cantidad de copias (1).
+        // 6 bytes: alto en renglones + ancho en puntos + cantidad de copias.
+        var cantidad = u16be(copias);
         var tamanioPagina = new Uint8Array([
           (dibujo.rows >> 8) & 0xff, dibujo.rows & 0xff,
           (dibujo.cols >> 8) & 0xff, dibujo.cols & 0xff,
-          0, 1,
+          cantidad[0], cantidad[1],
         ]);
         return cliente.enviarYEsperar(CMD.SET_PAGE_SIZE, tamanioPagina, CMD.IN_SET_PAGE_SIZE, 1500);
       })
@@ -804,10 +829,11 @@
         // PRINT_END: si llega antes, la impresión se cancela y no sale
         // nada. La respuesta de estado trae [página (2 bytes), avance de
         // impresión %, avance de alimentación %, ...] — se da por
-        // terminado cuando va por la página 1 y los avances llegan a 100.
-        // Tope de ~20 segundos para no trabar el botón para siempre.
-        actualizarEstado('Esperando que termine de imprimir...');
-        var limite = Date.now() + 20000;
+        // terminado cuando va por la última copia y los avances llegan a
+        // 100. Tope de 20 segundos más 5 por copia, para no trabar el
+        // botón para siempre.
+        actualizarEstado(copias > 1 ? 'Imprimiendo ' + copias + ' copias...' : 'Esperando que termine de imprimir...');
+        var limite = Date.now() + 20000 + copias * 5000;
         function unaVuelta() {
           return cliente.enviarYEsperar(CMD.PRINT_STATUS, new Uint8Array(0), CMD.IN_PRINT_STATUS, 800).then(function (respuesta) {
             if (respuesta && respuesta.length >= 8) {
@@ -816,7 +842,8 @@
               var avanceImpresion = d[2];
               var avanceAlimentacion = d[3];
               registrar('   estado: página ' + pagina + ', impresión ' + avanceImpresion + '%, alimentación ' + avanceAlimentacion + '%');
-              if (pagina >= 1 && avanceImpresion >= 100 && avanceAlimentacion >= 100) return true;
+              if (copias > 1) actualizarEstado('Imprimiendo copia ' + Math.min(copias, pagina + 1) + ' de ' + copias + '...');
+              if (pagina >= copias && avanceImpresion >= 100 && avanceAlimentacion >= 100) return true;
             }
             if (Date.now() > limite) {
               registrar('   se agotó la espera del estado');
@@ -842,9 +869,10 @@
       estadoDirecto.style.display = 'block';
       estadoDirecto.textContent = 'Iniciando...';
       botonDirecto.disabled = true;
+      var copias = obtenerCopias();
       limpiarRegistro();
-      registrar('Etiqueta ' + formato.ancho + '×' + formato.alto + ' mm');
-      imprimirDirecto(formato.ancho, formato.alto, ARTICULO.nombre, function (msg) {
+      registrar('Etiqueta ' + formato.ancho + '×' + formato.alto + ' mm, ' + copias + (copias === 1 ? ' copia' : ' copias'));
+      imprimirDirecto(formato.ancho, formato.alto, ARTICULO.nombre, copias, function (msg) {
         estadoDirecto.textContent = msg;
       }).then(function () {
         botonDirecto.disabled = false;
