@@ -79,22 +79,30 @@
       <option value="50x80">50 × 80 mm</option>
     </select>
   </div>
-  <div style="margin-bottom:12px;">
-    <label for="cantidad-copias">Copias</label>
-    <input type="number" id="cantidad-copias" value="1" min="1" max="50" step="1" inputmode="numeric" style="max-width:90px;">
-  </div>
   <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
     <button type="button" id="descargar-ticket" class="btn secondary">Descargar ticket (PDF)</button>
     <button type="button" id="imprimir-ticket-directo" class="btn secondary">Imprimir directo (Bluetooth)</button>
   </div>
   <p id="estado-impresion-directa" style="color:var(--ink-soft); font-size:.82rem; margin:10px 0 0; display:none;"></p>
-  <div id="registro-impresion-caja" style="display:none; margin-top:10px;">
-    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-      <span style="color:var(--ink-soft); font-size:.78rem;">Registro de la impresión (para revisar si algo falla):</span>
-      <button type="button" id="copiar-registro" class="btn secondary" style="font-size:.78rem; padding:4px 10px;">Copiar registro</button>
-    </div>
-    <pre id="registro-impresion" style="font-size:.7rem; line-height:1.35; max-height:240px; overflow:auto; white-space:pre-wrap; word-break:break-all; border:1px solid #ccc; border-radius:6px; padding:8px; margin:6px 0 0;"></pre>
-  </div>
+
+  <%# Se abre al tocar cualquiera de los dos botones: el clic en "Imprimir"
+      de este cuadro es el que arranca la impresión (el navegador solo deja
+      abrir el selector de Bluetooth justo después de un clic). %>
+  <dialog id="dialogo-copias" style="border:1px solid var(--line); border-radius:14px; padding:20px; max-width:320px; width:calc(100% - 32px); background:var(--surface);">
+    <form method="dialog" id="form-copias" style="margin:0;">
+      <h3 style="margin:0 0 4px; font-size:1.05rem;">¿Cuántas copias?</h3>
+      <p id="dialogo-copias-detalle" style="color:var(--ink-soft); font-size:.82rem; margin:0 0 14px;"></p>
+      <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:18px;">
+        <button type="button" id="copias-menos" class="btn secondary" aria-label="Una copia menos" style="width:48px; height:48px; font-size:1.4rem; padding:0;">−</button>
+        <input type="number" id="cantidad-copias" value="1" min="1" max="50" step="1" inputmode="numeric" aria-label="Cantidad de copias" style="width:80px; height:48px; text-align:center; font-size:1.3rem;">
+        <button type="button" id="copias-mas" class="btn secondary" aria-label="Una copia más" style="width:48px; height:48px; font-size:1.4rem; padding:0;">+</button>
+      </div>
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button type="button" id="copias-cancelar" class="btn secondary">Cancelar</button>
+        <button type="submit" id="copias-confirmar" class="btn">Imprimir</button>
+      </div>
+    </form>
+  </dialog>
   <p style="color:var(--ink-soft); font-size:.78rem; margin:10px 0 0;">
     La impresión directa manda el ticket por Bluetooth a una impresora de stickers Niimbot B31 — funciona en Chrome o Edge (no en Safari ni Firefox), y el navegador te va a pedir elegir el dispositivo la primera vez.
   </p>
@@ -143,6 +151,52 @@
     n = Math.min(MAX_COPIAS, n);
     if (campo) campo.value = n;
     return n;
+  }
+
+  // ===== Cuadro "¿Cuántas copias?" =====
+  // Lo abren los dos botones; al confirmar llama a accion(copias). Arranca
+  // siempre en 1 para no imprimir de más por haber dejado otro número.
+  var dialogoCopias = document.getElementById('dialogo-copias');
+  var accionPendiente = null;
+
+  function pedirCopias(detalle, textoBoton, accion) {
+    var campo = document.getElementById('cantidad-copias');
+    campo.value = 1;
+    document.getElementById('dialogo-copias-detalle').textContent = detalle;
+    document.getElementById('copias-confirmar').textContent = textoBoton;
+    accionPendiente = accion;
+    if (dialogoCopias && dialogoCopias.showModal) {
+      dialogoCopias.showModal();
+      campo.select();
+    } else {
+      // Navegador sin <dialog>: sigue con una copia.
+      accion(1);
+    }
+  }
+
+  if (dialogoCopias) {
+    document.getElementById('copias-menos').addEventListener('click', function () {
+      var campo = document.getElementById('cantidad-copias');
+      campo.value = Math.max(1, obtenerCopias() - 1);
+    });
+    document.getElementById('copias-mas').addEventListener('click', function () {
+      var campo = document.getElementById('cantidad-copias');
+      campo.value = Math.min(MAX_COPIAS, obtenerCopias() + 1);
+    });
+    document.getElementById('copias-cancelar').addEventListener('click', function () {
+      accionPendiente = null;
+      dialogoCopias.close();
+    });
+    // El "Imprimir" (o Enter en el campo) envía el formulario: este clic
+    // es el que habilita al navegador a abrir el selector de Bluetooth.
+    document.getElementById('form-copias').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var copias = obtenerCopias();
+      var accion = accionPendiente;
+      accionPendiente = null;
+      dialogoCopias.close();
+      if (accion) accion(copias);
+    });
   }
 
   // DD/MM/AAAA, igual al formato que se usa en el resto del sistema.
@@ -407,49 +461,52 @@
   }
 
   // ===== Descargar como PDF =====
+  function descargarPdf(copias) {
+    if (typeof window.jspdf === 'undefined') {
+      alert('No se pudo cargar la librería para generar el PDF. Revisá la conexión a internet e intentá de nuevo.');
+      return;
+    }
+
+    var formato = obtenerFormatoSeleccionado();
+    var ANCHO_MM = formato.ancho;
+    var ALTO_MM = formato.alto;
+    var escala = calcularEscala(ANCHO_MM, ALTO_MM);
+
+    // jsPDF fuerza el formato recibido a la orientación que le pasás
+    // (por defecto "portrait"): si el array [ancho, alto] no entra en
+    // esa orientación, lo DA VUELTA solo, sin avisar. Como la mayoría
+    // de estos tamaños son más anchos que altos (70×50, 50×30, 40×15,
+    // 40×30), sin esto la página real terminaba siendo, por ejemplo,
+    // 50×70mm en vez de 70×50mm — por eso se veía "cortado" el
+    // costado derecho (las fechas quedaban dibujadas fuera de la hoja
+    // real). Pidiendo la orientación acorde al tamaño elegido, jsPDF
+    // ya no necesita dar vuelta nada y la página sale del tamaño que
+    // se eligió.
+    var orientacion = ANCHO_MM >= ALTO_MM ? 'landscape' : 'portrait';
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF({ unit: 'mm', format: [ANCHO_MM, ALTO_MM], orientation: orientacion });
+
+    // La fecha de envasado es la fecha de HOY (el momento en que se
+    // genera el ticket, no la fecha en que se cargó el artículo) — y
+    // "consumir antes de" son 6 meses después.
+    var hoy = new Date();
+    var vencimiento = sumarMeses(hoy, 6);
+
+    // Una página del PDF por copia.
+    logoListo.then(function () {
+      for (var i = 0; i < copias; i++) {
+        if (i > 0) doc.addPage([ANCHO_MM, ALTO_MM], orientacion);
+        dibujarTicket(pintorPdf(doc, escala), escala, ANCHO_MM / escala, ALTO_MM / escala,
+          ARTICULO.nombre, formatearFechaCorta(hoy), formatearFechaCorta(vencimiento));
+      }
+      doc.save('ticket-' + ARTICULO.codigo + '-' + ANCHO_MM + 'x' + ALTO_MM + '.pdf');
+    });
+  }
+
   var botonPdf = document.getElementById('descargar-ticket');
   if (botonPdf) {
     botonPdf.addEventListener('click', function () {
-      if (typeof window.jspdf === 'undefined') {
-        alert('No se pudo cargar la librería para generar el PDF. Revisá la conexión a internet e intentá de nuevo.');
-        return;
-      }
-
-      var formato = obtenerFormatoSeleccionado();
-      var ANCHO_MM = formato.ancho;
-      var ALTO_MM = formato.alto;
-      var escala = calcularEscala(ANCHO_MM, ALTO_MM);
-
-      // jsPDF fuerza el formato recibido a la orientación que le pasás
-      // (por defecto "portrait"): si el array [ancho, alto] no entra en
-      // esa orientación, lo DA VUELTA solo, sin avisar. Como la mayoría
-      // de estos tamaños son más anchos que altos (70×50, 50×30, 40×15,
-      // 40×30), sin esto la página real terminaba siendo, por ejemplo,
-      // 50×70mm en vez de 70×50mm — por eso se veía "cortado" el
-      // costado derecho (las fechas quedaban dibujadas fuera de la hoja
-      // real). Pidiendo la orientación acorde al tamaño elegido, jsPDF
-      // ya no necesita dar vuelta nada y la página sale del tamaño que
-      // se eligió.
-      var orientacion = ANCHO_MM >= ALTO_MM ? 'landscape' : 'portrait';
-      var jsPDF = window.jspdf.jsPDF;
-      var doc = new jsPDF({ unit: 'mm', format: [ANCHO_MM, ALTO_MM], orientation: orientacion });
-
-      // La fecha de envasado es la fecha de HOY (el momento en que se
-      // genera el ticket, no la fecha en que se cargó el artículo) — y
-      // "consumir antes de" son 6 meses después.
-      var hoy = new Date();
-      var vencimiento = sumarMeses(hoy, 6);
-
-      // Una página del PDF por copia.
-      var copias = obtenerCopias();
-      logoListo.then(function () {
-        for (var i = 0; i < copias; i++) {
-          if (i > 0) doc.addPage([ANCHO_MM, ALTO_MM], orientacion);
-          dibujarTicket(pintorPdf(doc, escala), escala, ANCHO_MM / escala, ALTO_MM / escala,
-            ARTICULO.nombre, formatearFechaCorta(hoy), formatearFechaCorta(vencimiento));
-        }
-        doc.save('ticket-' + ARTICULO.codigo + '-' + ANCHO_MM + 'x' + ALTO_MM + '.pdf');
-      });
+      pedirCopias('Se descarga un PDF con una página por copia.', 'Descargar', descargarPdf);
     });
   }
 
@@ -491,10 +548,10 @@
 
   function u16be(n) { return [(n >> 8) & 0xff, n & 0xff]; }
 
-  // ===== Registro en pantalla =====
-  // Desde el celular no hay consola (F12), así que cada paso de la
-  // impresión (y lo que contesta la impresora, en hexadecimal) se anota
-  // también en un recuadro de la página, con un botón para copiarlo.
+  // ===== Registro =====
+  // Cada paso de la impresión (y lo que contesta la impresora, en
+  // hexadecimal) queda anotado en la consola del navegador (F12), para
+  // diagnosticar si algún día deja de funcionar.
   var NOMBRES_CMD = {};
   Object.keys(CMD).forEach(function (k) { NOMBRES_CMD[CMD[k]] = k; });
 
@@ -505,21 +562,11 @@
   var inicioRegistro = 0;
   function registrar(texto) {
     var segundos = ((Date.now() - inicioRegistro) / 1000).toFixed(2);
-    var linea = '[' + segundos + 's] ' + texto;
-    console.log('[ruta-fria] ' + linea);
-    var pre = document.getElementById('registro-impresion');
-    if (pre) {
-      pre.textContent += linea + '\n';
-      pre.scrollTop = pre.scrollHeight;
-    }
+    console.log('[ruta-fria] [' + segundos + 's] ' + texto);
   }
 
-  function limpiarRegistro() {
+  function empezarRegistro() {
     inicioRegistro = Date.now();
-    var pre = document.getElementById('registro-impresion');
-    if (pre) pre.textContent = '';
-    var caja = document.getElementById('registro-impresion-caja');
-    if (caja) caja.style.display = 'block';
     registrar('Navegador: ' + navigator.userAgent);
   }
 
@@ -857,55 +904,33 @@
       .then(function () { return cliente.enviarYEsperar(CMD.PRINT_END, new Uint8Array(0), CMD.IN_PRINT_END, 1500); })
       .then(function () {
         registrar('Fin');
-        actualizarEstado('¡Listo! Si no salió el ticket, tocá "Copiar registro" y mandámelo.');
+        actualizarEstado(copias > 1 ? '¡Listo! Se imprimieron ' + copias + ' copias.' : '¡Listo!');
       });
   }
 
   var botonDirecto = document.getElementById('imprimir-ticket-directo');
   var estadoDirecto = document.getElementById('estado-impresion-directa');
-  if (botonDirecto) {
-    botonDirecto.addEventListener('click', function () {
-      var formato = obtenerFormatoSeleccionado();
-      estadoDirecto.style.display = 'block';
-      estadoDirecto.textContent = 'Iniciando...';
-      botonDirecto.disabled = true;
-      var copias = obtenerCopias();
-      limpiarRegistro();
-      registrar('Etiqueta ' + formato.ancho + '×' + formato.alto + ' mm, ' + copias + (copias === 1 ? ' copia' : ' copias'));
-      imprimirDirecto(formato.ancho, formato.alto, ARTICULO.nombre, copias, function (msg) {
-        estadoDirecto.textContent = msg;
-      }).then(function () {
-        botonDirecto.disabled = false;
-      }).catch(function (err) {
-        console.error('[ruta-fria] error imprimiendo por Bluetooth:', err);
-        registrar('ERROR: ' + (err && err.name ? err.name + ': ' : '') + (err && err.message));
-        estadoDirecto.textContent = 'No se pudo imprimir: ' + err.message;
-        botonDirecto.disabled = false;
-      });
+  function imprimirPorBluetooth(copias) {
+    var formato = obtenerFormatoSeleccionado();
+    estadoDirecto.style.display = 'block';
+    estadoDirecto.textContent = 'Iniciando...';
+    botonDirecto.disabled = true;
+    empezarRegistro();
+    registrar('Etiqueta ' + formato.ancho + '×' + formato.alto + ' mm, ' + copias + (copias === 1 ? ' copia' : ' copias'));
+    imprimirDirecto(formato.ancho, formato.alto, ARTICULO.nombre, copias, function (msg) {
+      estadoDirecto.textContent = msg;
+    }).then(function () {
+      botonDirecto.disabled = false;
+    }).catch(function (err) {
+      console.error('[ruta-fria] error imprimiendo por Bluetooth:', err);
+      estadoDirecto.textContent = 'No se pudo imprimir: ' + err.message;
+      botonDirecto.disabled = false;
     });
   }
 
-  var botonCopiar = document.getElementById('copiar-registro');
-  if (botonCopiar) {
-    botonCopiar.addEventListener('click', function () {
-      var pre = document.getElementById('registro-impresion');
-      var texto = pre ? pre.textContent : '';
-      function seleccionar() {
-        var rango = document.createRange();
-        rango.selectNodeContents(pre);
-        var sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(rango);
-        botonCopiar.textContent = 'Seleccionado: copialo a mano';
-      }
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(texto).then(function () {
-          botonCopiar.textContent = 'Copiado';
-          setTimeout(function () { botonCopiar.textContent = 'Copiar registro'; }, 2000);
-        }, seleccionar);
-      } else {
-        seleccionar();
-      }
+  if (botonDirecto) {
+    botonDirecto.addEventListener('click', function () {
+      pedirCopias('Se imprimen por Bluetooth en la Niimbot, una detrás de otra.', 'Imprimir', imprimirPorBluetooth);
     });
   }
 })();
