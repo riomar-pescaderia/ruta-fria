@@ -68,6 +68,13 @@ Esto no reemplaza tener la base al día en un plan pago de Render (con
 sus propios backups automáticos) — es la copia de seguridad aparte, por
 si pasa algo con la cuenta de Render, con la base, o con lo que sea.
 
+## Deploy
+
+Render (servicio `ruta-fria`) publica solo cada commit que llega a la
+rama `main` de GitHub. Para eso la app de Render tiene que estar
+instalada en la cuenta `riomar-pescaderia` con acceso a este
+repositorio (GitHub → Settings → Applications → Render).
+
 ## Estructura del proyecto
 
 ```
