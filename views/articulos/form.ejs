@@ -438,6 +438,9 @@
   // esperable que la primera vez necesite algún ajuste — si falla, la
   // consola del navegador (F12) va a tener el detalle del error.
   var NIIMBOT_SERVICE_UUID = 'e7810a71-73ae-499d-8c15-faa9aef0c3f2';
+  // Algunos modelos usan en cambio el canal serie genérico de su chip
+  // Bluetooth (ISSC/Microchip "transparent UART").
+  var NIIMBOT_SERVICE_UUID_ALT = '49535343-fe7d-4ae5-8fa9-9fafd205e455';
   var CMD = {
     CONNECT: 0xc1, IN_CONNECT: 0xc2,
     SET_DENSITY: 0x21, IN_SET_DENSITY: 0x31,
@@ -497,7 +500,21 @@
   ClienteNiimbot.prototype.conectar = function (onEstado) {
     var self = this;
     onEstado('Elegí la impresora en el diálogo del navegador...');
-    return navigator.bluetooth.requestDevice({ filters: [{ services: [NIIMBOT_SERVICE_UUID] }] })
+    // Muchas Niimbot no anuncian su servicio hasta que uno se conecta, así
+    // que filtrar solo por servicio dejaba la lista vacía: se busca también
+    // por nombre (los filtros se suman: alcanza con que cumpla uno). Los
+    // servicios van además en optionalServices porque, si el dispositivo
+    // se eligió por nombre, el navegador solo deja usar los que estén ahí.
+    return navigator.bluetooth.requestDevice({
+      filters: [
+        { services: [NIIMBOT_SERVICE_UUID] },
+        { namePrefix: 'B31' },
+        { namePrefix: 'B3' },
+        { namePrefix: 'Niimbot' },
+        { namePrefix: 'NIIMBOT' },
+      ],
+      optionalServices: [NIIMBOT_SERVICE_UUID, NIIMBOT_SERVICE_UUID_ALT],
+    })
       .then(function (dispositivo) {
         self.dispositivo = dispositivo;
         onEstado('Conectando...');
