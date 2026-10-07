@@ -63,11 +63,581 @@
 <% } %>
 
 <% if (articulo.id) { %>
+<div class="card" style="max-width:520px; margin-top:16px;">
+  <h2 style="font-size:1rem; margin:0 0 6px;">Ticket de envasado</h2>
+  <p style="color:var(--ink-soft); font-size:.85rem; margin:0 0 12px;">
+    Para pegar en la bolsa: nombre del artículo, fecha de envasado (la de hoy) y "consumir antes de" (6 meses después).
+  </p>
+  <div style="margin-bottom:12px;">
+    <label for="formato-ticket">Tamaño de etiqueta</label>
+    <select id="formato-ticket" style="max-width:260px;">
+      <option value="30x15">30 × 15 mm</option>
+      <option value="40x15">40 × 15 mm</option>
+      <option value="40x30">40 × 30 mm</option>
+      <option value="50x30">50 × 30 mm</option>
+      <option value="70x50" selected>70 × 50 mm (recomendado)</option>
+      <option value="50x80">50 × 80 mm</option>
+    </select>
+  </div>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+    <button type="button" id="descargar-ticket" class="btn secondary">Descargar ticket (PDF)</button>
+    <button type="button" id="imprimir-ticket-directo" class="btn secondary">Imprimir directo (Bluetooth)</button>
+  </div>
+  <p id="estado-impresion-directa" style="color:var(--ink-soft); font-size:.82rem; margin:10px 0 0; display:none;"></p>
+  <p style="color:var(--ink-soft); font-size:.78rem; margin:10px 0 0;">
+    La impresión directa manda el ticket por Bluetooth a una impresora de stickers Niimbot B31 — funciona en Chrome o Edge (no en Safari ni Firefox), y el navegador te va a pedir elegir el dispositivo la primera vez.
+  </p>
+</div>
+<% } %>
+
+<% if (articulo.id) { %>
 <div style="max-width:520px; margin-top:16px;">
   <form method="post" action="/articulos/<%= articulo.id %>/eliminar" style="margin:0;" onsubmit="return confirm('¿Eliminar este artículo? No se puede deshacer.');">
     <button type="submit" class="btn secondary" style="color:#a33;">Eliminar artículo</button>
   </form>
 </div>
+<% } %>
+
+<% if (articulo.id) { %>
+<script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script>
+(function () {
+  var ARTICULO = <%- JSON.stringify({ codigo: articulo.codigo, nombre: articulo.nombre }) %>;
+
+  // ===== Formatos de etiqueta disponibles =====
+  // El diseño de referencia está pensado para 70×50mm — los demás
+  // tamaños reescalan proporcionalmente (ver calcularEscala/
+  // obtenerMetricasMm), tanto para el PDF como para la imagen que se
+  // manda por Bluetooth.
+  var FORMATOS = {
+    '30x15': { ancho: 30, alto: 15 },
+    '40x15': { ancho: 40, alto: 15 },
+    '40x30': { ancho: 40, alto: 30 },
+    '50x30': { ancho: 50, alto: 30 },
+    '70x50': { ancho: 70, alto: 50 },
+    '50x80': { ancho: 50, alto: 80 },
+  };
+
+  function obtenerFormatoSeleccionado() {
+    var select = document.getElementById('formato-ticket');
+    var valor = select ? select.value : '70x50';
+    return FORMATOS[valor] || FORMATOS['70x50'];
+  }
+
+  // DD/MM/AAAA, igual al formato que se usa en el resto del sistema.
+  function formatearFechaCorta(f) {
+    var dd = String(f.getDate()).padStart(2, '0');
+    var mm = String(f.getMonth() + 1).padStart(2, '0');
+    return dd + '/' + mm + '/' + f.getFullYear();
+  }
+
+  // Suma meses sin "desbordar" cuando el mes de destino tiene menos
+  // días: 31 de agosto + 6 meses daría 31 de febrero, que no existe, y
+  // el Date de JS por su cuenta lo empuja al 3 de marzo en vez de
+  // quedarse en el último día de febrero. Esto lo corrige quedándose en
+  // el último día del mes de destino en vez de pasarse al siguiente.
+  function sumarMeses(fecha, meses) {
+    var d = new Date(fecha);
+    var diaOriginal = d.getDate();
+    d.setMonth(d.getMonth() + meses);
+    if (d.getDate() !== diaOriginal) d.setDate(0);
+    return d;
+  }
+
+  // ===== Medidas del diseño, escaladas según el tamaño elegido =====
+  // Todo está pensado en milímetros, tanto para el PDF (que ya trabaja
+  // en mm) como para la imagen de la impresora Bluetooth (que los
+  // convierte a puntos según el DPI — ver PUNTOS_POR_MM más abajo).
+  function calcularEscala(anchoMm, altoMm) {
+    var e = Math.min(anchoMm / 70, altoMm / 50);
+    // Nunca deja el texto ilegiblemente chico ni desproporcionadamente
+    // grande en los tamaños extremos de la lista.
+    return Math.max(0.35, Math.min(1.3, e));
+  }
+
+  function obtenerMetricasMm(escala) {
+    return {
+      margenMm: 4 * escala,
+      brandFontMm: 2.5 * escala,
+      nombreFontMm: 5 * escala,
+      fechaFontMm: 3.2 * escala,
+      yInicialMm: 7 * escala,
+      saltoBrandANombreMm: 6 * escala,
+      lineaNombreMm: 5.5 * escala,
+      gapNombreADivisorMm: 2 * escala,
+      gapDivisorAFechasMm: 6 * escala,
+      gapEntreFechasMm: 6.5 * escala,
+    };
+  }
+
+  var MM_A_PT = 2.8346;
+
+  // ===== Descargar como PDF =====
+  var botonPdf = document.getElementById('descargar-ticket');
+  if (botonPdf) {
+    botonPdf.addEventListener('click', function () {
+      if (typeof window.jspdf === 'undefined') {
+        alert('No se pudo cargar la librería para generar el PDF. Revisá la conexión a internet e intentá de nuevo.');
+        return;
+      }
+
+      var formato = obtenerFormatoSeleccionado();
+      var ANCHO_MM = formato.ancho;
+      var ALTO_MM = formato.alto;
+      var escala = calcularEscala(ANCHO_MM, ALTO_MM);
+      var m = obtenerMetricasMm(escala);
+      var centroX = ANCHO_MM / 2;
+      var anchoUtil = ANCHO_MM - m.margenMm * 2;
+
+      var jsPDF = window.jspdf.jsPDF;
+      var doc = new jsPDF({ unit: 'mm', format: [ANCHO_MM, ALTO_MM] });
+
+      // La fecha de envasado es la fecha de HOY (el momento en que se
+      // genera el ticket, no la fecha en que se cargó el artículo) — y
+      // "consumir antes de" son 6 meses después.
+      var hoy = new Date();
+      var vencimiento = sumarMeses(hoy, 6);
+
+      var y = m.yInicialMm;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(m.brandFontMm * MM_A_PT);
+      doc.setTextColor(110);
+      doc.text('RIOMAR PESCADERÍA', centroX, y, { align: 'center' });
+
+      y += m.saltoBrandANombreMm;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(m.nombreFontMm * MM_A_PT);
+      doc.setTextColor(0);
+      var lineasNombre = doc.splitTextToSize(ARTICULO.nombre, anchoUtil);
+      lineasNombre.forEach(function (linea) {
+        doc.text(linea, centroX, y, { align: 'center' });
+        y += m.lineaNombreMm;
+      });
+
+      y += m.gapNombreADivisorMm;
+      doc.setDrawColor(20);
+      doc.setLineWidth(0.3);
+      doc.line(m.margenMm, y, ANCHO_MM - m.margenMm, y);
+      y += m.gapDivisorAFechasMm;
+
+      // Mismo tamaño de letra en las dos fechas — la de "consumir antes
+      // de" se distingue en negrita, no en tamaño.
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(m.fechaFontMm * MM_A_PT);
+      doc.setTextColor(80);
+      doc.text('Fecha de envasado', m.margenMm, y);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0);
+      doc.text(formatearFechaCorta(hoy), ANCHO_MM - m.margenMm, y, { align: 'right' });
+
+      y += m.gapEntreFechasMm;
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0);
+      doc.text('Consumir antes de', m.margenMm, y);
+      doc.text(formatearFechaCorta(vencimiento), ANCHO_MM - m.margenMm, y, { align: 'right' });
+
+      doc.save('ticket-' + ARTICULO.codigo + '-' + ANCHO_MM + 'x' + ALTO_MM + '.pdf');
+    });
+  }
+
+  // ===== Impresión directa por Bluetooth (Niimbot B31) =====
+  //
+  // Niimbot no publica un driver que registre esta impresora como una
+  // impresora común de Windows/Android, ni documentación oficial del
+  // protocolo — así que esto habla directo con la impresora por
+  // Bluetooth (Web Bluetooth, nativo del navegador) usando el protocolo
+  // que el proyecto de código abierto MultiMote/niimbluelib reconstruyó
+  // por ingeniería inversa (github.com/MultiMote/niimbluelib). Al ser no
+  // oficial y no estar probado contra una B31 real desde acá, es
+  // esperable que la primera vez necesite algún ajuste — si falla, la
+  // consola del navegador (F12) va a tener el detalle del error.
+  var NIIMBOT_SERVICE_UUID = 'e7810a71-73ae-499d-8c15-faa9aef0c3f2';
+  var CMD = {
+    CONNECT: 0xc1, IN_CONNECT: 0xc2,
+    SET_DENSITY: 0x21, IN_SET_DENSITY: 0x31,
+    SET_LABEL_TYPE: 0x23, IN_SET_LABEL_TYPE: 0x33,
+    PRINT_START: 0x01, IN_PRINT_START: 0x02,
+    PAGE_START: 0x03, IN_PAGE_START: 0x04,
+    SET_PAGE_SIZE: 0x13, IN_SET_PAGE_SIZE: 0x14,
+    PRINT_BITMAP_ROW: 0x85,
+    PRINT_BITMAP_ROW_INDEXED: 0x83,
+    PRINT_EMPTY_ROW: 0x84,
+    PAGE_END: 0xe3, IN_PAGE_END: 0xe4,
+    PRINT_STATUS: 0xa3, IN_PRINT_STATUS: 0xb3,
+    PRINT_END: 0xf3, IN_PRINT_END: 0xf4,
+  };
+  // Ancho del cabezal de la B31 en puntos (600 puntos = 75mm a 203dpi) —
+  // el protocolo lo usa como referencia fija para repartir cada renglón
+  // en tercios, no como límite del ancho real de la etiqueta elegida.
+  var B31_CABEZAL_PUNTOS = 600;
+  var DPI = 203;
+  var PUNTOS_POR_MM = DPI / 25.4;
+
+  function u16be(n) { return [(n >> 8) & 0xff, n & 0xff]; }
+
+  // [0x55,0x55, CMD, LEN, DATOS…, CHECKSUM, 0xAA,0xAA] — el checksum es
+  // un XOR encadenado del comando, el largo y cada byte de datos. El
+  // comando "Connect" es el único que además lleva un 0x03 suelto antes
+  // de todo el paquete (una rareza del protocolo, confirmada en la
+  // librería de referencia).
+  function armarPaquete(comando, datos) {
+    datos = datos || new Uint8Array(0);
+    var checksum = comando ^ datos.length;
+    for (var i = 0; i < datos.length; i++) checksum ^= datos[i];
+    var cuerpo = new Uint8Array(2 + 1 + 1 + datos.length + 1 + 2);
+    var o = 0;
+    cuerpo[o++] = 0x55; cuerpo[o++] = 0x55;
+    cuerpo[o++] = comando;
+    cuerpo[o++] = datos.length;
+    cuerpo.set(datos, o); o += datos.length;
+    cuerpo[o++] = checksum;
+    cuerpo[o++] = 0xaa; cuerpo[o++] = 0xaa;
+    if (comando === CMD.CONNECT) {
+      var conPrefijo = new Uint8Array(cuerpo.length + 1);
+      conPrefijo[0] = 0x03;
+      conPrefijo.set(cuerpo, 1);
+      return conPrefijo;
+    }
+    return cuerpo;
+  }
+
+  function ClienteNiimbot() {
+    this.caracteristica = null;
+    this.dispositivo = null;
+    this._resolverEspera = null;
+    this._comandoEsperado = null;
+  }
+
+  ClienteNiimbot.prototype.conectar = function (onEstado) {
+    var self = this;
+    onEstado('Elegí la impresora en el diálogo del navegador...');
+    return navigator.bluetooth.requestDevice({ filters: [{ services: [NIIMBOT_SERVICE_UUID] }] })
+      .then(function (dispositivo) {
+        self.dispositivo = dispositivo;
+        onEstado('Conectando...');
+        return dispositivo.gatt.connect();
+      })
+      .then(function (servidor) { return servidor.getPrimaryServices(); })
+      .then(function (servicios) {
+        var tareas = servicios.map(function (s) { return s.getCharacteristics(); });
+        return Promise.all(tareas);
+      })
+      .then(function (listasDeCaracteristicas) {
+        var encontrada = null;
+        listasDeCaracteristicas.forEach(function (caracteristicas) {
+          caracteristicas.forEach(function (c) {
+            if (!encontrada && c.properties.notify && c.properties.writeWithoutResponse) encontrada = c;
+          });
+        });
+        if (!encontrada) throw new Error('No encontré el canal de comunicación con la impresora (puede que no sea compatible con este protocolo).');
+        self.caracteristica = encontrada;
+        return encontrada.startNotifications();
+      })
+      .then(function () {
+        self.caracteristica.addEventListener('characteristicvaluechanged', function (ev) {
+          self._alRecibir(new Uint8Array(ev.target.value.buffer));
+        });
+      });
+  };
+
+  ClienteNiimbot.prototype._alRecibir = function (bytes) {
+    // Alcanza con mirar el byte de comando (posición 2) para saber qué
+    // respuesta llegó — no hace falta decodificar el resto del
+    // contenido para que la impresión funcione.
+    if (bytes.length < 3) return;
+    var comando = bytes[2];
+    if (this._comandoEsperado !== null && comando === this._comandoEsperado && this._resolverEspera) {
+      var resolver = this._resolverEspera;
+      this._resolverEspera = null;
+      this._comandoEsperado = null;
+      resolver(bytes);
+    }
+  };
+
+  ClienteNiimbot.prototype.enviar = function (comando, datos) {
+    var paquete = armarPaquete(comando, datos);
+    return this.caracteristica.writeValueWithoutResponse(paquete.buffer);
+  };
+
+  // Manda un comando y espera su respuesta — con un tiempo límite, para
+  // seguir igual si la impresora no contesta (no todos los firmwares
+  // confirman todo), en vez de trabar la impresión para siempre.
+  ClienteNiimbot.prototype.enviarYEsperar = function (comando, datos, comandoRespuesta, timeoutMs) {
+    var self = this;
+    var promesaRespuesta = new Promise(function (resolve) {
+      self._comandoEsperado = comandoRespuesta;
+      self._resolverEspera = resolve;
+    });
+    return this.enviar(comando, datos).then(function () {
+      return Promise.race([
+        promesaRespuesta,
+        new Promise(function (resolve) { setTimeout(function () { resolve(null); }, timeoutMs || 1500); }),
+      ]);
+    }).then(function (resultado) {
+      self._comandoEsperado = null;
+      self._resolverEspera = null;
+      return resultado;
+    });
+  };
+
+  // Mismo diseño que el PDF, dibujado sobre un canvas del tamaño exacto
+  // en puntos de la impresora (ancho/alto de la etiqueta × 203dpi).
+  function dibujarTicketEnCanvas(anchoMm, altoMm, nombreArticulo, hoy, vencimiento) {
+    var cols = Math.round(anchoMm * PUNTOS_POR_MM);
+    var rows = Math.round(altoMm * PUNTOS_POR_MM);
+    var canvas = document.createElement('canvas');
+    canvas.width = cols;
+    canvas.height = rows;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, cols, rows);
+    ctx.textBaseline = 'alphabetic';
+
+    var escala = calcularEscala(anchoMm, altoMm);
+    var m = obtenerMetricasMm(escala);
+    var margenPx = m.margenMm * PUNTOS_POR_MM;
+    var centroX = cols / 2;
+    var y = m.yInicialMm * PUNTOS_POR_MM;
+
+    ctx.font = Math.round(m.brandFontMm * PUNTOS_POR_MM) + 'px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#555';
+    ctx.fillText('RIOMAR PESCADERÍA', centroX, y);
+
+    y += m.saltoBrandANombreMm * PUNTOS_POR_MM;
+    ctx.font = 'bold ' + Math.round(m.nombreFontMm * PUNTOS_POR_MM) + 'px Arial';
+    ctx.fillStyle = '#000';
+    var anchoUtilPx = cols - margenPx * 2;
+    var lineasNombre = envolverTexto(ctx, nombreArticulo, anchoUtilPx);
+    lineasNombre.forEach(function (linea) {
+      ctx.fillText(linea, centroX, y);
+      y += m.lineaNombreMm * PUNTOS_POR_MM;
+    });
+
+    y += m.gapNombreADivisorMm * PUNTOS_POR_MM;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = Math.max(1, Math.round(0.3 * PUNTOS_POR_MM));
+    ctx.beginPath();
+    ctx.moveTo(margenPx, y);
+    ctx.lineTo(cols - margenPx, y);
+    ctx.stroke();
+    y += m.gapDivisorAFechasMm * PUNTOS_POR_MM;
+
+    var fontFechasPx = Math.round(m.fechaFontMm * PUNTOS_POR_MM);
+    ctx.textAlign = 'left';
+    ctx.font = fontFechasPx + 'px Arial';
+    ctx.fillStyle = '#555';
+    ctx.fillText('Fecha de envasado', margenPx, y);
+    ctx.textAlign = 'right';
+    ctx.font = 'bold ' + fontFechasPx + 'px Arial';
+    ctx.fillStyle = '#000';
+    ctx.fillText(formatearFechaCorta(hoy), cols - margenPx, y);
+
+    y += m.gapEntreFechasMm * PUNTOS_POR_MM;
+    ctx.textAlign = 'left';
+    ctx.font = 'bold ' + fontFechasPx + 'px Arial';
+    ctx.fillText('Consumir antes de', margenPx, y);
+    ctx.textAlign = 'right';
+    ctx.fillText(formatearFechaCorta(vencimiento), cols - margenPx, y);
+
+    return { canvas: canvas, cols: cols, rows: rows };
+  }
+
+  function envolverTexto(ctx, texto, anchoMaxPx) {
+    var palabras = texto.split(' ');
+    var lineas = [];
+    var actual = '';
+    palabras.forEach(function (palabra) {
+      var intento = actual ? actual + ' ' + palabra : palabra;
+      if (ctx.measureText(intento).width > anchoMaxPx && actual) {
+        lineas.push(actual);
+        actual = palabra;
+      } else {
+        actual = intento;
+      }
+    });
+    if (actual) lineas.push(actual);
+    return lineas;
+  }
+
+  function contarBitsEncendidos(byte) {
+    var n = 0;
+    while (byte) { n += byte & 1; byte >>= 1; }
+    return n;
+  }
+
+  function bytesIguales(a, b) {
+    if (a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+
+  function contarPorTercios(filaBytes, bytesPorTercio) {
+    var tercios = [0, 0, 0];
+    for (var i = 0; i < filaBytes.length; i++) {
+      var t = Math.min(2, Math.floor(i / bytesPorTercio));
+      tercios[t] += contarBitsEncendidos(filaBytes[i]);
+    }
+    return tercios;
+  }
+
+  function paqueteAImagenBytes(p, bytesPorTercio) {
+    var numeroFila = u16be(p.fila);
+    var repeticiones = Math.min(255, p.repeticiones);
+    if (p.tipo === 'vacia') {
+      return { comando: CMD.PRINT_EMPTY_ROW, datos: new Uint8Array([numeroFila[0], numeroFila[1], repeticiones]) };
+    }
+    var tercios = contarPorTercios(p.bytes, bytesPorTercio);
+    if (p.tipo === 'indexada') {
+      var indices = [];
+      for (var i = 0; i < p.bytes.length; i++) {
+        for (var bit = 0; bit < 8; bit++) {
+          if (p.bytes[i] & (0x80 >> bit)) {
+            var col = i * 8 + bit;
+            indices.push((col >> 8) & 0xff, col & 0xff);
+          }
+        }
+      }
+      var cabeza = [numeroFila[0], numeroFila[1], tercios[0], tercios[1], tercios[2], repeticiones];
+      return { comando: CMD.PRINT_BITMAP_ROW_INDEXED, datos: new Uint8Array(cabeza.concat(indices)) };
+    }
+    var cabezaCompleta = [numeroFila[0], numeroFila[1], tercios[0], tercios[1], tercios[2], repeticiones];
+    return { comando: CMD.PRINT_BITMAP_ROW, datos: new Uint8Array(cabezaCompleta.concat(Array.prototype.slice.call(p.bytes))) };
+  }
+
+  // Convierte el canvas en la lista de paquetes de imagen a mandar: cada
+  // renglón se manda "vacío" (en blanco), "indexado" (hasta 6 puntos
+  // negros, se mandan solo sus posiciones) o "completo" (el renglón
+  // entero en bits) — y los renglones idénticos consecutivos no se
+  // repiten, se le suma un contador al paquete anterior. Así arma los
+  // renglones el protocolo real, según lo reconstruido en niimbluelib.
+  function construirPaquetesImagen(dibujo) {
+    var ctx = dibujo.canvas.getContext('2d');
+    var cols = dibujo.cols;
+    var rows = dibujo.rows;
+    var colsBytes = Math.ceil(cols / 8);
+    var imagenDatos = ctx.getImageData(0, 0, cols, rows).data;
+    var bytesPorTercio = Math.floor(B31_CABEZAL_PUNTOS / 8 / 3);
+
+    var paquetesCrudos = [];
+    var filaAnteriorBytes = null;
+
+    for (var fila = 0; fila < rows; fila++) {
+      var filaBytes = new Uint8Array(colsBytes);
+      var bitsEncendidos = 0;
+      for (var col = 0; col < cols; col++) {
+        var idx = (fila * cols + col) * 4;
+        var luminosidad = (imagenDatos[idx] + imagenDatos[idx + 1] + imagenDatos[idx + 2]) / 3;
+        if (luminosidad < 128) {
+          filaBytes[col >> 3] |= 0x80 >> (col & 7);
+          bitsEncendidos++;
+        }
+      }
+
+      if (filaAnteriorBytes && bytesIguales(filaAnteriorBytes, filaBytes)) {
+        paquetesCrudos[paquetesCrudos.length - 1].repeticiones++;
+        continue;
+      }
+      filaAnteriorBytes = filaBytes;
+
+      var tipo = bitsEncendidos === 0 ? 'vacia' : (bitsEncendidos <= 6 ? 'indexada' : 'completa');
+      paquetesCrudos.push({ tipo: tipo, fila: fila, bytes: filaBytes, repeticiones: 1 });
+    }
+
+    return paquetesCrudos.map(function (p) { return paqueteAImagenBytes(p, bytesPorTercio); });
+  }
+
+  function imprimirDirecto(anchoMm, altoMm, nombreArticulo, actualizarEstado) {
+    if (!navigator.bluetooth) {
+      return Promise.reject(new Error('Este navegador no soporta impresión por Bluetooth — probá con Chrome o Edge en la computadora, o Chrome en Android.'));
+    }
+
+    var hoy = new Date();
+    var vencimiento = sumarMeses(hoy, 6);
+    var dibujo = dibujarTicketEnCanvas(anchoMm, altoMm, nombreArticulo, hoy, vencimiento);
+    var paquetesImagen = construirPaquetesImagen(dibujo);
+
+    var cliente = new ClienteNiimbot();
+    return cliente.conectar(actualizarEstado)
+      .then(function () {
+        actualizarEstado('Preparando la impresora...');
+        return cliente.enviarYEsperar(CMD.CONNECT, new Uint8Array([0x01]), CMD.IN_CONNECT, 2000);
+      })
+      .then(function () { return cliente.enviarYEsperar(CMD.SET_DENSITY, new Uint8Array([3]), CMD.IN_SET_DENSITY, 1500); })
+      // Tipo de etiqueta "con separación" (gap) — el más común en rollos
+      // de stickers precortados; si en algún momento usan un rollo
+      // distinto (papel continuo, marca negra), este es el valor a
+      // cambiar.
+      .then(function () { return cliente.enviarYEsperar(CMD.SET_LABEL_TYPE, new Uint8Array([1]), CMD.IN_SET_LABEL_TYPE, 1500); })
+      .then(function () {
+        // 7 bytes: cantidad de páginas (1) + 4 bytes en 0 + color de página (0 = un solo color).
+        var datosInicio = new Uint8Array([0, 1, 0, 0, 0, 0, 0]);
+        return cliente.enviarYEsperar(CMD.PRINT_START, datosInicio, CMD.IN_PRINT_START, 1500);
+      })
+      .then(function () { return cliente.enviarYEsperar(CMD.PAGE_START, new Uint8Array(0), CMD.IN_PAGE_START, 1500); })
+      .then(function () {
+        // 6 bytes: alto en renglones + ancho en puntos + cantidad de copias (1).
+        var tamanioPagina = new Uint8Array([
+          (dibujo.rows >> 8) & 0xff, dibujo.rows & 0xff,
+          (dibujo.cols >> 8) & 0xff, dibujo.cols & 0xff,
+          0, 1,
+        ]);
+        return cliente.enviarYEsperar(CMD.SET_PAGE_SIZE, tamanioPagina, CMD.IN_SET_PAGE_SIZE, 1500);
+      })
+      .then(function () {
+        actualizarEstado('Imprimiendo...');
+        // Los renglones de imagen van uno detrás de otro, sin esperar
+        // confirmación de cada uno (así lo hace el protocolo real).
+        var cadena = Promise.resolve();
+        paquetesImagen.forEach(function (paquete) {
+          cadena = cadena.then(function () { return cliente.enviar(paquete.comando, paquete.datos); });
+        });
+        return cadena;
+      })
+      .then(function () { return cliente.enviarYEsperar(CMD.PAGE_END, new Uint8Array(0), CMD.IN_PAGE_END, 1500); })
+      .then(function () {
+        // Se consulta el estado unas vueltas, pero sin depender de
+        // entenderlo del todo — si no contesta como se espera, se sigue
+        // igual después de una espera prudencial, en vez de trabar el
+        // botón para siempre.
+        actualizarEstado('Esperando que termine de imprimir...');
+        var intentos = 0;
+        function unaVuelta() {
+          intentos++;
+          return cliente.enviarYEsperar(CMD.PRINT_STATUS, new Uint8Array(0), CMD.IN_PRINT_STATUS, 400).then(function (respuesta) {
+            if (respuesta || intentos >= 10) return;
+            return unaVuelta();
+          });
+        }
+        return unaVuelta();
+      })
+      .then(function () { return cliente.enviar(CMD.PRINT_END, new Uint8Array(0)); })
+      .then(function () {
+        actualizarEstado('¡Listo! Si no salió bien, avisame qué pasó (y si podés, el error de la consola del navegador — F12).');
+      });
+  }
+
+  var botonDirecto = document.getElementById('imprimir-ticket-directo');
+  var estadoDirecto = document.getElementById('estado-impresion-directa');
+  if (botonDirecto) {
+    botonDirecto.addEventListener('click', function () {
+      var formato = obtenerFormatoSeleccionado();
+      estadoDirecto.style.display = 'block';
+      estadoDirecto.textContent = 'Iniciando...';
+      botonDirecto.disabled = true;
+      imprimirDirecto(formato.ancho, formato.alto, ARTICULO.nombre, function (msg) {
+        estadoDirecto.textContent = msg;
+      }).then(function () {
+        botonDirecto.disabled = false;
+      }).catch(function (err) {
+        console.error('[ruta-fria] error imprimiendo por Bluetooth:', err);
+        estadoDirecto.textContent = 'No se pudo imprimir: ' + err.message;
+        botonDirecto.disabled = false;
+      });
+    });
+  }
+})();
+</script>
 <% } %>
 
 <%- include('../partials/foot') %>
