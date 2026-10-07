@@ -189,8 +189,19 @@
       var centroX = ANCHO_MM / 2;
       var anchoUtil = ANCHO_MM - m.margenMm * 2;
 
+      // jsPDF fuerza el formato recibido a la orientación que le pasás
+      // (por defecto "portrait"): si el array [ancho, alto] no entra en
+      // esa orientación, lo DA VUELTA solo, sin avisar. Como la mayoría
+      // de estos tamaños son más anchos que altos (70×50, 50×30, 40×15,
+      // 40×30), sin esto la página real terminaba siendo, por ejemplo,
+      // 50×70mm en vez de 70×50mm — por eso se veía "cortado" el
+      // costado derecho (las fechas quedaban dibujadas fuera de la hoja
+      // real). Pidiendo la orientación acorde al tamaño elegido, jsPDF
+      // ya no necesita dar vuelta nada y la página sale del tamaño que
+      // se eligió.
+      var orientacion = ANCHO_MM >= ALTO_MM ? 'landscape' : 'portrait';
       var jsPDF = window.jspdf.jsPDF;
-      var doc = new jsPDF({ unit: 'mm', format: [ANCHO_MM, ALTO_MM] });
+      var doc = new jsPDF({ unit: 'mm', format: [ANCHO_MM, ALTO_MM], orientation: orientacion });
 
       // La fecha de envasado es la fecha de HOY (el momento en que se
       // genera el ticket, no la fecha en que se cargó el artículo) — y
