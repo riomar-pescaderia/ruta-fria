@@ -1,6 +1,27 @@
 <%- include('../partials/head') %>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>
+  /* Marcas numeradas del recorrido (una cada X minutos). */
+  .marca-recorrido span {
+    display: flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #1b5e8a; color: #fff; border: 2px solid #fff;
+    font: 600 11px/1 Arial, sans-serif; box-shadow: 0 1px 3px rgba(0,0,0,.4);
+  }
+  .marca-recorrido.detenido span { background: #e07b1a; }
+  .etiqueta-hora.leaflet-tooltip {
+    padding: 1px 5px; font-size: 11px; font-weight: 600;
+    background: rgba(255,255,255,.92); border-color: #b9c4cf; box-shadow: none;
+  }
+  #tabla-marcas tbody tr { cursor: pointer; }
+  #tabla-marcas .num-marca {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #1b5e8a; color: #fff; font-size: 11px; font-weight: 600;
+  }
+  #tabla-marcas .num-marca.detenido { background: #e07b1a; }
+</style>
 
 <div class="toolbar">
   <h1>Recorrido de <%= vendedor.nombre || vendedor.username %></h1>
@@ -12,12 +33,40 @@
     <label for="fecha">Día</label>
     <input type="date" id="fecha" value="<%= fechaInicial %>">
   </div>
+  <div style="margin:0;">
+    <label for="intervalo-marcas">Marcar cada</label>
+    <select id="intervalo-marcas">
+      <option value="5">5 minutos</option>
+      <option value="10">10 minutos</option>
+      <option value="15" selected>15 minutos</option>
+      <option value="30">30 minutos</option>
+      <option value="60">1 hora</option>
+    </select>
+  </div>
+  <label style="display:flex; align-items:center; gap:6px; margin:0; padding-bottom:8px; color:var(--ink); cursor:pointer;">
+    <input type="checkbox" id="mostrar-horas" checked style="width:auto; margin:0;"> Horarios en el mapa
+  </label>
   <div style="color:var(--ink-soft); font-size:.9rem; padding-bottom:8px;">
     <span id="resumen">Cargando...</span>
   </div>
 </div>
 
 <div id="mapa" style="height:480px; border:1px solid var(--line); border-radius:10px;"></div>
+
+<div class="informe-seccion" style="margin-top:20px;">
+  <h2>Dónde estaba</h2>
+  <p class="informe-nota">Una marca cada <span id="intervalo-texto">15 minutos</span>. Las naranjas son lugares donde se quedó quieto (varias marcas seguidas en el mismo lugar). Tocá una fila para verla en el mapa.</p>
+  <div style="overflow-x:auto;">
+  <table class="tabla-informe" id="tabla-marcas">
+    <thead>
+      <tr><th>#</th><th>Horario</th><th>Tiempo ahí</th><th></th></tr>
+    </thead>
+    <tbody id="marcas-tbody">
+      <tr><td colspan="4" class="empty">Cargando...</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
 
 <div class="informe-seccion" style="margin-top:28px;">
   <h2>Histórico</h2>
@@ -82,17 +131,141 @@
   var ruta = null;
   var marcadorInicio = null;
   var marcadorFin = null;
+  var capaMarcas = L.layerGroup().addTo(map);
+  var puntosDelDia = [];
+  var marcadoresPorGrupo = [];
 
   function limpiarMapa() {
     if (ruta) { map.removeLayer(ruta); ruta = null; }
     if (marcadorInicio) { map.removeLayer(marcadorInicio); marcadorInicio = null; }
     if (marcadorFin) { map.removeLayer(marcadorFin); marcadorFin = null; }
+    capaMarcas.clearLayers();
+    marcadoresPorGrupo = [];
   }
 
   function horaDe(iso) {
     var d = new Date(iso);
-    return d.toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   }
+
+  function duracionTexto(ms) {
+    var min = Math.round(ms / 60000);
+    if (min < 60) return min + ' min';
+    var h = Math.floor(min / 60), resto = min % 60;
+    return h + ' h' + (resto ? ' ' + resto + ' min' : '');
+  }
+
+  function distanciaMetros(a, b) {
+    var R = 6371000;
+    var dLat = (b.lat - a.lat) * Math.PI / 180;
+    var dLng = (b.lng - a.lng) * Math.PI / 180;
+    var x = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  }
+
+  // ===== Marcas cada X minutos =====
+  // De todos los puntos del día (llegan cada 5 minutos, o lo que diga el
+  // horario de seguimiento) se toma uno cada X minutos, con 1 minuto de
+  // tolerancia porque las capturas no caen exactas. Después, las marcas
+  // seguidas que quedan a menos de RADIO_DETENIDO_M de la primera del
+  // grupo se juntan en una sola ("estuvo acá de 10:00 a 11:15"), para no
+  // apilar números uno encima del otro cuando el vendedor está quieto.
+  var RADIO_DETENIDO_M = 100;
+
+  function elegirMarcas(puntos, intervaloMin) {
+    var marcas = [];
+    var ultima = -Infinity;
+    puntos.forEach(function (p) {
+      var t = new Date(p.capturado_en).getTime();
+      if (t - ultima >= (intervaloMin - 1) * 60000) {
+        marcas.push({ lat: p.lat, lng: p.lng, t: t });
+        ultima = t;
+      }
+    });
+    // La última posición del día siempre entra, aunque no haya llegado a
+    // cumplirse el intervalo desde la marca anterior.
+    var fin = puntos[puntos.length - 1];
+    var tFin = new Date(fin.capturado_en).getTime();
+    if (marcas.length && marcas[marcas.length - 1].t !== tFin) marcas.push({ lat: fin.lat, lng: fin.lng, t: tFin });
+    return marcas;
+  }
+
+  function agruparDetenciones(marcas) {
+    var grupos = [];
+    marcas.forEach(function (m) {
+      var g = grupos[grupos.length - 1];
+      if (g && distanciaMetros(g, m) < RADIO_DETENIDO_M) {
+        g.hasta = m.t;
+        g.cantidad++;
+      } else {
+        grupos.push({ lat: m.lat, lng: m.lng, desde: m.t, hasta: m.t, cantidad: 1 });
+      }
+    });
+    return grupos;
+  }
+
+  function textoHorario(g) {
+    return g.cantidad > 1 ? horaDe(g.desde) + ' a ' + horaDe(g.hasta) : horaDe(g.desde);
+  }
+
+  function dibujarMarcas() {
+    capaMarcas.clearLayers();
+    marcadoresPorGrupo = [];
+    var tbody = document.getElementById('marcas-tbody');
+    var intervalo = Number(document.getElementById('intervalo-marcas').value);
+    var opcion = document.getElementById('intervalo-marcas').selectedOptions[0];
+    document.getElementById('intervalo-texto').textContent = opcion ? opcion.textContent : intervalo + ' minutos';
+    if (puntosDelDia.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">No hay recorrido guardado para este día.</td></tr>';
+      return;
+    }
+    var grupos = agruparDetenciones(elegirMarcas(puntosDelDia, intervalo));
+    var conHoras = document.getElementById('mostrar-horas').checked;
+    tbody.innerHTML = '';
+    grupos.forEach(function (g, i) {
+      var detenido = g.cantidad > 1;
+      var numero = i + 1;
+      var horario = textoHorario(g);
+      var marcador = L.marker([g.lat, g.lng], {
+        icon: L.divIcon({
+          className: 'marca-recorrido' + (detenido ? ' detenido' : ''),
+          html: '<span>' + numero + '</span>',
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
+        }),
+        zIndexOffset: 500,
+      }).bindPopup(
+        '<strong>#' + numero + ' · ' + horario + '</strong>' +
+        (detenido ? '<br>Se quedó acá ' + duracionTexto(g.hasta - g.desde) : '')
+      );
+      if (conHoras) {
+        marcador.bindTooltip(horario, { permanent: true, direction: 'right', offset: [10, 0], className: 'etiqueta-hora' });
+      } else {
+        marcador.bindTooltip(horario, { direction: 'top', offset: [0, -10] });
+      }
+      marcador.addTo(capaMarcas);
+      marcadoresPorGrupo.push(marcador);
+
+      var fila = document.createElement('tr');
+      var enlaceMapa = 'https://www.google.com/maps?q=' + g.lat.toFixed(6) + ',' + g.lng.toFixed(6);
+      fila.innerHTML =
+        '<td><span class="num-marca' + (detenido ? ' detenido' : '') + '">' + numero + '</span></td>' +
+        '<td>' + horario + '</td>' +
+        '<td>' + (detenido ? duracionTexto(g.hasta - g.desde) : '—') + '</td>' +
+        '<td><a href="' + enlaceMapa + '" target="_blank" rel="noopener">Google Maps</a></td>';
+      fila.addEventListener('click', function (e) {
+        if (e.target.tagName === 'A') return;
+        map.setView([g.lat, g.lng], Math.max(map.getZoom(), 16));
+        marcador.openPopup();
+        document.getElementById('mapa').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+      tbody.appendChild(fila);
+    });
+  }
+
+  document.getElementById('intervalo-marcas').addEventListener('change', dibujarMarcas);
+  document.getElementById('mostrar-horas').addEventListener('change', dibujarMarcas);
 
   function cargar(fecha) {
     document.getElementById('resumen').textContent = 'Cargando...';
@@ -101,6 +274,8 @@
       .then(function (datos) {
         limpiarMapa();
         var puntos = datos.puntos;
+        puntosDelDia = puntos;
+        dibujarMarcas();
         if (puntos.length === 0) {
           document.getElementById('resumen').textContent = 'No hay recorrido guardado para este día.';
           map.setView(CENTRO_DEFECTO, 12);
@@ -121,6 +296,7 @@
       })
       .catch(function () {
         document.getElementById('resumen').textContent = 'No se pudo cargar el recorrido.';
+        document.getElementById('marcas-tbody').innerHTML = '<tr><td colspan="4" class="empty">No se pudo cargar el recorrido.</td></tr>';
       });
   }
 
