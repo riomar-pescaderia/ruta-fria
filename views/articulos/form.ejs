@@ -106,9 +106,8 @@
 
   // ===== Formatos de etiqueta disponibles =====
   // El diseño de referencia está pensado para 70×50mm — los demás
-  // tamaños reescalan proporcionalmente (ver calcularEscala/
-  // obtenerMetricasMm), tanto para el PDF como para la imagen que se
-  // manda por Bluetooth.
+  // tamaños reescalan y se reacomodan (ver calcularEscala/dibujarTicket),
+  // tanto para el PDF como para la imagen que se manda por Bluetooth.
   var FORMATOS = {
     '30x15': { ancho: 30, alto: 15 },
     '40x15': { ancho: 40, alto: 15 },
@@ -148,29 +147,242 @@
   // Todo está pensado en milímetros, tanto para el PDF (que ya trabaja
   // en mm) como para la imagen de la impresora Bluetooth (que los
   // convierte a puntos según el DPI — ver PUNTOS_POR_MM más abajo).
+  // Sin topes: el diseño se reacomoda solo según cuánto sobra de ancho o
+  // de alto (ver dibujarTicket), y así siempre ocupa la etiqueta entera.
   function calcularEscala(anchoMm, altoMm) {
-    var e = Math.min(anchoMm / 70, altoMm / 50);
-    // Nunca deja el texto ilegiblemente chico ni desproporcionadamente
-    // grande en los tamaños extremos de la lista.
-    return Math.max(0.35, Math.min(1.3, e));
-  }
-
-  function obtenerMetricasMm(escala) {
-    return {
-      margenMm: 4 * escala,
-      brandFontMm: 2.5 * escala,
-      nombreFontMm: 5 * escala,
-      fechaFontMm: 3.2 * escala,
-      yInicialMm: 7 * escala,
-      saltoBrandANombreMm: 6 * escala,
-      lineaNombreMm: 5.5 * escala,
-      gapNombreADivisorMm: 2 * escala,
-      gapDivisorAFechasMm: 6 * escala,
-      gapEntreFechasMm: 6.5 * escala,
-    };
+    return Math.min(anchoMm / 70, altoMm / 50);
   }
 
   var MM_A_PT = 2.8346;
+
+  // ===== Logo para el ticket =====
+  // Versión en blanco y negro puro del logo (el pez en blanco sobre el
+  // cielo negro), hecha a propósito para la impresora térmica: el logo a
+  // color, pasado a blanco y negro por brillo, perdía el naranja y el
+  // azul y quedaba borroso. Se precarga al abrir la página para que ya
+  // esté listo cuando se aprieta un botón.
+  var LOGO_TICKET = new Image();
+  var logoListo = new Promise(function (resolve) {
+    LOGO_TICKET.onload = function () { resolve(true); };
+    LOGO_TICKET.onerror = function () { resolve(false); };
+  });
+  LOGO_TICKET.src = '/img/logo-riomar-termica.png';
+
+  // ===== Diseño del ticket (uno solo para el PDF y para el Bluetooth) =====
+  // Se dibuja en "unidades de diseño": el tamaño de referencia es 70×50,
+  // y cada etiqueta se lleva a esa escala (escala = calcularEscala), así
+  // que el ancho y el alto en unidades quedan en 70+ y 50+. El "pintor"
+  // (pdf o canvas) traduce esas unidades a mm o a puntos de la impresora.
+  //
+  // Franja negra arriba con el nombre del artículo, el logo a la
+  // izquierda y las dos fechas en recuadros a la derecha (la de "consumir
+  // antes de" en negro, para que resalte). Las etiquetas muy bajas
+  // (40×15, 30×15) y la vertical (50×80) reacomodan lo mismo.
+  var PIE_TICKET = 'RIOMAR PESCADERÍA  ·  Conservar a -18 °C';
+
+  function ajustarTamano(p, texto, anchoMax, inicial, minimo, negrita) {
+    for (var t = inicial; t > minimo; t -= 0.1) {
+      if (p.ancho(texto, t, negrita) <= anchoMax) return t;
+    }
+    return minimo;
+  }
+
+  function partirEnLineas(p, texto, anchoMax, tam, negrita) {
+    var lineas = [];
+    var actual = '';
+    texto.split(/\s+/).filter(Boolean).forEach(function (palabra) {
+      var intento = actual ? actual + ' ' + palabra : palabra;
+      if (p.ancho(intento, tam, negrita) > anchoMax && actual) {
+        lineas.push(actual);
+        actual = palabra;
+      } else {
+        actual = intento;
+      }
+    });
+    if (actual) lineas.push(actual);
+    return lineas.length ? lineas : [''];
+  }
+
+  // El tamaño de letra más grande (entre inicial y mínimo) con el que el
+  // texto entra en hasta maxLineas renglones.
+  function ajustarLineas(p, texto, anchoMax, maxLineas, inicial, minimo, negrita) {
+    for (var t = inicial; t >= minimo; t -= 0.1) {
+      var lineas = partirEnLineas(p, texto, anchoMax, t, negrita);
+      var entra = lineas.length <= maxLineas && lineas.every(function (l) { return p.ancho(l, t, negrita) <= anchoMax; });
+      if (entra) return { tam: t, lineas: lineas };
+    }
+    return { tam: minimo, lineas: partirEnLineas(p, texto, anchoMax, minimo, negrita) };
+  }
+
+  function dibujarNombreEnFranja(p, nombre, W, altoFranja, maxLineas, inicial, minimo) {
+    p.rect(0, 0, W, altoFranja);
+    var n = ajustarLineas(p, nombre, W - 7, maxLineas, inicial, minimo, true);
+    var interlineado = n.tam * 1.08;
+    var y = (altoFranja - n.lineas.length * interlineado) / 2 + n.tam * 0.82;
+    n.lineas.forEach(function (l) {
+      p.texto(l, W / 2, y, n.tam, { negrita: true, alinear: 'center', blanco: true });
+      y += interlineado;
+    });
+  }
+
+  // Recuadro con la etiqueta arriba y la fecha abajo. "lleno" = fondo
+  // negro con letra blanca.
+  function dibujarRecuadroFecha(p, x, y, w, h, etiqueta, fecha, lleno, tamEtiqueta, tamFecha) {
+    p.rectRedondo(x, y, w, h, 1.3, lleno);
+    var util = w - 3.2;
+    p.texto(etiqueta, x + 1.6, y + h * 0.36, ajustarTamano(p, etiqueta, util, tamEtiqueta, 1.3, true), { negrita: true, blanco: lleno });
+    p.texto(fecha, x + 1.6, y + h * 0.82, ajustarTamano(p, fecha, util, tamFecha, 2.2, true), { negrita: true, blanco: lleno });
+  }
+
+  // Variante de un solo renglón (etiqueta a la izquierda, fecha a la
+  // derecha) para las etiquetas bajas, donde no entran dos renglones.
+  function dibujarRecuadroFechaEnLinea(p, x, y, w, h, etiqueta, fecha, lleno) {
+    p.rectRedondo(x, y, w, h, 1.3, lleno);
+    var util = w - 3.2;
+    var tam = ajustarTamano(p, etiqueta + '   ' + fecha, util, 7, 2.5, true);
+    var base = y + h / 2 + tam * 0.36;
+    p.texto(etiqueta, x + 1.6, base, tam, { negrita: true, blanco: lleno });
+    p.texto(fecha, x + w - 1.6, base, tam, { negrita: true, alinear: 'right', blanco: lleno });
+  }
+
+  function dibujarPie(p, W, H) {
+    p.linea(3.5, H - 8.5, W - 3.5, H - 8.5, 0.25);
+    p.texto(PIE_TICKET, W / 2, H - 4, ajustarTamano(p, PIE_TICKET, W - 7, 2.5, 1.4, true), { negrita: true, alinear: 'center' });
+  }
+
+  function dibujarTicket(p, escala, W, H, nombre, fechaEnvasado, fechaVencimiento) {
+    var pad = 3.5;
+    var logoProporcion = LOGO_TICKET.naturalWidth ? LOGO_TICKET.naturalWidth / LOGO_TICKET.naturalHeight : 1.25;
+
+    if (H > 70) {
+      // Vertical (50×80): todo apilado y a lo ancho.
+      dibujarNombreEnFranja(p, nombre, W, 20, 2, 7.5, 3.5);
+      var logoAltoV = Math.min(38, (W - pad * 2) * 0.75 / logoProporcion);
+      p.logo((W - logoAltoV * logoProporcion) / 2, 24, logoAltoV * logoProporcion, logoAltoV);
+      var yCajas = 24 + logoAltoV + 5;
+      var altoCaja = Math.min(14, (H - 11 - yCajas - 3) / 2);
+      dibujarRecuadroFecha(p, pad, yCajas, W - pad * 2, altoCaja, 'ENVASADO', fechaEnvasado, false, 3, 6);
+      dibujarRecuadroFecha(p, pad, yCajas + altoCaja + 3, W - pad * 2, altoCaja, 'CONSUMIR ANTES DE', fechaVencimiento, true, 3, 6);
+      dibujarPie(p, W, H);
+      return;
+    }
+
+    if (W > 95) {
+      // Bajas y anchas (40×15, 30×15): sin pie, y cada fecha en un renglón.
+      dibujarNombreEnFranja(p, nombre, W, 16, 2, 10, 4.5);
+      var arriba = 19, cuerpo = H - 3 - arriba;
+      var logoAltoA = Math.min(cuerpo, (W - pad * 2) * 0.3 / logoProporcion);
+      var logoAnchoA = logoAltoA * logoProporcion;
+      p.logo(pad, arriba + (cuerpo - logoAltoA) / 2, logoAnchoA, logoAltoA);
+      var xA = pad + logoAnchoA + 3, anchoA = W - pad - xA, altoA = (cuerpo - 2) / 2;
+      dibujarRecuadroFechaEnLinea(p, xA, arriba, anchoA, altoA, 'ENV.', fechaEnvasado, false);
+      dibujarRecuadroFechaEnLinea(p, xA, arriba + altoA + 2, anchoA, altoA, 'VENCE', fechaVencimiento, true);
+      return;
+    }
+
+    // Estándar (70×50, 50×30, 40×30). En las chicas (escala < 0.8) la
+    // letra del pie y de los rótulos quedaría por debajo de 1mm real,
+    // ilegible en la térmica: se saca el pie y se agrandan los recuadros.
+    var chica = escala < 0.8;
+    dibujarNombreEnFranja(p, nombre, W, 13.5, 2, 6.2, 3);
+    var arribaE = 16, abajoE = chica ? H - 3 : H - 11.5, cuerpoE = abajoE - arribaE;
+    var logoAlto = Math.min(cuerpoE, (W - pad * 2) * 0.38 / logoProporcion);
+    var logoAncho = logoAlto * logoProporcion;
+    p.logo(pad, arribaE + (cuerpoE - logoAlto) / 2, logoAncho, logoAlto);
+    var x0 = pad + logoAncho + 2.5, ancho = W - pad - x0, altoCajaE = (cuerpoE - 2) / 2;
+    var tamEtiqueta = chica ? 3.2 : 2.3, tamFecha = chica ? 6 : 4.2;
+    dibujarRecuadroFecha(p, x0, arribaE, ancho, altoCajaE, 'ENVASADO', fechaEnvasado, false, tamEtiqueta, tamFecha);
+    dibujarRecuadroFecha(p, x0, arribaE + altoCajaE + 2, ancho, altoCajaE, 'CONSUMIR ANTES DE', fechaVencimiento, true, tamEtiqueta, tamFecha);
+    if (!chica) dibujarPie(p, W, H);
+  }
+
+  // Pintor para jsPDF: las unidades de diseño × k = milímetros.
+  function pintorPdf(doc, k) {
+    function fuente(tam, negrita) {
+      doc.setFont('helvetica', negrita ? 'bold' : 'normal');
+      doc.setFontSize(tam * k * MM_A_PT);
+    }
+    return {
+      rect: function (x, y, w, h) {
+        doc.setFillColor(0);
+        doc.rect(x * k, y * k, w * k, h * k, 'F');
+      },
+      rectRedondo: function (x, y, w, h, r, lleno) {
+        doc.setFillColor(0);
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.4 * k);
+        doc.roundedRect(x * k, y * k, w * k, h * k, r * k, r * k, lleno ? 'F' : 'S');
+      },
+      linea: function (x1, y1, x2, y2, grosor) {
+        doc.setDrawColor(0);
+        doc.setLineWidth(grosor * k);
+        doc.line(x1 * k, y1 * k, x2 * k, y2 * k);
+      },
+      texto: function (str, x, y, tam, op) {
+        fuente(tam, op.negrita);
+        doc.setTextColor(op.blanco ? 255 : 0);
+        doc.text(str, x * k, y * k, op.alinear ? { align: op.alinear } : undefined);
+      },
+      ancho: function (str, tam, negrita) {
+        fuente(tam, negrita);
+        return doc.getTextWidth(str) / k;
+      },
+      logo: function (x, y, w, h) {
+        if (LOGO_TICKET.naturalWidth) doc.addImage(LOGO_TICKET, 'PNG', x * k, y * k, w * k, h * k);
+      },
+    };
+  }
+
+  // Pintor para canvas: el contexto ya viene escalado a unidades de diseño.
+  function pintorCanvas(ctx) {
+    function fuente(tam, negrita) {
+      ctx.font = (negrita ? 'bold ' : '') + tam + 'px Arial';
+    }
+    return {
+      rect: function (x, y, w, h) {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x, y, w, h);
+      },
+      rectRedondo: function (x, y, w, h, r, lleno) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+        if (lleno) {
+          ctx.fillStyle = '#000';
+          ctx.fill();
+        } else {
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 0.4;
+          ctx.stroke();
+        }
+      },
+      linea: function (x1, y1, x2, y2, grosor) {
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = grosor;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      },
+      texto: function (str, x, y, tam, op) {
+        fuente(tam, op.negrita);
+        ctx.fillStyle = op.blanco ? '#fff' : '#000';
+        ctx.textAlign = op.alinear || 'left';
+        ctx.fillText(str, x, y);
+      },
+      ancho: function (str, tam, negrita) {
+        fuente(tam, negrita);
+        return ctx.measureText(str).width;
+      },
+      logo: function (x, y, w, h) {
+        if (LOGO_TICKET.naturalWidth) ctx.drawImage(LOGO_TICKET, x, y, w, h);
+      },
+    };
+  }
 
   // ===== Descargar como PDF =====
   var botonPdf = document.getElementById('descargar-ticket');
@@ -185,9 +397,6 @@
       var ANCHO_MM = formato.ancho;
       var ALTO_MM = formato.alto;
       var escala = calcularEscala(ANCHO_MM, ALTO_MM);
-      var m = obtenerMetricasMm(escala);
-      var centroX = ANCHO_MM / 2;
-      var anchoUtil = ANCHO_MM - m.margenMm * 2;
 
       // jsPDF fuerza el formato recibido a la orientación que le pasás
       // (por defecto "portrait"): si el array [ancho, alto] no entra en
@@ -209,45 +418,11 @@
       var hoy = new Date();
       var vencimiento = sumarMeses(hoy, 6);
 
-      var y = m.yInicialMm;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(m.brandFontMm * MM_A_PT);
-      doc.setTextColor(110);
-      doc.text('RIOMAR PESCADERÍA', centroX, y, { align: 'center' });
-
-      y += m.saltoBrandANombreMm;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(m.nombreFontMm * MM_A_PT);
-      doc.setTextColor(0);
-      var lineasNombre = doc.splitTextToSize(ARTICULO.nombre, anchoUtil);
-      lineasNombre.forEach(function (linea) {
-        doc.text(linea, centroX, y, { align: 'center' });
-        y += m.lineaNombreMm;
+      logoListo.then(function () {
+        dibujarTicket(pintorPdf(doc, escala), escala, ANCHO_MM / escala, ALTO_MM / escala,
+          ARTICULO.nombre, formatearFechaCorta(hoy), formatearFechaCorta(vencimiento));
+        doc.save('ticket-' + ARTICULO.codigo + '-' + ANCHO_MM + 'x' + ALTO_MM + '.pdf');
       });
-
-      y += m.gapNombreADivisorMm;
-      doc.setDrawColor(20);
-      doc.setLineWidth(0.3);
-      doc.line(m.margenMm, y, ANCHO_MM - m.margenMm, y);
-      y += m.gapDivisorAFechasMm;
-
-      // Mismo tamaño de letra en las dos fechas — la de "consumir antes
-      // de" se distingue en negrita, no en tamaño.
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(m.fechaFontMm * MM_A_PT);
-      doc.setTextColor(80);
-      doc.text('Fecha de envasado', m.margenMm, y);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(0);
-      doc.text(formatearFechaCorta(hoy), ANCHO_MM - m.margenMm, y, { align: 'right' });
-
-      y += m.gapEntreFechasMm;
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(0);
-      doc.text('Consumir antes de', m.margenMm, y);
-      doc.text(formatearFechaCorta(vencimiento), ANCHO_MM - m.margenMm, y, { align: 'right' });
-
-      doc.save('ticket-' + ARTICULO.codigo + '-' + ANCHO_MM + 'x' + ALTO_MM + '.pdf');
     });
   }
 
@@ -405,70 +580,13 @@
     ctx.textBaseline = 'alphabetic';
 
     var escala = calcularEscala(anchoMm, altoMm);
-    var m = obtenerMetricasMm(escala);
-    var margenPx = m.margenMm * PUNTOS_POR_MM;
-    var centroX = cols / 2;
-    var y = m.yInicialMm * PUNTOS_POR_MM;
-
-    ctx.font = Math.round(m.brandFontMm * PUNTOS_POR_MM) + 'px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#555';
-    ctx.fillText('RIOMAR PESCADERÍA', centroX, y);
-
-    y += m.saltoBrandANombreMm * PUNTOS_POR_MM;
-    ctx.font = 'bold ' + Math.round(m.nombreFontMm * PUNTOS_POR_MM) + 'px Arial';
-    ctx.fillStyle = '#000';
-    var anchoUtilPx = cols - margenPx * 2;
-    var lineasNombre = envolverTexto(ctx, nombreArticulo, anchoUtilPx);
-    lineasNombre.forEach(function (linea) {
-      ctx.fillText(linea, centroX, y);
-      y += m.lineaNombreMm * PUNTOS_POR_MM;
-    });
-
-    y += m.gapNombreADivisorMm * PUNTOS_POR_MM;
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = Math.max(1, Math.round(0.3 * PUNTOS_POR_MM));
-    ctx.beginPath();
-    ctx.moveTo(margenPx, y);
-    ctx.lineTo(cols - margenPx, y);
-    ctx.stroke();
-    y += m.gapDivisorAFechasMm * PUNTOS_POR_MM;
-
-    var fontFechasPx = Math.round(m.fechaFontMm * PUNTOS_POR_MM);
-    ctx.textAlign = 'left';
-    ctx.font = fontFechasPx + 'px Arial';
-    ctx.fillStyle = '#555';
-    ctx.fillText('Fecha de envasado', margenPx, y);
-    ctx.textAlign = 'right';
-    ctx.font = 'bold ' + fontFechasPx + 'px Arial';
-    ctx.fillStyle = '#000';
-    ctx.fillText(formatearFechaCorta(hoy), cols - margenPx, y);
-
-    y += m.gapEntreFechasMm * PUNTOS_POR_MM;
-    ctx.textAlign = 'left';
-    ctx.font = 'bold ' + fontFechasPx + 'px Arial';
-    ctx.fillText('Consumir antes de', margenPx, y);
-    ctx.textAlign = 'right';
-    ctx.fillText(formatearFechaCorta(vencimiento), cols - margenPx, y);
+    ctx.save();
+    ctx.scale(escala * PUNTOS_POR_MM, escala * PUNTOS_POR_MM);
+    dibujarTicket(pintorCanvas(ctx), escala, anchoMm / escala, altoMm / escala,
+      nombreArticulo, formatearFechaCorta(hoy), formatearFechaCorta(vencimiento));
+    ctx.restore();
 
     return { canvas: canvas, cols: cols, rows: rows };
-  }
-
-  function envolverTexto(ctx, texto, anchoMaxPx) {
-    var palabras = texto.split(' ');
-    var lineas = [];
-    var actual = '';
-    palabras.forEach(function (palabra) {
-      var intento = actual ? actual + ' ' + palabra : palabra;
-      if (ctx.measureText(intento).width > anchoMaxPx && actual) {
-        lineas.push(actual);
-        actual = palabra;
-      } else {
-        actual = intento;
-      }
-    });
-    if (actual) lineas.push(actual);
-    return lineas;
   }
 
   function contarBitsEncendidos(byte) {
@@ -565,12 +683,18 @@
 
     var hoy = new Date();
     var vencimiento = sumarMeses(hoy, 6);
-    var dibujo = dibujarTicketEnCanvas(anchoMm, altoMm, nombreArticulo, hoy, vencimiento);
-    var paquetesImagen = construirPaquetesImagen(dibujo);
+    var dibujo;
+    var paquetesImagen;
 
+    // Primero se conecta (el navegador solo deja abrir el selector de
+    // Bluetooth justo después del clic) y recién después se espera el
+    // logo y se arma la imagen.
     var cliente = new ClienteNiimbot();
     return cliente.conectar(actualizarEstado)
+      .then(function () { return logoListo; })
       .then(function () {
+        dibujo = dibujarTicketEnCanvas(anchoMm, altoMm, nombreArticulo, hoy, vencimiento);
+        paquetesImagen = construirPaquetesImagen(dibujo);
         actualizarEstado('Preparando la impresora...');
         return cliente.enviarYEsperar(CMD.CONNECT, new Uint8Array([0x01]), CMD.IN_CONNECT, 2000);
       })
