@@ -75,7 +75,8 @@
       <option value="40x15">40 × 15 mm</option>
       <option value="40x30">40 × 30 mm</option>
       <option value="50x30">50 × 30 mm</option>
-      <option value="70x50" selected>70 × 50 mm (recomendado)</option>
+      <option value="63x32" selected>63 × 32 mm (rollo Húsares)</option>
+      <option value="70x50">70 × 50 mm</option>
       <option value="50x80">50 × 80 mm</option>
     </select>
   </div>
@@ -132,15 +133,30 @@
     '40x15': { ancho: 40, alto: 15 },
     '40x30': { ancho: 40, alto: 30 },
     '50x30': { ancho: 50, alto: 30 },
+    '63x32': { ancho: 63, alto: 32 },
     '70x50': { ancho: 70, alto: 50 },
     '50x80': { ancho: 50, alto: 80 },
   };
 
   function obtenerFormatoSeleccionado() {
     var select = document.getElementById('formato-ticket');
-    var valor = select ? select.value : '70x50';
-    return FORMATOS[valor] || FORMATOS['70x50'];
+    var valor = select ? select.value : '63x32';
+    return FORMATOS[valor] || FORMATOS['63x32'];
   }
+
+  // Recuerda en este navegador el último tamaño usado, para no tener que
+  // elegirlo cada vez (si cambian de rollo, se elige otro y queda ese).
+  (function () {
+    var select = document.getElementById('formato-ticket');
+    if (!select) return;
+    try {
+      var guardado = localStorage.getItem('ruta-fria.formato-ticket');
+      if (guardado && FORMATOS[guardado]) select.value = guardado;
+    } catch (e) { /* sin almacenamiento: queda el de por defecto */ }
+    select.addEventListener('change', function () {
+      try { localStorage.setItem('ruta-fria.formato-ticket', select.value); } catch (e) { /* nada */ }
+    });
+  })();
 
   // Entre 1 y 50 — si el campo queda vacío o con cualquier cosa, 1.
   var MAX_COPIAS = 50;
@@ -343,8 +359,9 @@
       return;
     }
 
-    if (W > 95) {
-      // Bajas y anchas (40×15, 30×15): sin pie, y cada fecha en un renglón.
+    if (H * escala < 20) {
+      // Bajas (40×15, 30×15 — menos de 20mm de alto real): sin pie, y
+      // cada fecha en un renglón.
       dibujarNombreEnFranja(p, nombre, W, 16, 2, 10, 4.5);
       var arriba = 19, cuerpo = H - 3 - arriba;
       var logoAltoA = Math.min(cuerpo, (W - pad * 2) * 0.3 / logoProporcion);
