@@ -11,6 +11,9 @@
 <p style="color:var(--ink-soft); font-size:.9rem;">
   Los artículos resaltados cambian de precio respecto al costo que tienen cargado hoy. Elegí, uno por uno, si querés que este costo nuevo quede guardado en el artículo. El precio nuevo es el que cargaste a mano en la factura, sin el IVA que suma la casilla "IVA" (el IVA se agrega después, al armar el precio de venta, si el artículo lo lleva).
 </p>
+<p style="color:var(--ink-soft); font-size:.9rem;">
+  La columna <strong>IVA</strong> muestra si cada artículo va a llevar IVA en su precio de venta: al confirmar, toma lo que marcaste en la casilla "IVA" de la factura (tildada, lo lleva; destildada, no). Se aplica siempre, aunque no cambies el precio.
+</p>
 
 <% if (fletesImputados.length > 0) { %>
   <p style="color:var(--ink-soft); font-size:.9rem;">
@@ -35,6 +38,7 @@
           <input type="checkbox" id="check-todos-precio" checked style="width:auto;"> todos
         </label>
       </th>
+      <th>IVA</th>
       <% if (fletesImputados.length > 0) { %>
         <th>Flete % anterior</th>
         <th>Flete % nuevo</th>
@@ -57,6 +61,15 @@
             </label>
           <% } else { %>
             <span style="color:var(--ink-soft); font-size:.85rem;">Sin cambios</span>
+          <% } %>
+        </td>
+        <td data-label="IVA" style="white-space:nowrap;">
+          <% if (it.cambiaIva) { %>
+            <strong><%= it.aplica_iva ? 'No → Sí' : 'Sí → No' %></strong>
+            <div style="color:var(--ink-soft); font-size:.78rem;">se va a actualizar</div>
+          <% } else { %>
+            <%= it.aplica_iva ? 'Sí' : 'No' %>
+            <span style="color:var(--ink-soft); font-size:.78rem;">(sin cambios)</span>
           <% } %>
         </td>
         <% if (fletesImputados.length > 0) { %>

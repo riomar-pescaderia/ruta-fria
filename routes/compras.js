@@ -459,7 +459,7 @@ router.get('/:id/confirmar', async (req, res, next) => {
     if (factura.actualizo_costos) return res.redirect(`/compras/${factura.id}`);
 
     const { rows: items } = await pool.query(
-      `select i.*, a.codigo, a.nombre, a.costo as costo_actual, a.flete_pct as flete_actual
+      `select i.*, a.codigo, a.nombre, a.costo as costo_actual, a.flete_pct as flete_actual, a.aplica_iva as iva_actual
        from facturas_compra_items i join articulos a on a.id = i.articulo_id
        where i.factura_id = $1
        order by i.id`,
@@ -504,6 +504,9 @@ router.get('/:id/confirmar', async (req, res, next) => {
         cambia: Number(it.costo_actual) !== costoNuevo,
         fletePctNuevo: fletePct,
         cambiaFlete,
+        // El "Aplica IVA" del artículo pasa a ser el de este renglón (ver
+        // el POST de abajo) — acá solo se avisa si va a cambiar.
+        cambiaIva: Boolean(it.iva_actual) !== Boolean(it.aplica_iva),
       };
     });
 
@@ -521,7 +524,7 @@ router.post('/:id/confirmar', async (req, res, next) => {
     if (factura.actualizo_costos) return res.redirect(`/compras/${factura.id}`);
 
     const { rows: items } = await client.query(
-      `select i.*, a.costo as costo_actual, a.flete_pct as flete_actual
+      `select i.*, a.costo as costo_actual, a.flete_pct as flete_actual, a.aplica_iva as iva_actual
        from facturas_compra_items i join articulos a on a.id = i.articulo_id
        where i.factura_id = $1`,
       [factura.id]
@@ -580,6 +583,16 @@ router.post('/:id/confirmar', async (req, res, next) => {
         await client.query('update facturas_compra_items set estado_costo = $1 where id = $2', ['aplicado', it.id]);
       } else {
         await client.query('update facturas_compra_items set estado_costo = $1 where id = $2', ['no_aplicado', it.id]);
+      }
+
+      // La casilla "IVA" del renglón define el "Aplica IVA" del artículo
+      // (que es lo que suma, o no, el IVA al armar su precio de venta —
+      // ver lib/precios.js): tildada en la compra, el artículo lo lleva;
+      // destildada, deja de llevarlo. Se aplica siempre al confirmar, sin
+      // preguntar, igual que el flete — independiente de si se eligió
+      // cambiar el costo.
+      if (Boolean(it.iva_actual) !== Boolean(it.aplica_iva)) {
+        await client.query('update articulos set aplica_iva = $1 where id = $2', [Boolean(it.aplica_iva), it.articulo_id]);
       }
 
       // El % de flete se pisa solo, sin preguntar renglón por renglón (a
