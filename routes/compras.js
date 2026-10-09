@@ -46,27 +46,30 @@ async function datosFormulario(facturaIdActual) {
   return { proveedores, articulos, fletesDisponibles };
 }
 
-// La casilla "IVA" de un renglón define qué es el precio unitario que se
-// tipeó: tildada, es el precio SIN IVA y hay que sumárselo (el caso más
-// común, como viene la mayoría de las facturas de compra); destildada, el
-// precio ya viene con el IVA integrado y se usa tal cual. En los dos
-// casos se devuelve el precio final (el costo real, con IVA ya sumado si
-// correspondía) y el desglose neto/IVA de todo el renglón, calculado al
-// %IVA vigente en config.
+// El precio unitario que se tipea es SIEMPRE el costo del artículo, con o
+// sin la casilla "IVA". La casilla solo decide si ese renglón suma IVA a
+// la factura: tildada, se le agrega el %IVA vigente en config al total;
+// destildada, el renglón no lleva IVA (neto = total, IVA = 0). Antes la
+// casilla destildada significaba "el precio ya trae el IVA adentro" y se
+// le descontaba para sacar el costo (8500 quedaba en 7024,79), que no es
+// como trabaja el negocio.
 function calcularItem(cantidad, precioIngresado, sumarIva, ivaPct) {
-  let precioFinal, total, neto, iva;
-  if (sumarIva) {
-    precioFinal = redondear2(precioIngresado * (1 + Number(ivaPct) / 100));
-    total = redondear2(cantidad * precioFinal);
-    neto = redondear2(cantidad * precioIngresado);
-    iva = redondear2(total - neto);
-  } else {
-    precioFinal = precioIngresado;
-    total = redondear2(cantidad * precioFinal);
-    neto = redondear2(total / (1 + Number(ivaPct) / 100));
-    iva = redondear2(total - neto);
-  }
+  const neto = redondear2(cantidad * precioIngresado);
+  const iva = sumarIva ? redondear2(neto * Number(ivaPct) / 100) : 0;
+  const total = redondear2(neto + iva);
+  const precioFinal = sumarIva ? redondear2(precioIngresado * (1 + Number(ivaPct) / 100)) : precioIngresado;
   return { precioFinal, total, neto, iva };
+}
+
+// Costo del artículo según un renglón ya guardado: el precio que se tipeó.
+// Si el renglón sumaba IVA, el guardado es el final (con IVA), así que se
+// usa el neto ÷ cantidad; si no, el guardado ya es lo tipeado. Así también
+// salen bien los borradores guardados antes del cambio de criterio, donde
+// un renglón sin IVA tenía el neto con el IVA descontado.
+function costoDelRenglon(it) {
+  return it.aplica_iva
+    ? redondear2(Number(it.neto) / Number(it.cantidad))
+    : redondear2(Number(it.precio_unitario));
 }
 
 // La categoría manda: "mercaderia" es la única con artículos reales del
@@ -286,9 +289,7 @@ router.get('/:id/editar', async (req, res, next) => {
     // tipeó, sin transformar.
     const items = itemsGuardados.map((it) => ({
       ...it,
-      precio_unitario: it.aplica_iva
-        ? redondear2(Number(it.neto) / Number(it.cantidad))
-        : Number(it.precio_unitario),
+      precio_unitario: costoDelRenglon(it),
     }));
 
     res.render('compras/form', {
@@ -466,10 +467,9 @@ router.get('/:id/confirmar', async (req, res, next) => {
     );
     if (items.length === 0) return res.redirect(`/compras/${factura.id}`);
 
-    // La sugerencia de precio nuevo se compara y se guarda siempre en
-    // costo SIN IVA (neto ÷ cantidad) — nunca contra "precio_unitario",
-    // que en la factura es el precio final YA con el IVA sumado si esa
-    // fila lo llevaba. El costo del artículo va sin IVA porque el
+    // La sugerencia de precio nuevo es el precio que se tipeó en la
+    // factura (ver costoDelRenglon), sin el IVA que la casilla le haya
+    // sumado al renglón — el costo del artículo va sin IVA porque el
     // artículo puede tener tildado "Aplica IVA" y ese IVA se le vuelve a
     // sumar solo al calcular el precio de venta (ver lib/precios.js) —
     // si acá se guardara el costo con IVA ya sumado, quedaría sumado dos
@@ -496,7 +496,7 @@ router.get('/:id/confirmar', async (req, res, next) => {
     }
 
     const itemsConCambio = items.map((it) => {
-      const costoNuevo = redondear2(Number(it.neto) / Number(it.cantidad));
+      const costoNuevo = costoDelRenglon(it);
       const cambiaFlete = fletePct !== null && Number(it.flete_actual) !== fletePct;
       return {
         ...it,
@@ -567,11 +567,11 @@ router.post('/:id/confirmar', async (req, res, next) => {
         });
       }
       // Mismo criterio que en la pantalla de revisión: el costo nuevo del
-      // artículo es el neto sin IVA, no el precio final de la factura. Ya
+      // artículo es el precio tipeado, no el precio final de la factura. Ya
       // no se corta con "continue" cuando el precio no cambia: el flete
       // (más abajo) es una decisión independiente y tiene que evaluarse
       // igual para este renglón.
-      const costoNuevo = redondear2(Number(it.neto) / Number(it.cantidad));
+      const costoNuevo = costoDelRenglon(it);
       const cambia = Number(it.costo_actual) !== costoNuevo;
       if (!cambia) {
         await client.query('update facturas_compra_items set estado_costo = $1 where id = $2', ['sin_cambio', it.id]);

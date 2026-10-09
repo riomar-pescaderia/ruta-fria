@@ -369,23 +369,15 @@
     buscador.style.display = 'block';
   }
 
-  // Misma lógica que calcularItem() en routes/compras.js:
-  // sumarIva=true  → el precio cargado es neto (sin IVA), se le suma el IVA.
-  // sumarIva=false → el precio cargado ya incluye el IVA, se usa tal cual.
+  // Misma lógica que calcularItem() en routes/compras.js: el precio
+  // cargado es siempre el costo (sin IVA).
+  // sumarIva=true  → al renglón se le suma el IVA en el total.
+  // sumarIva=false → el renglón no lleva IVA.
   function calcularItem(cantidad, precioIngresado, sumarIva) {
-    var precioFinal, total, neto, iva;
-    if (sumarIva) {
-      precioFinal = precioIngresado * (1 + IVA_PCT / 100);
-      total = cantidad * precioFinal;
-      neto = cantidad * precioIngresado;
-      iva = total - neto;
-    } else {
-      precioFinal = precioIngresado;
-      total = cantidad * precioFinal;
-      neto = total / (1 + IVA_PCT / 100);
-      iva = total - neto;
-    }
-    return { precioFinal: precioFinal, total: total, neto: neto, iva: iva };
+    var neto = cantidad * precioIngresado;
+    var iva = sumarIva ? neto * IVA_PCT / 100 : 0;
+    var precioFinal = sumarIva ? precioIngresado * (1 + IVA_PCT / 100) : precioIngresado;
+    return { precioFinal: precioFinal, total: neto + iva, neto: neto, iva: iva };
   }
 
   function actualizarTotales() {
@@ -398,7 +390,7 @@
       tr.querySelector('.f-subtotal').textContent = r.total.toFixed(2);
       tr.querySelector('.f-desglose').textContent = sumarIva
         ? '+ IVA $' + r.iva.toFixed(2) + ' (precio final $' + r.precioFinal.toFixed(2) + ')'
-        : 'IVA incluido: neto $' + r.neto.toFixed(2) + ' + IVA $' + r.iva.toFixed(2);
+        : 'Sin IVA';
       total += r.total;
       totalNeto += r.neto;
       totalIva += r.iva;

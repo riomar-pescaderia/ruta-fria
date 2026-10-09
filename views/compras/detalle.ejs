@@ -67,7 +67,7 @@
       <td data-label="Subtotal" class="mono">
         $<%= Number(it.total).toFixed(2) %>
         <div style="font-size:.75rem; font-weight:400; color:var(--ink-soft);">
-          <% if (it.aplica_iva) { %>neto $<%= Number(it.neto).toFixed(2) %> + IVA $<%= Number(it.iva).toFixed(2) %><% } else { %>sin IVA discriminado<% } %>
+          <% if (it.aplica_iva) { %>neto $<%= Number(it.neto).toFixed(2) %> + IVA $<%= Number(it.iva).toFixed(2) %><% } else { %>sin IVA<% } %>
         </div>
       </td>
       <% if (factura.actualizo_costos) { %>
